@@ -2,6 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import styled from 'styled-components';
 import axios from 'axios';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
+
+// Check for environment variables
+if (!supabaseUrl || !supabaseKey) {
+  console.error(
+    'Missing Supabase credentials. Make sure REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY are defined in your .env file.'
+  );
+} else {
+  console.log('Supabase URL configured for TeamManager');
+}
+
+const supabase = createClient(
+  supabaseUrl || 'https://your-supabase-url.supabase.co',
+  supabaseKey || 'your-supabase-anon-key'
+);
 
 const Container = styled.div`
   padding: 20px;
@@ -9,6 +28,84 @@ const Container = styled.div`
 
 const Title = styled.h1`
   margin-bottom: 20px;
+`;
+
+// New styled components for filter system
+const FilterContainer = styled.div`
+  margin-bottom: 30px;
+  max-width: 1200px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 15px;
+  align-items: flex-end;
+  
+  @media (max-width: 1200px) {
+    flex-wrap: wrap;
+  }
+`;
+
+const FilterStep = styled.div`
+  flex: 1;
+  min-width: 180px;
+  max-width: 250px;
+`;
+
+const FilterLabel = styled.label`
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #C4CED4;
+  margin-bottom: 8px;
+`;
+
+const FilterSelect = styled.select`
+  width: 100%;
+  padding: 12px 15px;
+  border-radius: 4px;
+  background-color: #1e1e1e;
+  border: 1px solid #444;
+  color: #fff;
+  font-size: 16px;
+  appearance: none;
+  position: relative;
+  cursor: pointer;
+  
+  &:focus {
+    outline: none;
+    border-color: #B30E16;
+  }
+  
+  option {
+    background-color: #1e1e1e;
+  }
+`;
+
+const SelectContainer = styled.div`
+  position: relative;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 6px solid #fff;
+    pointer-events: none;
+  }
+`;
+
+const FilterSummary = styled.div`
+  background-color: #1e1e1e;
+  border-radius: 4px;
+  padding: 12px 15px;
+  margin-top: 15px;
+  color: #C4CED4;
+  font-size: 14px;
+  width: 100%;
 `;
 
 const TeamGrid = styled.div`
@@ -25,6 +122,10 @@ const TeamCard = styled.div`
   overflow: hidden;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   transition: transform 0.2s;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 360px;
   
   &:hover {
     transform: translateY(-5px);
@@ -193,6 +294,29 @@ const SubmitButton = styled.button`
   }
 `;
 
+// Add TeamActions for buttons
+const TeamActions = styled.div`
+  padding: 15px;
+  margin-top: auto;
+  display: flex;
+  gap: 10px;
+  background-color: rgba(0, 0, 0, 0.2);
+`;
+
+const TeamButton = styled.button`
+  padding: 8px 12px;
+  background-color: #B30E16;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  flex: 1;
+  
+  &:hover {
+    background-color: #950b12;
+  }
+`;
+
 const TeamManager = () => {
   const [activeTab, setActiveTab] = useState('teams');
   const [teams, setTeams] = useState([]);
@@ -200,6 +324,24 @@ const TeamManager = () => {
   const [loading, setLoading] = useState(true);
   const [initializing, setInitializing] = useState(false);
   const [initMessage, setInitMessage] = useState(null);
+  const [supabaseError, setSupabaseError] = useState(null);
+  
+  // New filter state
+  const [leagueTypes, setLeagueTypes] = useState([]);
+  const [leagues, setLeagues] = useState([]);
+  const [conferences, setConferences] = useState([]);
+  
+  // Selected filter values
+  const [selectedLeagueType, setSelectedLeagueType] = useState('');
+  const [selectedLeague, setSelectedLeague] = useState('');
+  const [selectedConference, setSelectedConference] = useState('');
+  const [selectedDivision, setSelectedDivision] = useState('');
+  
+  // Available options based on current selection
+  const [availableLeagues, setAvailableLeagues] = useState([]);
+  const [availableConferences, setAvailableConferences] = useState([]);
+  const [availableDivisions, setAvailableDivisions] = useState([]);
+  
   const [newTeam, setNewTeam] = useState({
     name: '',
     city: '',
@@ -214,30 +356,285 @@ const TeamManager = () => {
   
   const { isAuthenticated, token } = useSelector(state => state.auth);
   
-  useEffect(() => {
-    // Fetch teams from API
-    axios.get('/api/teams')
-      .then(response => {
-        // Ensure all team objects have required properties
-        const processedTeams = response.data.map(team => ({
-          ...team,
-          name: team.name || 'Unknown Team',
-          city: team.city || 'Unknown City',
-          abbreviation: team.abbreviation || '???',
-          primary_color: team.primary_color || '#1e1e1e',
-          secondary_color: team.secondary_color || '#FFFFFF',
-          arena_name: team.arena_name || 'Unknown Arena',
-          arena_capacity: team.arena_capacity || 0,
-          prestige: team.prestige || 50
-        }));
+  // Fetch leagues and league types from Supabase
+  const fetchLeaguesFromSupabase = async () => {
+    try {
+      console.log('Attempting to fetch leagues from Supabase...');
+      
+      const { data, error } = await supabase
+        .from('League')
+        .select('*')
+        .order('league');
         
-        // Sort teams alphabetically by name
-        setTeams(processedTeams.sort((a, b) => a.name.localeCompare(b.name)));
-        setLoading(false);
-      })
-      .catch(error => {
-        console.error('Error fetching teams:', error);
-        // Fall back to mock data if API fails
+      if (error) {
+        console.error('Supabase error details:', error);
+        throw error;
+      }
+      
+      console.log('Supabase League data found:', data);
+      
+      if (data && data.length > 0) {
+        // Check the structure of the league data
+        console.log('Sample league data item:', data[0]);
+        
+        // Extract unique league types (ensuring only strings)
+        const uniqueLeagueTypes = [...new Set(
+          data
+            .map(league => String(league.league_level || ''))
+            .filter(Boolean)
+        )];
+        setLeagueTypes(uniqueLeagueTypes);
+        
+        // Store the league data objects for reference
+        setLeagues(data);
+        
+        // Extract league names/abbreviations for the dropdown (ensuring only strings)
+        const leagueNames = [...new Set(
+          data
+            .map(league => String(league.abbreviation || league.league || ''))
+            .filter(Boolean)
+        )];
+        console.log('Extracted league names:', leagueNames);
+        
+        // Set available leagues to strings only
+        setAvailableLeagues(leagueNames);
+        
+        return data;
+      } else {
+        console.log('No League data found in Supabase');
+        setSupabaseError('No leagues found. Using mock data.');
+        return null;
+      }
+    } catch (error) {
+      console.error('Error fetching leagues from Supabase:', error);
+      setSupabaseError(`Supabase connection failed: ${error.message}`);
+      return null;
+    }
+  };
+  
+  // Fetch teams from Supabase
+  const fetchTeamsFromSupabase = async () => {
+    try {
+      console.log('Attempting to fetch teams from Supabase...');
+      
+      // First fetch conferences to map IDs to names
+      const { data: conferencesData, error: conferencesError } = await supabase
+        .from('Conference')
+        .select('*');
+        
+      if (conferencesError) {
+        console.error('Error fetching conferences:', conferencesError);
+        throw conferencesError;
+      }
+      
+      console.log('Conferences from Supabase:', conferencesData);
+      
+      // Create a mapping of conference IDs to names
+      const conferenceMap = {};
+      if (conferencesData) {
+        conferencesData.forEach(conf => {
+          conferenceMap[conf.id] = conf.conference;
+        });
+      }
+      console.log('Conference mapping:', conferenceMap);
+      
+      // Get teams data
+      const { data, error } = await supabase
+        .from('Team')
+        .select('*')
+        .order('team');
+        
+      if (error) {
+        console.error('Supabase error details:', error);
+        throw error;
+      }
+      
+      console.log('Supabase Team data found, count:', data?.length);
+      
+      if (data && data.length > 0) {
+        // Log a few sample teams for debugging
+        console.log('Sample team data (first 3):');
+        data.slice(0, 3).forEach((team, idx) => {
+          console.log(`Team ${idx + 1}:`, {
+            id: team.id,
+            name: team.team,
+            division: team.division,
+            conference: team.conference,
+            conferenceId: team.conference,
+            conferenceName: conferenceMap[team.conference] || 'Unknown'
+          });
+        });
+        
+        // Separately fetch divisions to map to teams
+        const { data: divisionsData, error: divisionsError } = await supabase
+          .from('Division')
+          .select('*');
+          
+        if (divisionsError) {
+          console.error('Error fetching divisions:', divisionsError);
+        }
+        
+        const divisions = divisionsData || [];
+        console.log('Divisions for mapping:', divisions.length);
+        
+        // Process teams with division data
+        const processedTeams = data.map(team => {
+          // Find matching division
+          const divisionData = divisions.find(d => d.id === team.division) || {};
+          
+          // Map conference ID to name
+          const conferenceName = conferenceMap[team.conference] || 'Unknown';
+          
+          return {
+            id: team.id,
+            name: team.team || 'Unknown',
+            city: team.location || 'Unknown',
+            abbreviation: team.abbreviation || '???',
+            primary_color: team.primary_color || '#1e1e1e',
+            secondary_color: team.secondary_color || '#FFFFFF',
+            arena_name: team.arena || 'Unknown Arena',
+            arena_capacity: team.capacity || 0,
+            prestige: team.prestige || 50,
+            league_type: divisionData.league_level || 'Professional',
+            league: team.league || divisionData.league || 'NHL',
+            conferenceId: team.conference,
+            conference: conferenceName,
+            division_id: team.division,
+            divisionName: divisionData.name || 'Unknown Division',
+            salary_cap: team.salary_cap || 82500000
+          };
+        });
+        
+        console.log('Processed teams count:', processedTeams.length);
+        
+        // Set teams state
+        setTeams(processedTeams);
+        
+        // Extract unique conferences as strings
+        const uniqueConferences = [...new Set(
+          processedTeams
+            .map(team => team.conference)
+            .filter(Boolean)
+        )].map(String);
+        
+        console.log('Unique conferences extracted:', uniqueConferences);
+        setConferences(uniqueConferences);
+        setAvailableConferences(uniqueConferences);
+        
+        // Extract unique leagues as strings
+        const uniqueLeagues = [...new Set(
+          processedTeams
+            .map(team => team.league)
+            .filter(Boolean)
+        )].map(String);
+        
+        setAvailableLeagues(uniqueLeagues);
+        
+        return processedTeams;
+      } else {
+        console.log('No Team data found in Supabase');
+        return null;
+      }
+    } catch (error) {
+      console.error('Error fetching teams from Supabase:', error);
+      setSupabaseError(`Supabase team query failed: ${error.message}`);
+      return null;
+    }
+  };
+  
+  // Fetch divisions from Supabase
+  const fetchDivisionsFromSupabase = async () => {
+    try {
+      console.log('Attempting to fetch divisions from Supabase...');
+      
+      // First fetch conferences to map IDs to names
+      const { data: conferencesData, error: conferencesError } = await supabase
+        .from('Conference')
+        .select('*');
+        
+      if (conferencesError) {
+        console.error('Error fetching conferences:', conferencesError);
+      }
+      
+      // Create a mapping of conference IDs to names
+      const conferenceMap = {};
+      if (conferencesData) {
+        conferencesData.forEach(conf => {
+          conferenceMap[conf.id] = conf.conference;
+        });
+      }
+      
+      // Now fetch divisions
+      const { data, error } = await supabase
+        .from('Division')
+        .select('*')
+        .order('name');
+        
+      if (error) {
+        console.error('Supabase error details:', error);
+        throw error;
+      }
+      
+      console.log('Supabase Division data found, count:', data?.length);
+      
+      if (data && data.length > 0) {
+        // Log sample division data for debugging
+        console.log('Sample division data:', data[0]);
+        
+        // Process divisions to ensure we have correct data structure
+        const processedDivisions = data.map(division => {
+          // Map the conference ID to its name
+          const conferenceName = conferenceMap[division.conference] || 'Unknown';
+          
+          return {
+            id: division.id,
+            name: division.name || 'Unknown Division',
+            conferenceId: division.conference,
+            conference: conferenceName,
+            league: division.league || 'NHL',
+            league_type: division.league_level || 'Professional'
+          };
+        });
+        
+        console.log('Processed divisions with conference names:', processedDivisions);
+        
+        // Set divisions state
+        setDivisions(processedDivisions);
+        setAvailableDivisions(processedDivisions);
+        
+        return processedDivisions;
+      } else {
+        console.log('No Division data found in Supabase');
+        return null;
+      }
+    } catch (error) {
+      console.error('Error fetching divisions from Supabase:', error);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const fetchAllData = async () => {
+      setLoading(true);
+      
+      try {
+        // First fetch leagues from Supabase
+        const leaguesData = await fetchLeaguesFromSupabase();
+        
+        // Log league data for debugging
+        console.log('Leagues data from Supabase:', leaguesData);
+        console.log('Current leagues state:', leagues);
+        console.log('Current availableLeagues state:', availableLeagues);
+        
+        // Then fetch teams and divisions
+        const teamsData = await fetchTeamsFromSupabase();
+        const divisionsData = await fetchDivisionsFromSupabase();
+        
+        // If no data was returned from Supabase, use mock data
+        if (!teamsData || teamsData.length === 0) {
+          console.log('No teams returned from Supabase, using mock data');
+          
+          // Fall back to mock data if Supabase fails
         const mockTeams = [
           // Atlantic Division
           {
@@ -251,8 +648,12 @@ const TeamManager = () => {
             divisionName: "Atlantic Division",
             arena_name: "TD Garden",
             arena_capacity: 17565,
-            prestige: 85
+              prestige: 85,
+              league_type: "Professional",
+              league: "NHL",
+              conference: "Eastern"
           },
+            // Add more mock teams
           {
             id: 2,
             name: "Buffalo Sabres",
@@ -264,7 +665,10 @@ const TeamManager = () => {
             divisionName: "Atlantic Division",
             arena_name: "KeyBank Center",
             arena_capacity: 19070,
-            prestige: 65
+              prestige: 65,
+              league_type: "Professional",
+              league: "NHL",
+              conference: "Eastern"
           },
           {
             id: 3,
@@ -277,422 +681,75 @@ const TeamManager = () => {
             divisionName: "Atlantic Division",
             arena_name: "Little Caesars Arena",
             arena_capacity: 19515,
-            prestige: 75
-          },
-          {
-            id: 4,
-            name: "Florida Panthers",
-            city: "Sunrise",
-            abbreviation: "FLA",
-            primary_color: "#041E42",
-            secondary_color: "#C8102E",
-            division_id: 1,
-            divisionName: "Atlantic Division",
-            arena_name: "Amerant Bank Arena",
-            arena_capacity: 19250,
-            prestige: 90
-          },
-          {
-            id: 5,
-            name: "Montreal Canadiens",
-            city: "Montreal",
-            abbreviation: "MTL",
-            primary_color: "#AF1E2D",
-            secondary_color: "#192168",
-            division_id: 1,
-            divisionName: "Atlantic Division",
-            arena_name: "Bell Centre",
-            arena_capacity: 21302,
-            prestige: 80
-          },
-          {
-            id: 6,
-            name: "Ottawa Senators",
-            city: "Ottawa",
-            abbreviation: "OTT",
-            primary_color: "#E31837",
-            secondary_color: "#000000",
-            division_id: 1,
-            divisionName: "Atlantic Division",
-            arena_name: "Canadian Tire Centre",
-            arena_capacity: 18652,
-            prestige: 70
-          },
-          {
-            id: 7,
-            name: "Tampa Bay Lightning",
-            city: "Tampa Bay",
-            abbreviation: "TBL",
-            primary_color: "#002868",
-            secondary_color: "#FFFFFF",
-            division_id: 1,
-            divisionName: "Atlantic Division",
-            arena_name: "Amalie Arena",
-            arena_capacity: 19092,
-            prestige: 85
-          },
-          {
-            id: 8,
-            name: "Toronto Maple Leafs",
-            city: "Toronto",
-            abbreviation: "TOR",
-            primary_color: "#00205B",
-            secondary_color: "#FFFFFF",
-            division_id: 1,
-            divisionName: "Atlantic Division",
-            arena_name: "Scotiabank Arena",
-            arena_capacity: 18819,
-            prestige: 85
-          },
+              prestige: 70,
+              league_type: "Professional",
+              league: "NHL",
+              conference: "Eastern"
+            }
+          ];
           
-          // Metropolitan Division
-          {
-            id: 9,
-            name: "Carolina Hurricanes",
-            city: "Raleigh",
-            abbreviation: "CAR",
-            primary_color: "#CC0000",
-            secondary_color: "#000000",
-            division_id: 2,
-            divisionName: "Metropolitan Division",
-            arena_name: "PNC Arena",
-            arena_capacity: 18680,
-            prestige: 85
-          },
-          {
-            id: 10,
-            name: "Columbus Blue Jackets",
-            city: "Columbus",
-            abbreviation: "CBJ",
-            primary_color: "#002654",
-            secondary_color: "#CE1126",
-            division_id: 2,
-            divisionName: "Metropolitan Division",
-            arena_name: "Nationwide Arena",
-            arena_capacity: 18500,
-            prestige: 65
-          },
-          {
-            id: 11,
-            name: "New Jersey Devils",
-            city: "Newark",
-            abbreviation: "NJD",
-            primary_color: "#CE1126",
-            secondary_color: "#000000",
-            division_id: 2,
-            divisionName: "Metropolitan Division",
-            arena_name: "Prudential Center",
-            arena_capacity: 16514,
-            prestige: 80
-          },
-          {
-            id: 12,
-            name: "New York Islanders",
-            city: "Elmont",
-            abbreviation: "NYI",
-            primary_color: "#00539B",
-            secondary_color: "#F47D30",
-            division_id: 2,
-            divisionName: "Metropolitan Division",
-            arena_name: "UBS Arena",
-            arena_capacity: 17250,
-            prestige: 75
-          },
-          {
-            id: 13,
-            name: "New York Rangers",
-            city: "New York",
-            abbreviation: "NYR",
-            primary_color: "#0038A8",
-            secondary_color: "#CE1126",
-            division_id: 2,
-            divisionName: "Metropolitan Division",
-            arena_name: "Madison Square Garden",
-            arena_capacity: 18006,
-            prestige: 85
-          },
-          {
-            id: 14,
-            name: "Philadelphia Flyers",
-            city: "Philadelphia",
-            abbreviation: "PHI",
-            primary_color: "#F74902",
-            secondary_color: "#000000",
-            division_id: 2,
-            divisionName: "Metropolitan Division",
-            arena_name: "Wells Fargo Center",
-            arena_capacity: 19543,
-            prestige: 70
-          },
-          {
-            id: 15,
-            name: "Pittsburgh Penguins",
-            city: "Pittsburgh",
-            abbreviation: "PIT",
-            primary_color: "#000000",
-            secondary_color: "#FCB514",
-            division_id: 2,
-            divisionName: "Metropolitan Division",
-            arena_name: "PPG Paints Arena",
-            arena_capacity: 18387,
-            prestige: 80
-          },
-          {
-            id: 16,
-            name: "Washington Capitals",
-            city: "Washington",
-            abbreviation: "WSH",
-            primary_color: "#041E42",
-            secondary_color: "#C8102E",
-            division_id: 2,
-            divisionName: "Metropolitan Division",
-            arena_name: "Capital One Arena",
-            arena_capacity: 18573,
-            prestige: 80
-          },
-          
-          // Central Division
-          {
-            id: 17,
-            name: "Arizona Coyotes",
-            city: "Tempe",
-            abbreviation: "ARI",
-            primary_color: "#8C2633",
-            secondary_color: "#E2D6B5",
-            division_id: 3,
-            divisionName: "Central Division",
-            arena_name: "Mullett Arena",
-            arena_capacity: 4600,
-            prestige: 50
-          },
-          {
-            id: 18,
-            name: "Chicago Blackhawks",
-            city: "Chicago",
-            abbreviation: "CHI",
-            primary_color: "#CF0A2C",
-            secondary_color: "#000000",
-            division_id: 3,
-            divisionName: "Central Division",
-            arena_name: "United Center",
-            arena_capacity: 19717,
-            prestige: 65
-          },
-          {
-            id: 19,
-            name: "Colorado Avalanche",
-            city: "Denver",
-            abbreviation: "COL",
-            primary_color: "#6F263D",
-            secondary_color: "#236192",
-            division_id: 3,
-            divisionName: "Central Division",
-            arena_name: "Ball Arena",
-            arena_capacity: 18007,
-            prestige: 90
-          },
-          {
-            id: 20,
-            name: "Dallas Stars",
-            city: "Dallas",
-            abbreviation: "DAL",
-            primary_color: "#006847",
-            secondary_color: "#8F8F8C",
-            division_id: 3,
-            divisionName: "Central Division",
-            arena_name: "American Airlines Center",
-            arena_capacity: 18532,
-            prestige: 80
-          },
-          {
-            id: 21,
-            name: "Minnesota Wild",
-            city: "Saint Paul",
-            abbreviation: "MIN",
-            primary_color: "#154734",
-            secondary_color: "#A6192E",
-            division_id: 3,
-            divisionName: "Central Division",
-            arena_name: "Xcel Energy Center",
-            arena_capacity: 17954,
-            prestige: 75
-          },
-          {
-            id: 22,
-            name: "Nashville Predators",
-            city: "Nashville",
-            abbreviation: "NSH",
-            primary_color: "#FFB81C",
-            secondary_color: "#041E42",
-            division_id: 3,
-            divisionName: "Central Division",
-            arena_name: "Bridgestone Arena",
-            arena_capacity: 17159,
-            prestige: 75
-          },
-          {
-            id: 23,
-            name: "St. Louis Blues",
-            city: "St. Louis",
-            abbreviation: "STL",
-            primary_color: "#002F87",
-            secondary_color: "#FCB514",
-            division_id: 3,
-            divisionName: "Central Division",
-            arena_name: "Enterprise Center",
-            arena_capacity: 18096,
-            prestige: 75
-          },
-          {
-            id: 24,
-            name: "Winnipeg Jets",
-            city: "Winnipeg",
-            abbreviation: "WPG",
-            primary_color: "#041E42",
-            secondary_color: "#004C97",
-            division_id: 3,
-            divisionName: "Central Division",
-            arena_name: "Canada Life Centre",
-            arena_capacity: 15321,
-            prestige: 75
-          },
-          
-          // Pacific Division
-          {
-            id: 25,
-            name: "Anaheim Ducks",
-            city: "Anaheim",
-            abbreviation: "ANA",
-            primary_color: "#F47A38",
-            secondary_color: "#B9975B",
-            division_id: 4,
-            divisionName: "Pacific Division",
-            arena_name: "Honda Center",
-            arena_capacity: 17174,
-            prestige: 60
-          },
-          {
-            id: 26,
-            name: "Calgary Flames",
-            city: "Calgary",
-            abbreviation: "CGY",
-            primary_color: "#C8102E",
-            secondary_color: "#F1BE48",
-            division_id: 4,
-            divisionName: "Pacific Division",
-            arena_name: "Scotiabank Saddledome",
-            arena_capacity: 19289,
-            prestige: 75
-          },
-          {
-            id: 27,
-            name: "Edmonton Oilers",
-            city: "Edmonton",
-            abbreviation: "EDM",
-            primary_color: "#041E42",
-            secondary_color: "#FF4C00",
-            division_id: 4,
-            divisionName: "Pacific Division",
-            arena_name: "Rogers Place",
-            arena_capacity: 18347,
-            prestige: 85
-          },
-          {
-            id: 28,
-            name: "Los Angeles Kings",
-            city: "Los Angeles",
-            abbreviation: "LAK",
-            primary_color: "#111111",
-            secondary_color: "#A2AAAD",
-            division_id: 4,
-            divisionName: "Pacific Division",
-            arena_name: "Crypto.com Arena",
-            arena_capacity: 18230,
-            prestige: 80
-          },
-          {
-            id: 29,
-            name: "San Jose Sharks",
-            city: "San Jose",
-            abbreviation: "SJS",
-            primary_color: "#006D75",
-            secondary_color: "#000000",
-            division_id: 4,
-            divisionName: "Pacific Division",
-            arena_name: "SAP Center",
-            arena_capacity: 17562,
-            prestige: 60
-          },
-          {
-            id: 30,
-            name: "Seattle Kraken",
-            city: "Seattle",
-            abbreviation: "SEA",
-            primary_color: "#001628",
-            secondary_color: "#99D9D9",
-            division_id: 4,
-            divisionName: "Pacific Division",
-            arena_name: "Climate Pledge Arena",
-            arena_capacity: 17100,
-            prestige: 70
-          },
-          {
-            id: 31,
-            name: "Vancouver Canucks",
-            city: "Vancouver",
-            abbreviation: "VAN",
-            primary_color: "#00205B",
-            secondary_color: "#00843D",
-            division_id: 4,
-            divisionName: "Pacific Division",
-            arena_name: "Rogers Arena",
-            arena_capacity: 18910,
-            prestige: 85
-          },
-          {
-            id: 32,
-            name: "Vegas Golden Knights",
-            city: "Las Vegas",
-            abbreviation: "VGK",
-            primary_color: "#B4975A",
-            secondary_color: "#333F42",
-            division_id: 4,
-            divisionName: "Pacific Division",
-            arena_name: "T-Mobile Arena",
-            arena_capacity: 17500,
-            prestige: 90
-          }
-        ];
-        
-        // Process and sort mock teams alphabetically
+          // Add missing properties to mock teams
         const processedMockTeams = mockTeams.map(team => ({
           ...team,
           primary_color: team.primary_color || team.primaryColor || '#1e1e1e',
           secondary_color: team.secondary_color || team.secondaryColor || '#FFFFFF',
           division_id: team.division_id || team.divisionId,
           arena_name: team.arena_name || team.arenaName || 'Unknown Arena',
-          arena_capacity: team.arena_capacity || team.arenaCapacity || 0
-        }));
-        
+            arena_capacity: team.arena_capacity || team.arenaCapacity || 0,
+            league_type: team.league_type || 'Professional',
+            league: team.league || 'NHL',
+            conference: team.conference || (team.division_id <= 2 ? 'Eastern' : 'Western'),
+            salary_cap: team.salary_cap || 82500000
+          }));
+          
+          console.log('Setting teams with mock data, count:', processedMockTeams.length);
         setTeams(processedMockTeams.sort((a, b) => a.name.localeCompare(b.name)));
-        setLoading(false);
-      });
-    
-    // Fetch divisions
-    axios.get('/api/teams/divisions')
-      .then(response => {
-        setDivisions(response.data);
-      })
-      .catch(error => {
-        console.error('Error fetching divisions:', error);
+          
+          // Extract unique filter options from mock data
+          const uniqueLeagueTypes = [...new Set(processedMockTeams.map(team => team.league_type))].filter(Boolean);
+          const uniqueLeagues = [...new Set(processedMockTeams.map(team => team.league))].filter(Boolean);
+          const uniqueConferences = [...new Set(processedMockTeams.map(team => team.conference))].filter(Boolean);
+          
+          setLeagueTypes(uniqueLeagueTypes.length > 0 ? uniqueLeagueTypes : ['Professional', 'Junior', 'College']);
+          
+          // Make sure we only store strings in leagues state
+          setLeagues(uniqueLeagues);
+          setConferences(uniqueConferences);
+          
+          // Initialize available options with strings only
+          setAvailableLeagues(uniqueLeagues);
+          setAvailableConferences(uniqueConferences);
+        } else {
+          console.log('Using teams data from Supabase, count:', teamsData.length);
+        }
+        
+        if (!divisionsData || divisionsData.length === 0) {
+          console.log('No divisions returned from Supabase, using mock data');
+          
         // Fall back to mock division data
-        setDivisions([
-          { id: 1, name: "Atlantic Division" },
-          { id: 2, name: "Metropolitan Division" },
-          { id: 3, name: "Central Division" },
-          { id: 4, name: "Pacific Division" }
-        ]);
-      });
+          const mockDivisions = [
+            { id: 1, name: "Atlantic Division", conference: "Eastern", league: "NHL", league_type: "Professional" },
+            { id: 2, name: "Metropolitan Division", conference: "Eastern", league: "NHL", league_type: "Professional" },
+            { id: 3, name: "Central Division", conference: "Western", league: "NHL", league_type: "Professional" },
+            { id: 4, name: "Pacific Division", conference: "Western", league: "NHL", league_type: "Professional" }
+          ];
+          
+          console.log('Setting divisions with mock data, count:', mockDivisions.length);
+          setDivisions(mockDivisions);
+          setAvailableDivisions(mockDivisions);
+        } else {
+          console.log('Using divisions data from Supabase, count:', divisionsData.length);
+        }
+      } catch (error) {
+        console.error("Error loading data:", error);
+        setSupabaseError(`Failed to load data: ${error.message}`);
+        setLoading(false);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchAllData();
   }, []);
   
   const handleNewTeamChange = (e) => {
@@ -767,7 +824,10 @@ const TeamManager = () => {
           secondary_color: team.secondary_color || '#FFFFFF',
           arena_name: team.arena_name || 'Unknown Arena',
           arena_capacity: team.arena_capacity || 0,
-          prestige: team.prestige || 50
+          prestige: team.prestige || 50,
+          league_type: team.league_type || 'Professional',
+          league: team.league || 'NHL',
+          conference: team.conference || (team.division_id <= 2 ? 'Eastern' : 'Western')
         }));
         
         // Sort teams alphabetically by name
@@ -805,9 +865,169 @@ const TeamManager = () => {
     return brightness > 128 ? '#000000' : '#FFFFFF';
   };
   
+  // Handle league type change
+  const handleLeagueTypeChange = (e) => {
+    const type = e.target.value;
+    setSelectedLeagueType(type);
+    
+    // Reset subsequent filters
+    setSelectedLeague('');
+    setSelectedConference('');
+    setSelectedDivision('');
+    
+    if (type) {
+      // Filter available leagues based on selected league type
+      const filteredLeagues = [...new Set(
+        teams
+          .filter(team => team.league_type === type)
+          .map(team => team.league)
+      )].filter(Boolean);
+      
+      setAvailableLeagues(filteredLeagues);
+    } else {
+      // If no league type selected, show all leagues
+      setAvailableLeagues([...new Set(teams.map(team => team.league))].filter(Boolean));
+    }
+    
+    // Reset available conferences and divisions
+    setAvailableConferences([]);
+    setAvailableDivisions([]);
+  };
+  
+  // Handle league change
+  const handleLeagueChange = (e) => {
+    const league = e.target.value;
+    setSelectedLeague(league);
+    
+    // Reset subsequent filters
+    setSelectedConference('');
+    setSelectedDivision('');
+    
+    if (league) {
+      // Filter available conferences based on selected league type and league
+      const filteredConferences = [...new Set(
+        teams
+          .filter(team => 
+            (selectedLeagueType ? team.league_type === selectedLeagueType : true) && 
+            team.league === league
+          )
+          .map(team => team.conference)
+      )].filter(Boolean);
+      
+      setAvailableConferences(filteredConferences);
+    } else {
+      // If no league selected, show all conferences for the selected league type
+      const filteredConferences = [...new Set(
+        teams
+          .filter(team => selectedLeagueType ? team.league_type === selectedLeagueType : true)
+          .map(team => team.conference)
+      )].filter(Boolean);
+      
+      setAvailableConferences(filteredConferences);
+    }
+    
+    // Reset available divisions
+    setAvailableDivisions([]);
+  };
+  
+  // Handle conference change
+  const handleConferenceChange = (e) => {
+    const conferenceName = e.target.value;
+    console.log('Conference changed to:', conferenceName);
+    setSelectedConference(conferenceName);
+    setSelectedDivision("");  // Reset division when conference changes
+    
+    // Filter divisions based on the selected conference
+    if (conferenceName) {
+      // Find divisions that belong to this conference
+      const filteredDivisions = divisions.filter(division => 
+        division.conference === conferenceName
+      );
+      
+      console.log(`Divisions in conference ${conferenceName}:`, filteredDivisions);
+      setAvailableDivisions(filteredDivisions);
+    } else {
+      // If no conference selected, show all divisions
+      setAvailableDivisions(divisions);
+    }
+  };
+  
+  // Handle division change
+  const handleDivisionChange = (e) => {
+    const division = e.target.value;
+    setSelectedDivision(division);
+    console.log('Division selected:', division);
+  };
+  
+  // Get filtered teams based on all selected filters
+  const getFilteredTeams = () => {
+    console.log('Filtering teams with:', {
+      selectedLeagueType,
+      selectedLeague,
+      selectedConference,
+      selectedDivision
+    });
+    
+    let filtered = [...teams];
+    
+    // Apply filters sequentially
+    if (selectedLeagueType) {
+      filtered = filtered.filter(team => team.league_type === selectedLeagueType);
+    }
+    
+    if (selectedLeague) {
+      filtered = filtered.filter(team => team.league === selectedLeague);
+    }
+    
+    if (selectedConference) {
+      filtered = filtered.filter(team => team.conference === selectedConference);
+    }
+    
+    if (selectedDivision) {
+      // Handle both ID and name comparisons for division
+      filtered = filtered.filter(team => {
+        // Try to match by ID (if it's a number)
+        if (!isNaN(selectedDivision)) {
+          return team.division_id === Number(selectedDivision);
+        }
+        // Otherwise match by name
+        return team.divisionName === selectedDivision;
+      });
+    }
+    
+    console.log('Filtered teams count:', filtered.length);
+    return filtered;
+  };
+  
+  // Add function to handle navigation to Line Combinations
+  const handleEditLines = (teamId, teamName) => {
+    window.location.href = `/line-combinations/${teamId}`;
+  };
+  
   return (
     <Container>
       <Title>Team Management</Title>
+      
+      {/* Debug section */}
+      <div style={{ 
+        padding: '10px', 
+        background: '#333',
+        borderRadius: '4px',
+        marginBottom: '20px',
+        fontSize: '14px',
+        fontFamily: 'monospace'
+      }}>
+        <p>Debug - Team Data:</p>
+        <div>Number of teams in state: {teams.length}</div>
+        {teams.length > 0 && (
+          <div>
+            <p>First team data:</p>
+            <pre style={{ maxHeight: '100px', overflow: 'auto' }}>
+              {JSON.stringify(teams[0], null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
       
       {isAuthenticated && (
         <div style={{ marginBottom: '20px' }}>
@@ -825,6 +1045,15 @@ const TeamManager = () => {
               marginLeft: '10px'
             }}>
               {initMessage.text}
+            </span>
+          )}
+          
+          {supabaseError && (
+            <span style={{ 
+              color: '#F44336',
+              marginLeft: '10px'
+            }}>
+              {supabaseError}
             </span>
           )}
         </div>
@@ -993,48 +1222,179 @@ const TeamManager = () => {
         <>
           <p>Below are the teams in the league. Click on a team to view details and manage roster.</p>
           
+          {/* Filter bar */}
+          <FilterContainer>
+            {/* Filter Step 1: League Type */}
+            <FilterStep>
+              <FilterLabel>League Type:</FilterLabel>
+              <FilterSelect
+                value={selectedLeagueType}
+                onChange={(e) => handleLeagueTypeChange(e.target.value)}
+              >
+                <option value="">All League Types</option>
+                {leagueTypes.map((leagueType) => (
+                  <option key={leagueType} value={leagueType}>
+                    {leagueType}
+                  </option>
+                ))}
+              </FilterSelect>
+            </FilterStep>
+
+            {/* Filter Step 2: League */}
+            <FilterStep>
+              <FilterLabel>League:</FilterLabel>
+              <FilterSelect
+                value={selectedLeague}
+                onChange={(e) => handleLeagueChange(e.target.value)}
+              >
+                <option value="">All Leagues</option>
+                {availableLeagues.map((league) => (
+                  <option key={league} value={league}>
+                    {league}
+                  </option>
+                ))}
+              </FilterSelect>
+            </FilterStep>
+
+            {/* Filter Step 3: Conference */}
+            <FilterStep>
+              <FilterLabel>Conference:</FilterLabel>
+              <FilterSelect
+                value={selectedConference}
+                onChange={(e) => handleConferenceChange(e.target.value)}
+              >
+                <option value="">All Conferences</option>
+                {availableConferences.map((conference) => (
+                  <option key={conference} value={conference}>
+                    {conference}
+                  </option>
+                ))}
+              </FilterSelect>
+            </FilterStep>
+
+            {/* Filter Step 4: Division */}
+            <FilterStep>
+              <FilterLabel>Division:</FilterLabel>
+              <FilterSelect
+                value={selectedDivision}
+                onChange={(e) => setSelectedDivision(e.target.value)}
+              >
+                <option value="">All Divisions</option>
+                {availableDivisions.map((division) => (
+                  <option key={division.id} value={division.id}>
+                    {division.name}
+                  </option>
+                ))}
+              </FilterSelect>
+            </FilterStep>
+          </FilterContainer>
+          
+          {/* Filter summary - shows how many teams match the current filters */}
+          <FilterSummary>
+            Showing {getFilteredTeams().length} of {teams.length} teams
+            {selectedLeagueType && ` in ${selectedLeagueType}`}
+            {selectedLeague && ` from ${selectedLeague}`}
+            {selectedConference && ` in the ${selectedConference} Conference`}
+            {selectedDivision && ` from the ${
+              // Handle division being either a string or an ID
+              typeof selectedDivision === 'string' && !isNaN(parseInt(selectedDivision))
+                ? divisions.find(d => d.id === parseInt(selectedDivision))?.name
+                : selectedDivision
+            } Division`}
+          </FilterSummary>
+          
           {loading ? (
             <p>Loading teams...</p>
+          ) : teams.length === 0 ? (
+            <div>
+              <p>No teams found. Try adjusting your filters or check your database connection.</p>
+              <pre>Debug: teams state is empty array</pre>
+            </div>
+          ) : getFilteredTeams().length === 0 ? (
+            <div>
+              <p>No teams match your current filter criteria. Try adjusting your filters.</p>
+              <pre>Debug: teams.length = {teams.length}, but all were filtered out</pre>
+            </div>
           ) : (
-            <TeamGrid>
-              {teams.map(team => (
-                <TeamCard 
-                  key={team.id} 
-                  primaryColor={team.primary_color || '#1e1e1e'}
-                  textColor={getTextColor(team.primary_color)}
-                >
-                  <TeamHeader>
-                    <TeamLogo primaryColor={team.primary_color || '#1e1e1e'}>
-                      {team.abbreviation}
-                    </TeamLogo>
-                    <TeamInfo>
-                      <TeamName>{team.name}</TeamName>
-                      <TeamCity>{team.city}</TeamCity>
-                    </TeamInfo>
-                  </TeamHeader>
-                  <TeamDetails>
-                    <TeamDetail>
-                      <span>Division:</span>
-                      <span>
-                        {divisions.find(d => d.id === team.division_id)?.name || 'Unknown'}
-                      </span>
-                    </TeamDetail>
-                    <TeamDetail>
-                      <span>Arena:</span>
-                      <span>{team.arena_name}</span>
-                    </TeamDetail>
-                    <TeamDetail>
-                      <span>Capacity:</span>
-                      <span>{team.arena_capacity?.toLocaleString() || 'Unknown'}</span>
-                    </TeamDetail>
-                    <TeamDetail>
-                      <span>Prestige:</span>
-                      <span>{team.prestige}/100</span>
-                    </TeamDetail>
-                  </TeamDetails>
-                </TeamCard>
-              ))}
-            </TeamGrid>
+            <>
+              <div style={{ marginBottom: '15px', padding: '10px', background: '#1e1e1e', borderRadius: '4px' }}>
+                <p>Debug Info:</p>
+                <ul>
+                  <li>Total teams in state: {teams.length}</li>
+                  <li>Filtered teams: {getFilteredTeams().length}</li>
+                  <li>First team: {teams.length > 0 ? teams[0].name : 'None'}</li>
+                </ul>
+              </div>
+              <TeamGrid>
+                {getFilteredTeams().map((team, index) => {
+                  // Debugging
+                  if (!team) {
+                    console.error('Undefined team in getFilteredTeams');
+                    return null;
+                  }
+                  
+                  return (
+                    <TeamCard 
+                      key={team.id || index} 
+                      primaryColor={team.primary_color || '#1e1e1e'}
+                      textColor={getTextColor(team.primary_color)}
+                    >
+                      <TeamHeader>
+                        <TeamLogo primaryColor={team.primary_color || '#1e1e1e'}>
+                          {team.abbreviation}
+                        </TeamLogo>
+                        <TeamInfo>
+                          <TeamName>{team.name}</TeamName>
+                          <TeamCity>{team.city}</TeamCity>
+                        </TeamInfo>
+                      </TeamHeader>
+                      <TeamDetails>
+                          <TeamDetail>
+                            <span>League:</span>
+                            <span>{team.league || 'NHL'}</span>
+                          </TeamDetail>
+                          <TeamDetail>
+                            <span>Conference:</span>
+                            <span>{team.conference || (team.division_id <= 2 ? 'Eastern' : 'Western')}</span>
+                          </TeamDetail>
+                        <TeamDetail>
+                          <span>Division:</span>
+                          <span>
+                              {divisions.find(d => d.id === team.division_id)?.name || team.divisionName || 'Unknown'}
+                          </span>
+                        </TeamDetail>
+                        <TeamDetail>
+                          <span>Arena:</span>
+                          <span>{team.arena_name}</span>
+                        </TeamDetail>
+                        <TeamDetail>
+                          <span>Capacity:</span>
+                          <span>{team.arena_capacity?.toLocaleString() || 'Unknown'}</span>
+                        </TeamDetail>
+                        <TeamDetail>
+                          <span>Prestige:</span>
+                          <span>{team.prestige}/100</span>
+                        </TeamDetail>
+                          <TeamDetail>
+                            <span>Salary Cap:</span>
+                            <span>${(team.salary_cap || 82500000).toLocaleString()}</span>
+                          </TeamDetail>
+                      </TeamDetails>
+                        <TeamActions>
+                          <TeamButton 
+                            onClick={() => handleEditLines(team.id, team.name)}
+                          >
+                            Edit Lines
+                          </TeamButton>
+                          <TeamButton>
+                            Edit Players
+                          </TeamButton>
+                        </TeamActions>
+                    </TeamCard>
+                  );
+                })}
+              </TeamGrid>
+            </>
           )}
         </>
       )}

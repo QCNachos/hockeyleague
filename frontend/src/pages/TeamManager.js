@@ -736,7 +736,15 @@ const TeamManager = () => {
   
   // Handle league type change
   const handleLeagueTypeChange = (e) => {
-    const type = e.target.value;
+    let type;
+    
+    // Handle both cases: when e is the event (e.target.value) or the direct value
+    if (e && e.target && e.target.value !== undefined) {
+      type = e.target.value;
+    } else {
+      type = e; // Direct value passed
+    }
+    
     setSelectedLeagueType(type);
     
     // Reset subsequent filters
@@ -765,7 +773,15 @@ const TeamManager = () => {
   
   // Handle league change
   const handleLeagueChange = (e) => {
-    const league = e.target.value;
+    let league;
+    
+    // Handle both cases: when e is the event (e.target.value) or the direct value
+    if (e && e.target && e.target.value !== undefined) {
+      league = e.target.value;
+    } else {
+      league = e; // Direct value passed
+    }
+    
     setSelectedLeague(league);
     
     // Reset subsequent filters
@@ -801,7 +817,15 @@ const TeamManager = () => {
   
   // Handle conference change
   const handleConferenceChange = (e) => {
-    const conferenceName = e.target.value;
+    let conferenceName;
+    
+    // Handle both cases: when e is the event (e.target.value) or the direct value
+    if (e && e.target && e.target.value !== undefined) {
+      conferenceName = e.target.value;
+    } else {
+      conferenceName = e; // Direct value passed
+    }
+    
     console.log('Conference changed to:', conferenceName);
     setSelectedConference(conferenceName);
     setSelectedDivision("");  // Reset division when conference changes
@@ -845,42 +869,41 @@ const TeamManager = () => {
   
   // Get filtered teams based on all selected filters
   const getFilteredTeams = () => {
-    console.log('Filtering teams with:', {
+    console.log("Filtering teams with:", {
       selectedLeagueType,
       selectedLeague,
       selectedConference,
-      selectedDivision
+      selectedDivision,
+      teams: teams.length
     });
     
-    let filtered = [...teams];
-    
-    // Apply filters sequentially
-    if (selectedLeagueType) {
-      filtered = filtered.filter(team => team.league_type === selectedLeagueType);
-    }
-    
-    if (selectedLeague) {
-      filtered = filtered.filter(team => team.league === selectedLeague);
-    }
-    
-    if (selectedConference) {
-      filtered = filtered.filter(team => team.conference === selectedConference);
-    }
-    
-    if (selectedDivision) {
-      // Handle both ID and name comparisons for division
-      filtered = filtered.filter(team => {
-        // Try to match by ID (if it's a number)
-        if (!isNaN(selectedDivision)) {
-          return team.division_id === Number(selectedDivision);
-        }
-        // Otherwise match by name
-        return team.divisionName === selectedDivision;
-      });
-    }
-    
-    console.log('Filtered teams count:', filtered.length);
-    return filtered;
+    return teams.filter((team) => {
+      // Filter by league type if selected
+      if (selectedLeagueType && team.league_type !== selectedLeagueType) {
+        return false;
+      }
+
+      // Filter by league if selected
+      if (selectedLeague && team.league !== selectedLeague) {
+        return false;
+      }
+
+      // Filter by conference if selected
+      if (selectedConference && team.conference !== selectedConference) {
+        return false;
+      }
+
+      // Filter by division if selected
+      if (selectedDivision) {
+        const isDivisionMatch = 
+          (typeof team.division_id === 'number' && team.division_id.toString() === selectedDivision) ||
+          team.divisionName === selectedDivision;
+        
+        if (!isDivisionMatch) return false;
+      }
+
+      return true;
+    });
   };
   
   // Add function to handle navigation to Line Combinations
@@ -1112,8 +1135,8 @@ const TeamManager = () => {
             <FilterStep>
               <FilterLabel>League Type:</FilterLabel>
               <FilterSelect
-                value={selectedLeagueType}
-                onChange={(e) => handleLeagueTypeChange(e.target.value)}
+                value={selectedLeagueType || ""}
+                onChange={handleLeagueTypeChange}
               >
                 <option value="">All League Types</option>
                 {leagueTypes.map((leagueType) => (
@@ -1128,8 +1151,9 @@ const TeamManager = () => {
             <FilterStep>
               <FilterLabel>League:</FilterLabel>
               <FilterSelect
-                value={selectedLeague}
-                onChange={(e) => handleLeagueChange(e.target.value)}
+                value={selectedLeague || ""}
+                onChange={handleLeagueChange}
+                disabled={availableLeagues.length === 0}
               >
                 <option value="">All Leagues</option>
                 {availableLeagues.map((league) => (
@@ -1144,8 +1168,8 @@ const TeamManager = () => {
             <FilterStep>
               <FilterLabel>Conference:</FilterLabel>
               <FilterSelect
-                value={selectedConference}
-                onChange={(e) => handleConferenceChange(e.target.value)}
+                value={selectedConference || ""}
+                onChange={handleConferenceChange}
               >
                 <option value="">All Conferences</option>
                 {availableConferences.map((conference) => (
@@ -1160,8 +1184,9 @@ const TeamManager = () => {
             <FilterStep>
               <FilterLabel>Division:</FilterLabel>
               <FilterSelect
-                value={selectedDivision}
+                value={selectedDivision || ""}
                 onChange={(e) => setSelectedDivision(e.target.value)}
+                disabled={availableDivisions.length === 0}
               >
                 <option value="">All Divisions</option>
                 {availableDivisions.map((division) => (

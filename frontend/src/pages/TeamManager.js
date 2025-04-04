@@ -889,13 +889,28 @@ const TeamManager = () => {
     
     // Filter divisions based on the selected conference
     if (conferenceName) {
-      // Find divisions that belong to this conference
-      const filteredDivisions = divisions.filter(division => 
-        division.conference === conferenceName
-      );
-      
-      console.log(`Divisions in conference ${conferenceName}:`, filteredDivisions);
-      setAvailableDivisions(filteredDivisions);
+      try {
+        // Find divisions that belong to this conference
+        console.log('All divisions:', divisions);
+        console.log('Looking for divisions with conference:', conferenceName);
+        
+        const filteredDivisions = divisions.filter(division => {
+          console.log('Checking division:', division.name, 'with conference:', division.conference);
+          return division.conference === conferenceName;
+        });
+        
+        console.log(`Divisions in conference ${conferenceName}:`, filteredDivisions);
+        
+        if (filteredDivisions.length === 0) {
+          console.warn(`No divisions found for conference: ${conferenceName}`);
+        }
+        
+        setAvailableDivisions(filteredDivisions);
+      } catch (error) {
+        console.error('Error filtering divisions by conference:', error);
+        // Fallback - don't filter divisions if there's an error
+        setAvailableDivisions(divisions);
+      }
     } else {
       // If no conference selected, show all divisions
       setAvailableDivisions(divisions);

@@ -356,6 +356,39 @@ const TeamManager = () => {
   
   const { isAuthenticated, token } = useSelector(state => state.auth);
   
+  // Process teams with division and conference data
+  const processTeams = (teams, divisionToConferenceMap, conferenceMap) => {
+    return teams.map(team => {
+      // Get division and conference info from our mapping
+      const divisionInfo = divisionToConferenceMap[team.division] || {};
+      
+      // Check if team has a direct conference reference (new schema) or use division's (old schema)
+      const conferenceId = team.conference || divisionInfo.conferenceId;
+      const conferenceName = conferenceId ? conferenceMap[conferenceId] || 'Unknown' : divisionInfo.conferenceName || 'Unknown';
+      
+      return {
+        id: team.id,
+        name: team.team || 'Unknown',
+        city: team.location || 'Unknown',
+        abbreviation: team.abbreviation || '???',
+        primary_color: team.primary_color || '#1e1e1e',
+        secondary_color: team.secondary_color || '#FFFFFF',
+        arena_name: team.arena || 'Unknown Arena',
+        arena_capacity: team.capacity || 0,
+        prestige: team.prestige || 50,
+        division_id: team.division,
+        divisionName: divisionInfo.divisionName || 'Unknown Division',
+        // Store both for flexibility
+        conferenceId: conferenceId,
+        conference: conferenceName,
+        // Use division's relationship to get league info
+        league_type: divisionInfo.league_type || 'Professional',
+        league: team.league || divisionInfo.league || 'NHL',
+        salary_cap: team.salary_cap || 82500000
+      };
+    });
+  };
+  
   // Fetch leagues and league types from Supabase
   const fetchLeaguesFromSupabase = async () => {
     try {
@@ -428,6 +461,10 @@ const TeamManager = () => {
       }
       
       console.log('Conferences from Supabase:', conferencesData);
+      console.log('Supabase URL & Key check:', {
+        hasUrl: !!supabaseUrl,
+        hasKey: !!supabaseKey
+      });
       
       // Create a mapping of conference IDs to names
       const conferenceMap = {};
@@ -467,13 +504,14 @@ const TeamManager = () => {
       console.log('Division to Conference mapping:', divisionToConferenceMap);
       
       // Now fetch teams
+      console.log('Attempting to fetch team data directly...');
       const { data, error } = await supabase
         .from('Team')
         .select('*')
         .order('team');
         
       if (error) {
-        console.error('Supabase error details:', error);
+        console.error('Supabase Team fetch error details:', error);
         throw error;
       }
       
@@ -482,44 +520,20 @@ const TeamManager = () => {
       if (data && data.length > 0) {
         // Log a few sample teams for debugging
         console.log('Sample team data (first 3):');
-        data.slice(0, 3).forEach((team, idx) => {
+        data.slice(0, Math.min(3, data.length)).forEach((team, idx) => {
           const divisionInfo = divisionToConferenceMap[team.division] || {};
           console.log(`Team ${idx + 1}:`, {
             id: team.id,
             name: team.team,
             division: team.division,
             divisionName: divisionInfo.divisionName,
-            conferenceId: divisionInfo.conferenceId,
-            conferenceName: divisionInfo.conferenceName
+            conferenceId: team.conference || divisionInfo.conferenceId, 
+            conferenceName: conferenceMap[team.conference] || divisionInfo.conferenceName
           });
         });
         
         // Process teams with division and conference data
-        const processedTeams = data.map(team => {
-          // Get division and conference info from our mapping
-          const divisionInfo = divisionToConferenceMap[team.division] || {};
-          
-          return {
-            id: team.id,
-            name: team.team || 'Unknown',
-            city: team.location || 'Unknown',
-            abbreviation: team.abbreviation || '???',
-            primary_color: team.primary_color || '#1e1e1e',
-            secondary_color: team.secondary_color || '#FFFFFF',
-            arena_name: team.arena || 'Unknown Arena',
-            arena_capacity: team.capacity || 0,
-            prestige: team.prestige || 50,
-            division_id: team.division,
-            divisionName: divisionInfo.divisionName || 'Unknown Division',
-            // Use division's relationship to get conference
-            conferenceId: divisionInfo.conferenceId,
-            conference: divisionInfo.conferenceName,
-            // Use division's relationship to get league info
-            league_type: divisionInfo.league_type || 'Professional',
-            league: team.league || divisionInfo.league || 'NHL',
-            salary_cap: team.salary_cap || 82500000
-          };
-        });
+        const processedTeams = processTeams(data, divisionToConferenceMap, conferenceMap);
         
         console.log('Processed teams count:', processedTeams.length);
         
@@ -558,142 +572,47 @@ const TeamManager = () => {
         
         return processedTeams;
       } else {
-        console.log('No Team data found in Supabase');
-        return null;
+        console.log('No Team data found in Supabase, data:', data);
+        setSupabaseError("No teams found in database. Please check your Supabase connection and data.");
+        return [];
       }
     } catch (error) {
       console.error('Error fetching teams from Supabase:', error);
       setSupabaseError(`Supabase team query failed: ${error.message}`);
-      return null;
+      return [];
     }
   };
   
   useEffect(() => {
     const fetchAllData = async () => {
       setLoading(true);
+      setSupabaseError(null);
       
       try {
+        console.log('Starting fetchAllData process...');
+        console.log('Supabase connection config:', {
+          url: supabaseUrl ? 'URL is set' : 'URL is missing',
+          key: supabaseKey ? 'API key is set' : 'API key is missing'
+        });
+        
         // First fetch leagues from Supabase
         const leaguesData = await fetchLeaguesFromSupabase();
         
         // Log league data for debugging
         console.log('Leagues data from Supabase:', leaguesData);
-        console.log('Current leagues state:', leagues);
-        console.log('Current availableLeagues state:', availableLeagues);
         
         // Then fetch teams (which now also includes divisions and conferences)
         const teamsData = await fetchTeamsFromSupabase();
         
-        // If no data was returned from Supabase, use mock data
-        if (!teamsData || teamsData.length === 0) {
-          console.log('No teams returned from Supabase, using mock data');
-          
-          // Fall back to mock data if Supabase fails
-          const mockTeams = [
-            // Atlantic Division
-            {
-              id: 1,
-              name: "Boston Bruins",
-              city: "Boston",
-              abbreviation: "BOS",
-              primary_color: "#FFB81C",
-              secondary_color: "#000000",
-              division_id: 1,
-              divisionName: "Atlantic Division",
-              arena_name: "TD Garden",
-              arena_capacity: 17565,
-                prestige: 85,
-                league_type: "Professional",
-                league: "NHL",
-                conference: "Eastern"
-            },
-              // Add more mock teams
-            {
-              id: 2,
-              name: "Buffalo Sabres",
-              city: "Buffalo",
-              abbreviation: "BUF",
-              primary_color: "#002654",
-              secondary_color: "#FCB514",
-              division_id: 1,
-              divisionName: "Atlantic Division",
-              arena_name: "KeyBank Center",
-              arena_capacity: 19070,
-                prestige: 65,
-                league_type: "Professional",
-                league: "NHL",
-                conference: "Eastern"
-            },
-            {
-              id: 3,
-              name: "Detroit Red Wings",
-              city: "Detroit",
-              abbreviation: "DET",
-              primary_color: "#CE1126",
-              secondary_color: "#FFFFFF",
-              division_id: 1,
-              divisionName: "Atlantic Division",
-              arena_name: "Little Caesars Arena",
-              arena_capacity: 19515,
-                prestige: 70,
-                league_type: "Professional",
-                league: "NHL",
-                conference: "Eastern"
-              }
-            ];
-            
-            // Add missing properties to mock teams
-          const processedMockTeams = mockTeams.map(team => ({
-            ...team,
-            primary_color: team.primary_color || team.primaryColor || '#1e1e1e',
-            secondary_color: team.secondary_color || team.secondaryColor || '#FFFFFF',
-            division_id: team.division_id || team.divisionId,
-            arena_name: team.arena_name || team.arenaName || 'Unknown Arena',
-              arena_capacity: team.arena_capacity || team.arenaCapacity || 0,
-              league_type: team.league_type || 'Professional',
-              league: team.league || 'NHL',
-              conference: team.conference || (team.division_id <= 2 ? 'Eastern' : 'Western'),
-              salary_cap: team.salary_cap || 82500000
-            }));
-            
-            console.log('Setting teams with mock data, count:', processedMockTeams.length);
-          setTeams(processedMockTeams.sort((a, b) => a.name.localeCompare(b.name)));
-            
-            // Extract unique filter options from mock data
-            const uniqueLeagueTypes = [...new Set(processedMockTeams.map(team => team.league_type))].filter(Boolean);
-            const uniqueLeagues = [...new Set(processedMockTeams.map(team => team.league))].filter(Boolean);
-            const uniqueConferences = [...new Set(processedMockTeams.map(team => team.conference))].filter(Boolean);
-            
-            setLeagueTypes(uniqueLeagueTypes.length > 0 ? uniqueLeagueTypes : ['Professional', 'Junior', 'College']);
-            
-            // Make sure we only store strings in leagues state
-            setLeagues(uniqueLeagues);
-            setConferences(uniqueConferences);
-            
-            // Initialize available options with strings only
-            setAvailableLeagues(uniqueLeagues);
-            setAvailableConferences(uniqueConferences);
-            
-            // Create mock divisions if none exist
-            if (divisions.length === 0) {
-              const mockDivisions = [
-                { id: 1, name: "Atlantic Division", conference: "Eastern", league: "NHL", league_type: "Professional" },
-                { id: 2, name: "Metropolitan Division", conference: "Eastern", league: "NHL", league_type: "Professional" },
-                { id: 3, name: "Central Division", conference: "Western", league: "NHL", league_type: "Professional" },
-                { id: 4, name: "Pacific Division", conference: "Western", league: "NHL", league_type: "Professional" }
-              ];
-              
-              console.log('Setting divisions with mock data, count:', mockDivisions.length);
-              setDivisions(mockDivisions);
-              setAvailableDivisions(mockDivisions);
-            }
-          } else {
-            console.log('Using teams data from Supabase, count:', teamsData.length);
-          }
+        if (teamsData.length === 0) {
+          console.warn('No teams were returned from Supabase. Check your database connection and data.');
+          setSupabaseError('No teams found in the database. Please check your Supabase connection or add teams to your database.');
+        } else {
+          console.log('Successfully loaded teams data from Supabase, count:', teamsData.length);
+        }
       } catch (error) {
         console.error("Error loading data:", error);
         setSupabaseError(`Failed to load data: ${error.message}`);
-        setLoading(false);
       } finally {
         setLoading(false);
       }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import styled from 'styled-components';
 import axios from 'axios';
@@ -309,6 +309,7 @@ const TeamManager = () => {
   const [supabaseError, setSupabaseError] = useState(null);
   
   // New filter state
+  // eslint-disable-next-line no-unused-vars
   const [leagueTypes, setLeagueTypes] = useState([]);
   // Use these state variables for historical reference but disable eslint warning
   // eslint-disable-next-line no-unused-vars
@@ -327,6 +328,9 @@ const TeamManager = () => {
   const [availableConferences, setAvailableConferences] = useState([]);
   const [availableDivisions, setAvailableDivisions] = useState([]);
   
+  // New state variable for availableLeagueTypes
+  const [availableLeagueTypes, setAvailableLeagueTypes] = useState([]);
+  
   const [newTeam, setNewTeam] = useState({
     name: '',
     city: '',
@@ -340,39 +344,6 @@ const TeamManager = () => {
   });
   
   const { isAuthenticated, token } = useSelector(state => state.auth);
-  
-  // Process teams with division and conference data
-  const processTeams = (teams, divisionToConferenceMap, conferenceMap) => {
-    return teams.map(team => {
-      // Get division and conference info from our mapping
-      const divisionInfo = divisionToConferenceMap[team.division] || {};
-      
-      // Check if team has a direct conference reference (new schema) or use division's (old schema)
-      const conferenceId = team.conference || divisionInfo.conferenceId;
-      const conferenceName = conferenceId ? conferenceMap[conferenceId] || 'Unknown' : divisionInfo.conferenceName || 'Unknown';
-      
-      return {
-        id: team.id,
-        name: team.team || 'Unknown',
-        city: team.location || 'Unknown',
-        abbreviation: team.abbreviation || '???',
-        primary_color: team.primary_color || '#1e1e1e',
-        secondary_color: team.secondary_color || '#FFFFFF',
-        arena_name: team.arena || 'Unknown Arena',
-        arena_capacity: team.capacity || 0,
-        prestige: team.prestige || 50,
-        division_id: team.division,
-        divisionName: divisionInfo.divisionName || 'Unknown Division',
-        // Store both for flexibility
-        conferenceId: conferenceId,
-        conference: conferenceName,
-        // Use division's relationship to get league info
-        league_type: divisionInfo.league_type || 'Professional',
-        league: team.league || divisionInfo.league || 'NHL',
-        salary_cap: team.salary_cap || 82500000
-      };
-    });
-  };
   
   // Fetch leagues and league types from Supabase
   const fetchLeaguesFromSupabase = async () => {
@@ -395,12 +366,27 @@ const TeamManager = () => {
         // Check the structure of the league data
         console.log('Sample league data item:', data[0]);
         
+        // Create a mapping of league names to their league_levels
+        const leagueToTypeMap = {};
+        data.forEach(league => {
+          const leagueName = league.abbreviation || league.league;
+          const leagueLevel = league.league_level;
+          
+          if (leagueName && leagueLevel) {
+            leagueToTypeMap[leagueName] = leagueLevel;
+          }
+        });
+        
+        console.log('League to Type mapping:', leagueToTypeMap);
+        
         // Extract unique league types (ensuring only strings)
         const uniqueLeagueTypes = [...new Set(
           data
             .map(league => String(league.league_level || ''))
             .filter(Boolean)
         )];
+        
+        console.log('Unique league types:', uniqueLeagueTypes);
         setLeagueTypes(uniqueLeagueTypes);
         
         // Store the league data objects for reference
@@ -417,21 +403,21 @@ const TeamManager = () => {
         // Set available leagues to strings only
         setAvailableLeagues(leagueNames);
         
-        return data;
+        return { leagues: data, leagueToTypeMap };
       } else {
         console.log('No League data found in Supabase');
         setSupabaseError('No leagues found. Using mock data.');
-        return null;
+        return { leagues: null, leagueToTypeMap: {} };
       }
     } catch (error) {
       console.error('Error fetching leagues from Supabase:', error);
       setSupabaseError(`Supabase connection failed: ${error.message}`);
-      return null;
+      return { leagues: null, leagueToTypeMap: {} };
     }
   };
   
   // Fetch teams from Supabase
-  const fetchTeamsFromSupabase = async () => {
+  const fetchTeamsFromSupabase = async (leagueToTypeMap = {}) => {
     try {
       console.log('Attempting to fetch teams from Supabase...');
       
@@ -513,12 +499,48 @@ const TeamManager = () => {
             division: team.division,
             divisionName: divisionInfo.divisionName,
             conferenceId: team.conference || divisionInfo.conferenceId, 
-            conferenceName: conferenceMap[team.conference] || divisionInfo.conferenceName
+            conferenceName: conferenceMap[team.conference] || divisionInfo.conferenceName,
+            league: team.league,
+            league_type: leagueToTypeMap[team.league] || divisionInfo.league_type || 'Professional'
           });
         });
         
         // Process teams with division and conference data
-        const processedTeams = processTeams(data, divisionToConferenceMap, conferenceMap);
+        const processedTeams = data.map(team => {
+          // Get division and conference info from our mapping
+          const divisionInfo = divisionToConferenceMap[team.division] || {};
+          
+          // Check if team has a direct conference reference (new schema) or use division's (old schema)
+          const conferenceId = team.conference || divisionInfo.conferenceId;
+          const conferenceName = conferenceId ? conferenceMap[conferenceId] || 'Unknown' : divisionInfo.conferenceName || 'Unknown';
+          
+          // Get the league abbreviation or name
+          const leagueName = team.league || divisionInfo.league || 'NHL';
+          
+          // Get the league type from our mapping or use a default
+          const leagueType = leagueToTypeMap[leagueName] || divisionInfo.league_type || 'Professional';
+          
+          return {
+            id: team.id,
+            name: team.team || 'Unknown',
+            city: team.location || 'Unknown',
+          abbreviation: team.abbreviation || '???',
+          primary_color: team.primary_color || '#1e1e1e',
+          secondary_color: team.secondary_color || '#FFFFFF',
+            arena_name: team.arena || 'Unknown Arena',
+            arena_capacity: team.capacity || 0,
+            prestige: team.prestige || 50,
+            division_id: team.division,
+            divisionName: divisionInfo.divisionName || 'Unknown Division',
+            // Store both for flexibility
+            conferenceId: conferenceId,
+            conference: conferenceName,
+            // Use explicit league type from mapping
+            league_type: leagueType,
+            league: leagueName,
+            salary_cap: team.salary_cap || 82500000
+          };
+        });
         
         console.log('Processed teams count:', processedTeams.length);
         
@@ -589,13 +611,14 @@ const TeamManager = () => {
         });
         
         // First fetch leagues from Supabase
-        const leaguesData = await fetchLeaguesFromSupabase();
+        const { leagues: leagueData, leagueToTypeMap } = await fetchLeaguesFromSupabase();
         
         // Log league data for debugging
-        console.log('Leagues data from Supabase:', leaguesData);
+        console.log('Leagues data from Supabase:', leagueData);
+        console.log('League to Type mapping for teams:', leagueToTypeMap);
         
         // Then fetch teams (which now also includes divisions and conferences)
-        const teamsData = await fetchTeamsFromSupabase();
+        const teamsData = await fetchTeamsFromSupabase(leagueToTypeMap);
         
         if (teamsData.length === 0) {
           console.warn('No teams were returned from Supabase. Check your database connection and data.');
@@ -615,6 +638,21 @@ const TeamManager = () => {
     // Include fetchTeamsFromSupabase in the dependency array
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  
+  // Extract unique league types on component mount or when the teams array changes
+  useEffect(() => {
+    if (teams.length) {
+      const uniqueLeagueTypes = [...new Set(
+        teams
+          .map(team => team.league_type)
+          .filter(Boolean)
+      )].sort();
+      
+      console.log('Unique league types from teams:', uniqueLeagueTypes);
+      setLeagueTypes(uniqueLeagueTypes);
+      setAvailableLeagueTypes(uniqueLeagueTypes);
+    }
+  }, [teams]);
   
   const handleNewTeamChange = (e) => {
     const { name, value } = e.target;
@@ -729,36 +767,39 @@ const TeamManager = () => {
     return brightness > 128 ? '#000000' : '#FFFFFF';
   };
   
-  // Handle league type change
+  // Handle league type selection change
   const handleLeagueTypeChange = (e) => {
-    let type;
+    const value = e && e.target ? e.target.value : e;
+    console.log('League type selected:', value);
     
-    // Handle both cases: when e is the event (e.target.value) or the direct value
-    if (e && e.target && e.target.value !== undefined) {
-      type = e.target.value;
-    } else {
-      type = e; // Direct value passed
-    }
-    
-    setSelectedLeagueType(type);
+    // Set the selected league type
+    setSelectedLeagueType(value);
     
     // Reset subsequent filters
     setSelectedLeague('');
     setSelectedConference('');
     setSelectedDivision('');
     
-    if (type) {
-      // Filter available leagues based on selected league type
+    // Filter available leagues based on the selected league type
+    if (value) {
       const filteredLeagues = [...new Set(
         teams
-          .filter(team => team.league_type === type)
+          .filter(team => team.league_type === value)
           .map(team => team.league)
-      )].filter(Boolean);
+          .filter(Boolean)
+      )].sort();
       
+      console.log('Filtered leagues by league type:', filteredLeagues);
       setAvailableLeagues(filteredLeagues);
     } else {
-      // If no league type selected, show all leagues
-      setAvailableLeagues([...new Set(teams.map(team => team.league))].filter(Boolean));
+      // If no league type is selected, show all leagues
+      const allLeagues = [...new Set(
+        teams
+          .map(team => team.league)
+          .filter(Boolean)
+      )].sort();
+      
+      setAvailableLeagues(allLeagues);
     }
     
     // Reset available conferences and divisions
@@ -766,42 +807,40 @@ const TeamManager = () => {
     setAvailableDivisions([]);
   };
   
-  // Handle league change
+  // Handle league selection change
   const handleLeagueChange = (e) => {
-    let league;
+    const value = e && e.target ? e.target.value : e;
+    console.log('League selected:', value);
     
-    // Handle both cases: when e is the event (e.target.value) or the direct value
-    if (e && e.target && e.target.value !== undefined) {
-      league = e.target.value;
-    } else {
-      league = e; // Direct value passed
-    }
-    
-    setSelectedLeague(league);
+    // Set the selected league
+    setSelectedLeague(value);
     
     // Reset subsequent filters
     setSelectedConference('');
     setSelectedDivision('');
     
-    if (league) {
-      // Filter available conferences based on selected league type and league
+    // Filter available conferences based on the selected league type and league
+    if (value) {
       const filteredConferences = [...new Set(
         teams
           .filter(team => 
-            (selectedLeagueType ? team.league_type === selectedLeagueType : true) && 
-            team.league === league
+            (!selectedLeagueType || team.league_type === selectedLeagueType) &&
+            team.league === value
           )
           .map(team => team.conference)
-      )].filter(Boolean);
+          .filter(Boolean)
+      )].sort();
       
+      console.log('Filtered conferences by league:', filteredConferences);
       setAvailableConferences(filteredConferences);
     } else {
-      // If no league selected, show all conferences for the selected league type
+      // If no league is selected, show all conferences for the selected league type
       const filteredConferences = [...new Set(
         teams
-          .filter(team => selectedLeagueType ? team.league_type === selectedLeagueType : true)
+          .filter(team => !selectedLeagueType || team.league_type === selectedLeagueType)
           .map(team => team.conference)
-      )].filter(Boolean);
+          .filter(Boolean)
+      )].sort();
       
       setAvailableConferences(filteredConferences);
     }
@@ -844,44 +883,33 @@ const TeamManager = () => {
     setSelectedDivision(divisionId);
   };
   
-  // Get filtered teams based on all selected filters
-  const getFilteredTeams = () => {
-    return teams.filter((team) => {
+  // Get filtered teams based on selected filters
+  const getFilteredTeams = useCallback(() => {
+    return teams.filter(team => {
       // Filter by league type if selected
       if (selectedLeagueType && team.league_type !== selectedLeagueType) {
         return false;
       }
-
+      
       // Filter by league if selected
       if (selectedLeague && team.league !== selectedLeague) {
         return false;
       }
-
+      
       // Filter by conference if selected
       if (selectedConference && team.conference !== selectedConference) {
         return false;
       }
-
+      
       // Filter by division if selected
-      if (selectedDivision) {
-        // Get the division object to access its properties
-        const divisionObj = divisions.find(d => d.id.toString() === selectedDivision);
-        
-        // Try to match by division ID first
-        const isDivisionMatch = 
-          // Check if the team's division_id matches the selected division ID
-          (team.division_id && team.division_id.toString() === selectedDivision) ||
-          // As fallback, check if the team's divisionName matches the selected division's name
-          (divisionObj && team.divisionName === divisionObj.name);
-        
-        if (!isDivisionMatch) {
-          return false;
-        }
+      if (selectedDivision && team.division_id !== selectedDivision) {
+        return false;
       }
-
+      
+      // Include this team in the filtered results
       return true;
     });
-  };
+  }, [teams, selectedLeagueType, selectedLeague, selectedConference, selectedDivision]);
   
   // Add function to handle navigation to Line Combinations
   const handleEditLines = (teamId, teamName) => {
@@ -1095,7 +1123,7 @@ const TeamManager = () => {
                 onChange={handleLeagueTypeChange}
               >
                 <option value="">All League Types</option>
-                {leagueTypes.map((leagueType) => (
+                {availableLeagueTypes.map((leagueType) => (
                   <option key={leagueType} value={leagueType}>
                     {leagueType}
                   </option>
@@ -1180,7 +1208,7 @@ const TeamManager = () => {
             </div>
           ) : (
             <>
-              <TeamGrid>
+            <TeamGrid>
                 {getFilteredTeams().map((team, index) => {
                   // Debugging
                   if (!team) {
@@ -1189,21 +1217,21 @@ const TeamManager = () => {
                   }
                   
                   return (
-                    <TeamCard 
+                <TeamCard 
                       key={team.id || index} 
-                      primaryColor={team.primary_color || '#1e1e1e'}
-                      textColor={getTextColor(team.primary_color)}
-                    >
-                      <TeamHeader>
-                        <TeamLogo primaryColor={team.primary_color || '#1e1e1e'}>
-                          {team.abbreviation}
-                        </TeamLogo>
-                        <TeamInfo>
-                          <TeamName>{team.name}</TeamName>
-                          <TeamCity>{team.city}</TeamCity>
-                        </TeamInfo>
-                      </TeamHeader>
-                      <TeamDetails>
+                  primaryColor={team.primary_color || '#1e1e1e'}
+                  textColor={getTextColor(team.primary_color)}
+                >
+                  <TeamHeader>
+                    <TeamLogo primaryColor={team.primary_color || '#1e1e1e'}>
+                      {team.abbreviation}
+                    </TeamLogo>
+                    <TeamInfo>
+                      <TeamName>{team.name}</TeamName>
+                      <TeamCity>{team.city}</TeamCity>
+                    </TeamInfo>
+                  </TeamHeader>
+                  <TeamDetails>
                           <TeamDetail>
                             <span>League:</span>
                             <span>{team.league || 'NHL'}</span>
@@ -1212,29 +1240,29 @@ const TeamManager = () => {
                             <span>Conference:</span>
                             <span>{team.conference || (team.division_id <= 2 ? 'Eastern' : 'Western')}</span>
                           </TeamDetail>
-                        <TeamDetail>
-                          <span>Division:</span>
-                          <span>
+                    <TeamDetail>
+                      <span>Division:</span>
+                      <span>
                             {divisions.find(d => d.id === team.division_id)?.name || team.divisionName || 'Unknown'}
-                          </span>
-                        </TeamDetail>
-                        <TeamDetail>
-                          <span>Arena:</span>
-                          <span>{team.arena_name}</span>
-                        </TeamDetail>
-                        <TeamDetail>
-                          <span>Capacity:</span>
-                          <span>{team.arena_capacity?.toLocaleString() || 'Unknown'}</span>
-                        </TeamDetail>
-                        <TeamDetail>
-                          <span>Prestige:</span>
-                          <span>{team.prestige}/100</span>
+                      </span>
+                    </TeamDetail>
+                    <TeamDetail>
+                      <span>Arena:</span>
+                      <span>{team.arena_name}</span>
+                    </TeamDetail>
+                    <TeamDetail>
+                      <span>Capacity:</span>
+                      <span>{team.arena_capacity?.toLocaleString() || 'Unknown'}</span>
+                    </TeamDetail>
+                    <TeamDetail>
+                      <span>Prestige:</span>
+                      <span>{team.prestige}/100</span>
                         </TeamDetail>
                           <TeamDetail>
                             <span>Salary Cap:</span>
                             <span>${(team.salary_cap || 82500000).toLocaleString()}</span>
-                          </TeamDetail>
-                      </TeamDetails>
+                    </TeamDetail>
+                  </TeamDetails>
                         <TeamActions>
                           <TeamButton 
                             onClick={() => handleEditLines(team.id, team.name)}
@@ -1245,10 +1273,10 @@ const TeamManager = () => {
                             Edit Players
                           </TeamButton>
                         </TeamActions>
-                    </TeamCard>
+                </TeamCard>
                   );
                 })}
-              </TeamGrid>
+            </TeamGrid>
             </>
           )}
         </>

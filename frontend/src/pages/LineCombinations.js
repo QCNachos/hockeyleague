@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
+// eslint-disable-next-line no-unused-vars
 import axios from 'axios';
 
 // Styled components
@@ -10,6 +11,7 @@ const Container = styled.div`
   background-color: #111;
 `;
 
+// eslint-disable-next-line no-unused-vars
 const Title = styled.h1`
   color: #C4CED4;
   margin-bottom: 20px;
@@ -144,6 +146,7 @@ const SpecialTeamsGrid = styled.div`
   }
 `;
 
+// eslint-disable-next-line no-unused-vars
 const ClickMessage = styled.div`
   text-align: center;
   color: #aaa;

@@ -80,24 +80,6 @@ const FilterSelect = styled.select`
   }
 `;
 
-const SelectContainer = styled.div`
-  position: relative;
-  
-  &::after {
-    content: '';
-    position: absolute;
-    right: 15px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 0;
-    height: 0;
-    border-left: 6px solid transparent;
-    border-right: 6px solid transparent;
-    border-top: 6px solid #fff;
-    pointer-events: none;
-  }
-`;
-
 const FilterSummary = styled.div`
   background-color: #1e1e1e;
   border-radius: 4px;
@@ -328,7 +310,10 @@ const TeamManager = () => {
   
   // New filter state
   const [leagueTypes, setLeagueTypes] = useState([]);
+  // Use these state variables for historical reference but disable eslint warning
+  // eslint-disable-next-line no-unused-vars
   const [leagues, setLeagues] = useState([]);
+  // eslint-disable-next-line no-unused-vars
   const [conferences, setConferences] = useState([]);
   
   // Selected filter values
@@ -627,6 +612,8 @@ const TeamManager = () => {
     };
     
     fetchAllData();
+    // Include fetchTeamsFromSupabase in the dependency array
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   const handleNewTeamChange = (e) => {

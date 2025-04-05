@@ -485,7 +485,7 @@ const TeamManager = () => {
         throw divisionsError;
       }
       
-      console.log('Divisions from Supabase:', divisionsData?.length);
+      console.log('Divisions from Supabase:', divisionsData);
       
       // Create a mapping of division IDs to conference names
       const divisionToConferenceMap = {};
@@ -495,7 +495,7 @@ const TeamManager = () => {
           divisionToConferenceMap[division.id] = {
             conferenceId: division.conference,
             conferenceName: conferenceMap[division.conference] || 'Unknown',
-            divisionName: division.name,
+            divisionName: division.name || `Division ${division.id}`,
             league: division.league,
             league_type: division.league_level
           };
@@ -537,15 +537,23 @@ const TeamManager = () => {
         
         console.log('Processed teams count:', processedTeams.length);
         
-        // Set divisions state
-        setDivisions(divisionsData.map(division => ({
+        // Ensure divisions have proper names
+        const enhancedDivisions = divisionsData.map(division => ({
           id: division.id,
-          name: division.name || 'Unknown Division',
+          name: division.name || `Division ${division.id}`,
           conferenceId: division.conference,
           conference: conferenceMap[division.conference] || 'Unknown',
           league: division.league || 'NHL',
           league_type: division.league_level || 'Professional'
-        })));
+        }));
+        
+        console.log('Enhanced divisions:', enhancedDivisions);
+        
+        // Set divisions state
+        setDivisions(enhancedDivisions);
+        
+        // Initially set all divisions as available
+        setAvailableDivisions(enhancedDivisions);
         
         // Set teams state
         setTeams(processedTeams);
@@ -830,33 +838,26 @@ const TeamManager = () => {
     setSelectedConference(conferenceName);
     setSelectedDivision("");  // Reset division when conference changes
     
-    // Filter divisions based on the selected conference
+    // Update available divisions based on conference selection
     if (conferenceName) {
-      try {
-        // Find divisions that belong to this conference
-        console.log('All divisions:', divisions);
-        console.log('Looking for divisions with conference:', conferenceName);
-        
-        const filteredDivisions = divisions.filter(division => {
-          console.log('Checking division:', division.name, 'with conference:', division.conference);
-          return division.conference === conferenceName;
-        });
-        
-        console.log(`Divisions in conference ${conferenceName}:`, filteredDivisions);
-        
-        if (filteredDivisions.length === 0) {
-          console.warn(`No divisions found for conference: ${conferenceName}`);
-        }
-        
-        setAvailableDivisions(filteredDivisions);
-      } catch (error) {
-        console.error('Error filtering divisions by conference:', error);
-        // Fallback - don't filter divisions if there's an error
-        setAvailableDivisions(divisions);
-      }
+      // Find divisions that belong to this conference
+      console.log('Looking for divisions with conference:', conferenceName);
+      
+      const filteredDivisions = divisions.filter(division => {
+        const match = division.conference === conferenceName;
+        console.log(`Division "${division.name}" has conference "${division.conference}" - match: ${match}`);
+        return match;
+      });
+      
+      console.log(`Found ${filteredDivisions.length} divisions in conference ${conferenceName}:`, 
+        filteredDivisions.map(d => d.name));
+      
+      setAvailableDivisions(filteredDivisions);
     } else {
       // If no conference selected, show all divisions
-      setAvailableDivisions(divisions);
+      console.log('No conference selected, showing all divisions:', 
+        divisions.map(d => d.name));
+      setAvailableDivisions([...divisions]);
     }
   };
   
@@ -1191,7 +1192,7 @@ const TeamManager = () => {
                 <option value="">All Divisions</option>
                 {availableDivisions.map((division) => (
                   <option key={division.id} value={division.id}>
-                    {division.name}
+                    {division.name || "Unknown Division"}
                   </option>
                 ))}
               </FilterSelect>

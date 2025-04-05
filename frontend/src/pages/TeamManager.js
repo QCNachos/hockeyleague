@@ -480,7 +480,7 @@ const TeamManager = () => {
           divisionToConferenceMap[division.id] = {
             conferenceId: division.conference,
             conferenceName: conferenceMap[division.conference] || 'Unknown',
-            divisionName: division.name || `Division ${division.id}`,
+            divisionName: division.division || `Division ${division.id}`,
             league: division.league,
             league_type: division.league_level
           };
@@ -525,7 +525,7 @@ const TeamManager = () => {
         // Ensure divisions have proper names
         const enhancedDivisions = divisionsData.map(division => ({
           id: division.id,
-          name: division.name || `Division ${division.id}`,
+          name: division.division || `Division ${division.id}`,
           conferenceId: division.conference,
           conference: conferenceMap[division.conference] || 'Unknown',
           league: division.league || 'NHL',
@@ -1273,7 +1273,7 @@ const TeamManager = () => {
                         <TeamDetail>
                           <span>Division:</span>
                           <span>
-                              {divisions.find(d => d.id === team.division_id)?.name || team.divisionName || 'Unknown'}
+                            {divisions.find(d => d.id === team.division_id)?.name || team.divisionName || 'Unknown'}
                           </span>
                         </TeamDetail>
                         <TeamDetail>

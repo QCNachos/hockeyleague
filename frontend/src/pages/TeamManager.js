@@ -821,29 +821,19 @@ const TeamManager = () => {
       conferenceName = e; // Direct value passed
     }
     
-    console.log('Conference changed to:', conferenceName);
     setSelectedConference(conferenceName);
     setSelectedDivision("");  // Reset division when conference changes
     
     // Update available divisions based on conference selection
     if (conferenceName) {
       // Find divisions that belong to this conference
-      console.log('Looking for divisions with conference:', conferenceName);
-      
-      const filteredDivisions = divisions.filter(division => {
-        const match = division.conference === conferenceName;
-        console.log(`Division "${division.name}" has conference "${division.conference}" - match: ${match}`);
-        return match;
-      });
-      
-      console.log(`Found ${filteredDivisions.length} divisions in conference ${conferenceName}:`, 
-        filteredDivisions.map(d => d.name));
+      const filteredDivisions = divisions.filter(division => 
+        division.conference === conferenceName
+      );
       
       setAvailableDivisions(filteredDivisions);
     } else {
       // If no conference selected, show all divisions
-      console.log('No conference selected, showing all divisions:', 
-        divisions.map(d => d.name));
       setAvailableDivisions([...divisions]);
     }
   };
@@ -852,26 +842,10 @@ const TeamManager = () => {
   const handleDivisionChange = (e) => {
     const divisionId = e.target.value;
     setSelectedDivision(divisionId);
-    
-    // Log division selection details for debugging
-    const selectedDivisionObj = divisions.find(d => d.id.toString() === divisionId);
-    console.log('Division selected:', {
-      id: divisionId,
-      name: selectedDivisionObj?.name || 'Unknown',
-      conference: selectedDivisionObj?.conference || 'Unknown'
-    });
   };
   
   // Get filtered teams based on all selected filters
   const getFilteredTeams = () => {
-    console.log("Filtering teams with:", {
-      selectedLeagueType,
-      selectedLeague,
-      selectedConference,
-      selectedDivision,
-      teams: teams.length
-    });
-    
     return teams.filter((team) => {
       // Filter by league type if selected
       if (selectedLeagueType && team.league_type !== selectedLeagueType) {
@@ -901,7 +875,6 @@ const TeamManager = () => {
           (divisionObj && team.divisionName === divisionObj.name);
         
         if (!isDivisionMatch) {
-          console.log(`Team ${team.name} doesn't match division filter: team division=${team.division_id}, selected=${selectedDivision}`);
           return false;
         }
       }
@@ -918,27 +891,6 @@ const TeamManager = () => {
   return (
     <Container>
       <Title>Team Management</Title>
-      
-      {/* Debug section */}
-      <div style={{ 
-        padding: '10px', 
-        background: '#333',
-        borderRadius: '4px',
-        marginBottom: '20px',
-        fontSize: '14px',
-        fontFamily: 'monospace'
-      }}>
-        <p>Debug - Team Data:</p>
-        <div>Number of teams in state: {teams.length}</div>
-        {teams.length > 0 && (
-          <div>
-            <p>First team data:</p>
-            <pre style={{ maxHeight: '100px', overflow: 'auto' }}>
-              {JSON.stringify(teams[0], null, 2)}
-            </pre>
-          </div>
-        )}
-      </div>
       
       {isAuthenticated && (
         <div style={{ marginBottom: '20px' }}>
@@ -1221,23 +1173,13 @@ const TeamManager = () => {
           ) : teams.length === 0 ? (
             <div>
               <p>No teams found. Try adjusting your filters or check your database connection.</p>
-              <pre>Debug: teams state is empty array</pre>
             </div>
           ) : getFilteredTeams().length === 0 ? (
             <div>
               <p>No teams match your current filter criteria. Try adjusting your filters.</p>
-              <pre>Debug: teams.length = {teams.length}, but all were filtered out</pre>
             </div>
           ) : (
             <>
-              <div style={{ marginBottom: '15px', padding: '10px', background: '#1e1e1e', borderRadius: '4px' }}>
-                <p>Debug Info:</p>
-                <ul>
-                  <li>Total teams in state: {teams.length}</li>
-                  <li>Filtered teams: {getFilteredTeams().length}</li>
-                  <li>First team: {teams.length > 0 ? teams[0].name : 'None'}</li>
-                </ul>
-              </div>
               <TeamGrid>
                 {getFilteredTeams().map((team, index) => {
                   // Debugging

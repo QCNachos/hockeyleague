@@ -114,6 +114,26 @@ const Home = () => {
         </FeatureCard>
         
         <FeatureCard>
+          <h3>Owner Mode</h3>
+          <p>
+            Take ownership of a franchise and guide it to financial and competitive success.
+            Control ticket prices, renovations, marketing, merchandise, and team budgets
+            while building your team's brand and expanding your fan base.
+          </p>
+          <ActionButton to="/owner">Play Owner Mode</ActionButton>
+        </FeatureCard>
+        
+        <FeatureCard>
+          <h3>Season Mode</h3>
+          <p>
+            Play through a complete hockey season with your favorite team. Control scheduling,
+            manage your team's operations, and compete for the playoffs and championship
+            with a focus on the on-ice action.
+          </p>
+          <ActionButton to="/season">Play Season Mode</ActionButton>
+        </FeatureCard>
+        
+        <FeatureCard>
           <h3>Tournaments</h3>
           <p>
             Compete in various tournament formats including Olympics, 8 Nations, 
@@ -151,6 +171,15 @@ const Home = () => {
             See detailed breakdowns of forward lines, defense pairs, special teams units, and more.
           </p>
           <ActionButton to="/lines">View Lines</ActionButton>
+        </FeatureCard>
+        
+        <FeatureCard>
+          <h3>Asset Movement</h3>
+          <p>
+            Manage player trades, free agent signings, and waiver wire transactions.
+            Optimize your team's roster by strategically moving assets to build a championship contender.
+          </p>
+          <ActionButton to="/asset-movement">Manage Assets</ActionButton>
         </FeatureCard>
       </FeaturesGrid>
       

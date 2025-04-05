@@ -124,6 +124,7 @@ const Sidebar = () => {
           <StyledNavLink to="/players">Players</StyledNavLink>
           <StyledNavLink to="/teams">Teams</StyledNavLink>
           <StyledNavLink to="/lines">Line Combinations</StyledNavLink>
+          <StyledNavLink to="/asset-movement">Asset Movement</StyledNavLink>
         </NavContent>
       </NavSection>
       

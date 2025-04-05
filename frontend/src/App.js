@@ -16,12 +16,15 @@ import Draft from './pages/Draft';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import LineCombinations from './pages/LineCombinations';
+import AssetMovement from './pages/AssetMovement';
 
 // Game Modes
 import FranchiseMode from './pages/gameModes/FranchiseMode';
 import BeAProMode from './pages/gameModes/BeAProMode';
 import BeAProCreate from './pages/gameModes/BeAProCreate';
 import Tournaments from './pages/gameModes/Tournaments';
+import OwnerMode from './pages/gameModes/OwnerMode';
+import SeasonMode from './pages/gameModes/SeasonMode';
 
 // Auth guard component
 const PrivateRoute = ({ children }) => {
@@ -46,6 +49,8 @@ function App() {
           <Route path="be-a-pro" element={<BeAProMode />} />
           <Route path="be-a-pro/create/:startType" element={<BeAProCreate />} />
           <Route path="tournaments" element={<Tournaments />} />
+          <Route path="owner" element={<OwnerMode />} />
+          <Route path="season" element={<SeasonMode />} />
           
           {/* Management */}
           <Route path="players" element={<PlayerEditor />} />
@@ -53,6 +58,7 @@ function App() {
           <Route path="games" element={<GameSimulation />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="lines" element={<LineCombinations />} />
+          <Route path="asset-movement" element={<AssetMovement />} />
           
           {/* Analytics */}
           <Route path="stats" element={<Statistics />} />

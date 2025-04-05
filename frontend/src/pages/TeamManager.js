@@ -863,9 +863,16 @@ const TeamManager = () => {
   
   // Handle division change
   const handleDivisionChange = (e) => {
-    const division = e.target.value;
-    setSelectedDivision(division);
-    console.log('Division selected:', division);
+    const divisionId = e.target.value;
+    setSelectedDivision(divisionId);
+    
+    // Log division selection details for debugging
+    const selectedDivisionObj = divisions.find(d => d.id.toString() === divisionId);
+    console.log('Division selected:', {
+      id: divisionId,
+      name: selectedDivisionObj?.name || 'Unknown',
+      conference: selectedDivisionObj?.conference || 'Unknown'
+    });
   };
   
   // Get filtered teams based on all selected filters
@@ -896,11 +903,20 @@ const TeamManager = () => {
 
       // Filter by division if selected
       if (selectedDivision) {
-        const isDivisionMatch = 
-          (typeof team.division_id === 'number' && team.division_id.toString() === selectedDivision) ||
-          team.divisionName === selectedDivision;
+        // Get the division object to access its properties
+        const divisionObj = divisions.find(d => d.id.toString() === selectedDivision);
         
-        if (!isDivisionMatch) return false;
+        // Try to match by division ID first
+        const isDivisionMatch = 
+          // Check if the team's division_id matches the selected division ID
+          (team.division_id && team.division_id.toString() === selectedDivision) ||
+          // As fallback, check if the team's divisionName matches the selected division's name
+          (divisionObj && team.divisionName === divisionObj.name);
+        
+        if (!isDivisionMatch) {
+          console.log(`Team ${team.name} doesn't match division filter: team division=${team.division_id}, selected=${selectedDivision}`);
+          return false;
+        }
       }
 
       return true;
@@ -1186,7 +1202,7 @@ const TeamManager = () => {
               <FilterLabel>Division:</FilterLabel>
               <FilterSelect
                 value={selectedDivision || ""}
-                onChange={(e) => setSelectedDivision(e.target.value)}
+                onChange={handleDivisionChange}
                 disabled={availableDivisions.length === 0}
               >
                 <option value="">All Divisions</option>
@@ -1206,10 +1222,10 @@ const TeamManager = () => {
             {selectedLeague && ` from ${selectedLeague}`}
             {selectedConference && ` in the ${selectedConference} Conference`}
             {selectedDivision && ` from the ${
-              // Handle division being either a string or an ID
-              typeof selectedDivision === 'string' && !isNaN(parseInt(selectedDivision))
-                ? divisions.find(d => d.id === parseInt(selectedDivision))?.name
-                : selectedDivision
+              // Get division name from its ID
+              divisions.find(d => d.id.toString() === selectedDivision)?.name || 
+              // Fallback to the division value itself if not found by ID
+              selectedDivision
             } Division`}
           </FilterSummary>
           

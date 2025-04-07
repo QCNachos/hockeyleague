@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-// eslint-disable-next-line no-unused-vars
-import axios from 'axios';
+import { useParams } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 
 // Styled components
 const Container = styled.div`
@@ -11,10 +11,47 @@ const Container = styled.div`
   background-color: #111;
 `;
 
-// eslint-disable-next-line no-unused-vars
-const Title = styled.h1`
-  color: #C4CED4;
+const Header = styled.div`
+  margin-bottom: 30px;
+`;
+
+const TeamHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 15px;
   margin-bottom: 20px;
+  padding: 20px;
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  border: 1px solid #333;
+`;
+
+const TeamLogo = styled.div`
+  width: 60px;
+  height: 60px;
+  background-color: #333;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #fff;
+`;
+
+const TeamInfo = styled.div`
+  flex: 1;
+`;
+
+const TeamName = styled.h1`
+  color: #C4CED4;
+  margin: 0;
+  font-size: 2rem;
+`;
+
+const LeagueInfo = styled.div`
+  color: #888;
+  font-size: 1.1rem;
 `;
 
 const NavWidgets = styled.div`
@@ -25,8 +62,8 @@ const NavWidgets = styled.div`
 
 const NavWidget = styled.div`
   padding: 10px 15px;
-  background-color: ${props => props.active ? '#1a3042' : 'white'};
-  color: ${props => props.active ? 'white' : 'black'};
+  background-color: ${props => props.active ? '#1a3042' : '#1e1e1e'};
+  color: ${props => props.active ? 'white' : '#888'};
   border-right: 1px solid #333;
   cursor: pointer;
   font-weight: bold;
@@ -38,7 +75,7 @@ const NavWidget = styled.div`
   }
   
   &:hover {
-    background-color: ${props => props.active ? '#1a3042' : '#eee'};
+    background-color: ${props => props.active ? '#1a3042' : '#2a2a2a'};
   }
 `;
 
@@ -661,9 +698,11 @@ const OtherLinesContainer = styled.div`
 `;
 
 const LineCombinations = () => {
-  const [selectedLeague, setSelectedLeague] = useState('NHL');
+  const { league, teamId } = useParams();
+  const [selectedLeague, setSelectedLeague] = useState(league || 'NHL');
   const [teams, setTeams] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState(null);
+  const [teamInfo, setTeamInfo] = useState(null);
   const [activeWidget, setActiveWidget] = useState('lines');
   const [roster, setRoster] = useState({
     forwards: [],
@@ -673,56 +712,93 @@ const LineCombinations = () => {
     powerPlay2: [],
     penaltyKill1: [],
     penaltyKill2: [],
-    injured: [],
-    benched: [],
     fourOnFour: [],
     threeOnThree: [],
-    shootout: []
+    shootout: [],
+    injured: [],
+    benched: []
   });
   const [loading, setLoading] = useState(true);
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [showPlayerModal, setShowPlayerModal] = useState(false);
   const [showOtherLines, setShowOtherLines] = useState(false);
 
-  // Sample leagues for dropdown
-  const leagues = ['NHL', 'AHL', 'KHL', 'SHL', 'Liiga', 'DEL', 'NL', 'Junior Leagues'];
-
-  // Effect to fetch teams for the selected league
+  // Effect to fetch teams when league changes
   useEffect(() => {
     const fetchTeams = async () => {
-      setLoading(true);
       try {
-        // In real app, replace with actual API endpoint
-        // const response = await axios.get(`/api/teams?league=${selectedLeague}`);
-        // setTeams(response.data);
+        const { data, error } = await supabase
+          .from('Team')
+          .select(`
+            *,
+            League (
+              league,
+              league_level
+            )
+          `)
+          .eq('league', selectedLeague)
+          .order('team');
+
+        if (error) throw error;
         
-        // For now, use mock data
-        setTimeout(() => {
-          setTeams(getMockTeams());
-          setSelectedTeam(getMockTeams()[0].id);
-          setLoading(false);
-        }, 500);
+        setTeams(data || []);
+        
+        // If we have a teamId but no teamInfo, find and set it
+        if (teamId && !teamInfo) {
+          const team = data?.find(t => t.id === parseInt(teamId));
+          if (team) {
+            setTeamInfo(team);
+            setSelectedTeam(team.id);
+          }
+        }
       } catch (error) {
         console.error('Error fetching teams:', error);
-        setLoading(false);
+        setTeams(getMockTeams());
       }
     };
 
     fetchTeams();
-  }, [selectedLeague]);
+  }, [selectedLeague, teamId]);
 
-  // Effect to fetch roster when selected team changes
+  // Effect to fetch team info when teamId changes
+  useEffect(() => {
+    const fetchTeamInfo = async () => {
+      if (!teamId) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('Team')
+          .select(`
+            *,
+            League (
+              league,
+              league_level
+            )
+          `)
+          .eq('id', teamId)
+          .single();
+
+        if (error) throw error;
+        
+        setTeamInfo(data);
+        setSelectedTeam(data.id);
+        setSelectedLeague(data.league || league || 'NHL');
+        
+        console.log('Team info loaded:', data);
+      } catch (error) {
+        console.error('Error fetching team info:', error);
+      }
+    };
+
+    fetchTeamInfo();
+  }, [teamId, league]);
+
+  // Effect to set mock roster data
   useEffect(() => {
     const fetchRoster = async () => {
-      if (!selectedTeam) return;
-      
       setLoading(true);
       try {
-        // In real app, replace with actual API endpoint
-        // const response = await axios.get(`/api/teams/${selectedTeam}/roster`);
-        // setRoster(response.data);
-        
-        // For now, use mock data
+        // Always use mock data
         setTimeout(() => {
           setRoster(getMockRoster());
           setLoading(false);
@@ -734,14 +810,20 @@ const LineCombinations = () => {
     };
 
     fetchRoster();
-  }, [selectedTeam]);
+  }, [selectedTeam]); // Update roster when team changes
 
   const handleLeagueChange = (e) => {
     setSelectedLeague(e.target.value);
+    setSelectedTeam(null);
+    setTeamInfo(null);
   };
 
-  const handleTeamChange = (e) => {
-    setSelectedTeam(e.target.value);
+  const handleTeamChange = async (e) => {
+    const teamId = parseInt(e.target.value);
+    const team = teams.find(t => t.id === teamId);
+    setSelectedTeam(teamId);
+    setTeamInfo(team);
+    window.history.pushState({}, '', `/line-combinations/${team.league}/${teamId}`);
   };
 
   const handleWidgetClick = (widget) => {
@@ -1882,84 +1964,100 @@ const LineCombinations = () => {
     );
   };
 
-  if (loading) {
-    return <LoadingSpinner>Loading team roster...</LoadingSpinner>;
-  }
-
   return (
     <Container>
-      {/* Navigation Widgets */}
-      <NavWidgets>
-        <NavWidget 
-          onClick={() => handleWidgetClick('news')}
-          active={activeWidget === 'news'}
-        >
-          TEAM NEWS
-        </NavWidget>
-        <NavWidget 
-          onClick={() => handleWidgetClick('lines')}
-          active={activeWidget === 'lines'}
-        >
-          LINES
-        </NavWidget>
-        <NavWidget 
-          onClick={() => handleWidgetClick('lastGames')}
-          active={activeWidget === 'lastGames'}
-        >
-          LAST 10 GAMES STATS
-        </NavWidget>
-        <NavWidget 
-          onClick={() => handleWidgetClick('seasonStats')}
-          active={activeWidget === 'seasonStats'}
-        >
-          SEASON STATS
-        </NavWidget>
-      </NavWidgets>
-      
-      {/* Team and League Selector */}
-      <TeamSelector>
-        <Select value={selectedLeague} onChange={handleLeagueChange}>
-          {leagues.map(league => (
-            <option key={league} value={league}>{league}</option>
-          ))}
-        </Select>
-        
-        <Select value={selectedTeam} onChange={handleTeamChange}>
-          {teams.map(team => (
-            <option key={team.id} value={team.id}>{team.name}</option>
-          ))}
-        </Select>
-      </TeamSelector>
-      
-      {/* Main Content Area */}
-      <ContentArea>
-        {activeWidget === 'news' && renderTeamNews()}
-        {activeWidget === 'lines' && (
-          <>
-            {renderForwardLines()}
-            {renderDefensePairs()}
-            {renderGoalies()}
-            {renderPowerPlay()}
-            {renderPenaltyKill()}
-            
-            {/* Add the Show Other Lines button */}
-            <OtherLinesButton onClick={() => setShowOtherLines(!showOtherLines)}>
-              {showOtherLines ? 'Hide Other Lines' : 'Show Other Lines'}
-            </OtherLinesButton>
-            
-            {/* Render other lines when button is clicked */}
-            {renderOtherLines()}
-            
-            {renderInjured()}
-            {renderBenched()}
-            {renderBadgesLegend()}
-          </>
+      <Header>
+        <TeamSelector>
+          <Select value={selectedLeague} onChange={handleLeagueChange}>
+            <option value="NHL">NHL</option>
+            <option value="AHL">AHL</option>
+            <option value="CHL">CHL</option>
+          </Select>
+          <Select 
+            value={selectedTeam || ''} 
+            onChange={handleTeamChange}
+          >
+            <option value="">Select Team</option>
+            {teams.map(team => (
+              <option key={team.id} value={team.id}>
+                {team.team}
+              </option>
+            ))}
+          </Select>
+        </TeamSelector>
+
+        {teamInfo ? (
+          <TeamHeader>
+            <TeamLogo>
+              {teamInfo.abbreviation || '???'}
+            </TeamLogo>
+            <TeamInfo>
+              <TeamName>{teamInfo.team || 'Select Team'}</TeamName>
+              <LeagueInfo>{teamInfo.league || selectedLeague}</LeagueInfo>
+            </TeamInfo>
+          </TeamHeader>
+        ) : (
+          <TeamHeader>
+            <TeamInfo>
+              <TeamName>Line Combinations</TeamName>
+              <LeagueInfo>{selectedLeague}</LeagueInfo>
+            </TeamInfo>
+          </TeamHeader>
         )}
-        {activeWidget === 'lastGames' && renderLast10GamesStats()}
-        {activeWidget === 'seasonStats' && renderSeasonStats()}
-      </ContentArea>
-      
-      {/* Add the Player Modal */}
+
+        <NavWidgets>
+          <NavWidget 
+            active={activeWidget === 'lines'} 
+            onClick={() => handleWidgetClick('lines')}
+          >
+            Lines
+          </NavWidget>
+          <NavWidget 
+            active={activeWidget === 'stats'} 
+            onClick={() => handleWidgetClick('stats')}
+          >
+            Last 10 Games
+          </NavWidget>
+          <NavWidget 
+            active={activeWidget === 'season'} 
+            onClick={() => handleWidgetClick('season')}
+          >
+            Season Stats
+          </NavWidget>
+          <NavWidget 
+            active={activeWidget === 'news'} 
+            onClick={() => handleWidgetClick('news')}
+          >
+            Team News
+          </NavWidget>
+        </NavWidgets>
+      </Header>
+
+      {loading ? (
+        <div>Loading...</div>
+      ) : (
+        <ContentArea>
+          {activeWidget === 'lines' && (
+            <>
+              {renderForwardLines()}
+              {renderDefensePairs()}
+              {renderGoalies()}
+              {renderPowerPlay()}
+              {renderPenaltyKill()}
+              <OtherLinesButton onClick={() => setShowOtherLines(!showOtherLines)}>
+                {showOtherLines ? 'Hide Other Lines' : 'Show Other Lines'}
+              </OtherLinesButton>
+              {renderOtherLines()}
+              {renderInjured()}
+              {renderBenched()}
+            </>
+          )}
+          {activeWidget === 'stats' && renderLast10GamesStats()}
+          {activeWidget === 'season' && renderSeasonStats()}
+          {activeWidget === 'news' && <div>Team News Coming Soon</div>}
+        </ContentArea>
+      )}
+
       {renderPlayerModal()}
     </Container>
   );

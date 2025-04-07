@@ -61,6 +61,22 @@ const SubNavLink = styled(StyledNavLink)`
   font-size: 0.95em;
 `;
 
+const DisabledNavLink = styled.div`
+  display: flex;
+  align-items: center;
+  padding: 10px 20px;
+  color: #666;
+  text-decoration: none;
+  cursor: not-allowed;
+  
+  &:after {
+    content: ' (Coming Soon)';
+    margin-left: 5px;
+    font-size: 0.9em;
+    color: #555;
+  }
+`;
+
 const Divider = styled.hr`
   border: none;
   border-top: 1px solid #333;
@@ -111,7 +127,9 @@ const Sidebar = () => {
         <NavContent isOpen={sections.gameModes}>
           <StyledNavLink to="/franchise">Franchise Mode</StyledNavLink>
           <StyledNavLink to="/be-a-pro">Be a Pro Mode</StyledNavLink>
+          <StyledNavLink to="/season">Season Mode</StyledNavLink>
           <StyledNavLink to="/tournaments">Tournaments</StyledNavLink>
+          <DisabledNavLink>Owner Mode</DisabledNavLink>
         </NavContent>
       </NavSection>
       

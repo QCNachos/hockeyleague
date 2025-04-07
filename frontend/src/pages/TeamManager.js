@@ -913,7 +913,12 @@ const TeamManager = () => {
   
   // Add function to handle navigation to Line Combinations
   const handleEditLines = (teamId, teamName) => {
-    window.location.href = `/line-combinations/${teamId}`;
+    // Find the full team data
+    const team = teams.find(t => t.id === teamId);
+    if (!team) return;
+
+    // Navigate to line combinations with team info
+    window.location.href = `/line-combinations/${team.league}/${teamId}`;
   };
   
   return (

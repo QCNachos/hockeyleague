@@ -25,6 +25,8 @@ import BeAProCreate from './pages/gameModes/BeAProCreate';
 import Tournaments from './pages/gameModes/Tournaments';
 import OwnerMode from './pages/gameModes/OwnerMode';
 import SeasonMode from './pages/gameModes/SeasonMode';
+import TournamentSetup from './pages/gameModes/TournamentSetup';
+import StanleyCupSetup from './pages/gameModes/StanleyCupSetup';
 
 // Auth guard component
 const PrivateRoute = ({ children }) => {
@@ -49,6 +51,10 @@ function App() {
           <Route path="be-a-pro" element={<BeAProMode />} />
           <Route path="be-a-pro/create/:startType" element={<BeAProCreate />} />
           <Route path="tournaments" element={<Tournaments />} />
+          <Route path="tournaments/stanley-cup/setup" element={<StanleyCupSetup />} />
+          <Route path="tournaments/stanley-cup/play" element={<div>Stanley Cup Playoffs (Coming Soon)</div>} />
+          <Route path="tournaments/:tournamentId/setup" element={<TournamentSetup />} />
+          <Route path="tournaments/play" element={<div>Tournament Play Page (Coming Soon)</div>} />
           <Route path="owner" element={<OwnerMode />} />
           <Route path="season" element={<SeasonMode />} />
           
@@ -58,6 +64,8 @@ function App() {
           <Route path="games" element={<GameSimulation />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="lines" element={<LineCombinations />} />
+          <Route path="line-combinations" element={<LineCombinations />} />
+          <Route path="line-combinations/:league/:teamId" element={<LineCombinations />} />
           <Route path="asset-movement" element={<AssetMovement />} />
           
           {/* Analytics */}

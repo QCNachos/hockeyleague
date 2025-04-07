@@ -56,6 +56,18 @@ const FeatureCard = styled.div`
   }
 `;
 
+const DisabledCard = styled(FeatureCard)`
+  opacity: 0.6;
+  
+  h3 {
+    color: #666 !important;
+  }
+  
+  p {
+    color: #666 !important;
+  }
+`;
+
 const ActionButton = styled(Link)`
   display: inline-block;
   background-color: #B30E16;
@@ -68,6 +80,21 @@ const ActionButton = styled(Link)`
   
   &:hover {
     background-color: #950b12;
+  }
+`;
+
+const ComingSoonButton = styled.div`
+  display: inline-block;
+  background-color: #555;
+  color: #999;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: not-allowed;
+  font-weight: 500;
+  
+  &:after {
+    content: ' (Coming Soon)';
+    font-size: 0.9em;
   }
 `;
 
@@ -114,16 +141,6 @@ const Home = () => {
         </FeatureCard>
         
         <FeatureCard>
-          <h3>Owner Mode</h3>
-          <p>
-            Take ownership of a franchise and guide it to financial and competitive success.
-            Control ticket prices, renovations, marketing, merchandise, and team budgets
-            while building your team's brand and expanding your fan base.
-          </p>
-          <ActionButton to="/owner">Play Owner Mode</ActionButton>
-        </FeatureCard>
-        
-        <FeatureCard>
           <h3>Season Mode</h3>
           <p>
             Play through a complete hockey season with your favorite team. Control scheduling,
@@ -142,6 +159,15 @@ const Home = () => {
           </p>
           <ActionButton to="/tournaments">Play Tournaments</ActionButton>
         </FeatureCard>
+
+        <DisabledCard>
+          <h3>Owner Mode</h3>
+          <p>
+            Take ownership of a hockey franchise and guide it to success. Control ticket prices,
+            arena operations, marketing, and set goals for your GM while building a hockey dynasty.
+          </p>
+          <ComingSoonButton>Play Owner Mode</ComingSoonButton>
+        </DisabledCard>
       </FeaturesGrid>
       
       <SectionTitle>Management Tools</SectionTitle>

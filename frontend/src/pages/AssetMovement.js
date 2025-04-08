@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { createClient } from '@supabase/supabase-js';
+import PlayerCard from '../components/PlayerCard';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -320,6 +321,182 @@ const ConfirmTradeButton = styled.button`
   }
 `;
 
+// Add these styled components for the player modal after the other styled components
+const PlayerModal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+`;
+
+const PlayerCardContent = styled.div`
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 900px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  color: white;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+`;
+
+const PlayerCardHeader = styled.div`
+  display: flex;
+  align-items: flex-start;
+  padding: 20px;
+  background-color: #1a3042;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 1px solid #333;
+`;
+
+const PlayerCardBody = styled.div`
+  padding: 20px;
+`;
+
+const PlayerCardClose = styled.button`
+  position: absolute;
+  right: 15px;
+  top: 15px;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  
+  &:hover {
+    color: #B30E16;
+  }
+`;
+
+const PlayerCardImage = styled.div`
+  width: 120px;
+  height: 140px;
+  background-color: #B30E16;
+  border-radius: 8px;
+  margin-right: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 3rem;
+  font-weight: bold;
+  color: white;
+  text-transform: uppercase;
+`;
+
+const PlayerCardInfo = styled.div`
+  flex: 1;
+`;
+
+const PlayerCardName = styled.h2`
+  margin: 0 0 5px 0;
+  font-size: 1.8rem;
+`;
+
+const PlayerCardDetails = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+`;
+
+const PlayerCardDetail = styled.div`
+  margin-right: 20px;
+  margin-bottom: 5px;
+  
+  span {
+    color: #aaa;
+    margin-right: 5px;
+  }
+`;
+
+const PlayerCardSection = styled.div`
+  margin-top: 20px;
+`;
+
+const PlayerCardSectionTitle = styled.h3`
+  background-color: #1a3042;
+  color: white;
+  padding: 8px 15px;
+  margin: 0 0 15px 0;
+  font-size: 1.2rem;
+  border-bottom: 1px solid #333;
+  font-weight: normal;
+`;
+
+const AttributeGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  
+  @media (max-width: 600px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+`;
+
+const AttributeItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #333;
+`;
+
+const AttributeName = styled.span`
+  color: #aaa;
+`;
+
+const AttributeValue = styled.span`
+  font-weight: bold;
+  color: ${props => {
+    if (props.value >= 90) return '#4CAF50';
+    if (props.value >= 80) return '#8BC34A';
+    if (props.value >= 70) return '#CDDC39';
+    if (props.value >= 60) return '#FFC107';
+    return '#FF5722';
+  }};
+`;
+
+const SeasonStatsTable = styled.div`
+  overflow-x: auto;
+  margin-top: 15px;
+`;
+
+const StatsTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  text-align: center;
+`;
+
+const StatsTableHeader = styled.th`
+  background-color: #1a3042;
+  padding: 8px;
+  font-weight: bold;
+  color: white;
+  border-bottom: 1px solid #333;
+`;
+
+const StatsTableRow = styled.tr`
+  &:nth-child(even) {
+    background-color: #2a2a2a;
+  }
+`;
+
+const StatsTableCell = styled.td`
+  padding: 8px;
+  border-bottom: 1px solid #333;
+`;
+
+const EmptySlot = styled.div`
+  color: #aaa;
+  text-align: center;
+`;
+
 const AssetMovement = () => {
   // Helper for safe ID comparison
   const isSameId = (id1, id2) => {
@@ -368,6 +545,10 @@ const AssetMovement = () => {
   // Selected assets
   const [selectedTeam1Assets, setSelectedTeam1Assets] = useState([]);
   const [selectedTeam2Assets, setSelectedTeam2Assets] = useState([]);
+  
+  // Add player modal state variables
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [showPlayerModal, setShowPlayerModal] = useState(false);
   
   // Add this function near the top of the component
   const listAvailableTables = async () => {
@@ -732,41 +913,15 @@ const AssetMovement = () => {
   
   // Toggle for team 1 asset selection
   const toggleTeam1Asset = (asset) => {
-    if (!asset) return;
-    
-    // Check if the asset is already selected
-    const isSelected = selectedTeam1Assets.some(a => 
-      a.id === asset.id && a.assetType === asset.assetType
-    );
-    
-    if (isSelected) {
-      // Remove the asset
-      setSelectedTeam1Assets(selectedTeam1Assets.filter(a => 
-        !(a.id === asset.id && a.assetType === asset.assetType)
-      ));
-    } else {
-      // Add the asset
-      setSelectedTeam1Assets([...selectedTeam1Assets, asset]);
+    if (asset && asset.assetType === 'player') {
+      handlePlayerClick(asset);
     }
   };
   
   // Toggle for team 2 asset selection
   const toggleTeam2Asset = (asset) => {
-    if (!asset) return;
-    
-    // Check if the asset is already selected
-    const isSelected = selectedTeam2Assets.some(a => 
-      a.id === asset.id && a.assetType === asset.assetType
-    );
-    
-    if (isSelected) {
-      // Remove the asset
-      setSelectedTeam2Assets(selectedTeam2Assets.filter(a => 
-        !(a.id === asset.id && a.assetType === asset.assetType)
-      ));
-    } else {
-      // Add the asset
-      setSelectedTeam2Assets([...selectedTeam2Assets, asset]);
+    if (asset && asset.assetType === 'player') {
+      handlePlayerClick(asset);
     }
   };
   
@@ -1140,14 +1295,379 @@ const AssetMovement = () => {
     return team ? team.team : abbreviation;
   };
   
-  // Update the SelectedTeamSection component
+  // Add these functions
+  const handlePlayerClick = (player) => {
+    if (player && player.assetType === 'player') {
+      setSelectedPlayer(player);
+      setShowPlayerModal(true);
+    }
+  };
+  
+  const closePlayerModal = () => {
+    setShowPlayerModal(false);
+    setSelectedPlayer(null);
+  };
+  
+  // Modify the existing renderPlayer function to add support for clicking players
+  const renderPlayer = (player, showBadge = false) => {
+    if (!player) {
+      return <EmptySlot>Empty Slot</EmptySlot>;
+    }
+    
+    return (
+      <AssetCard 
+        key={player.id}
+        selected={isTeam1AssetSelected(player, 'player') || isTeam2AssetSelected(player, 'player')}
+        onClick={(e) => {
+          // First show the player modal if it's a player
+          if (player.assetType === 'player') {
+            // Don't stop propagation to allow toggling too
+            handlePlayerClick(player);
+          }
+          
+          // Then handle the original toggle behavior
+          if (isSameId(player.team_id, team1)) {
+            toggleTeam1Asset(player);
+          } else if (isSameId(player.team_id, team2)) {
+            toggleTeam2Asset(player);
+          }
+        }}
+      >
+        <AssetName>{player.first_name} {player.last_name}</AssetName>
+        <AssetDetails>
+          {player.position_primary || 'N/A'} • {player.age || 'N/A'} yrs • {player.overall || 'N/A'} OVR
+          <br />
+          {getPlayerContractInfo(player)}
+        </AssetDetails>
+      </AssetCard>
+    );
+  };
+
+  // Add the render function for the player modal
+  const renderPlayerModal = () => {
+    if (!showPlayerModal || !selectedPlayer) return null;
+    
+    // Mock player attributes (would come from the API in a real implementation)
+    const mockAttributes = {
+      skating: Math.floor(Math.random() * 20) + 70,
+      shooting: Math.floor(Math.random() * 20) + 70,
+      hands: Math.floor(Math.random() * 20) + 70,
+      checking: Math.floor(Math.random() * 20) + 70,
+      defense: Math.floor(Math.random() * 20) + 70,
+      physical: Math.floor(Math.random() * 20) + 70
+    };
+    
+    // Format team name safely - important for avoiding the React child error
+    const getTeamDisplay = () => {
+      if (selectedPlayer.team_id) {
+        return getTeamNameById(selectedPlayer.team_id);
+      } else if (selectedPlayer.team) {
+        if (typeof selectedPlayer.team === 'object') {
+          return selectedPlayer.team.team || 'N/A';
+        } else {
+          return String(selectedPlayer.team);
+        }
+      }
+      return 'N/A';
+    };
+    
+    // Get team abbreviation safely
+    const getTeamAbbr = () => {
+      if (selectedPlayer.team) {
+        if (typeof selectedPlayer.team === 'object') {
+          return selectedPlayer.team.abbreviation || 'N/A';
+        } else {
+          const teamObj = teams.find(t => 
+            isSameId(t.id, selectedPlayer.team) || 
+            t.abbreviation === selectedPlayer.team
+          );
+          return teamObj ? teamObj.abbreviation : String(selectedPlayer.team);
+        }
+      }
+      return 'N/A';
+    };
+    
+    const teamAbbr = getTeamAbbr();
+    
+    // Mock season stats data with the safely obtained team abbreviation
+    const seasonStats = [
+      { season: '2023-24', team: teamAbbr, league: 'NHL', gp: 82, goals: 9, assists: 33, points: 42, plusMinus: -7, pim: 51 },
+      { season: '2022-23', team: teamAbbr, league: 'NHL', gp: 82, goals: 5, assists: 37, points: 42, plusMinus: -11, pim: 40 },
+      { season: '2021-22', team: teamAbbr, league: 'NHL', gp: 82, goals: 7, assists: 43, points: 50, plusMinus: -9, pim: 34 },
+      { season: '2020-21', team: 'SWE', league: 'SweHL', gp: 41, goals: 7, assists: 21, points: 28, plusMinus: 14, pim: 16 },
+      { season: '2019-20', team: 'GRG', league: 'AHL', gp: 49, goals: 2, assists: 20, points: 22, plusMinus: -5, pim: 28 },
+      { season: '2018-19', team: 'MEA', league: 'DEL', gp: 29, goals: 2, assists: 4, points: 6, plusMinus: 2, pim: 8 },
+      { season: '2017-18', team: 'MEA', league: 'DEL', gp: 4, goals: 0, assists: 0, points: 0, plusMinus: 0, pim: 0 },
+    ];
+    
+    // Mock playoff stats
+    const playoffStats = [
+      { season: '2020-21', team: 'SWE', gp: 13, goals: 1, assists: 4, points: 5, pim: 8 },
+      { season: '2018-19', team: 'MEA', gp: 14, goals: 0, assists: 5, points: 5, pim: 0 },
+    ];
+    
+    // Get NHL totals
+    const nhlStats = seasonStats.filter(s => s.league === 'NHL');
+    const nhlTotals = {
+      gp: nhlStats.reduce((sum, s) => sum + s.gp, 0),
+      goals: nhlStats.reduce((sum, s) => sum + s.goals, 0),
+      assists: nhlStats.reduce((sum, s) => sum + s.assists, 0),
+      points: nhlStats.reduce((sum, s) => sum + (s.points || s.goals + s.assists), 0),
+      pim: nhlStats.reduce((sum, s) => sum + s.pim, 0)
+    };
+    
+    // Mock tournaments data
+    const tournaments = [
+      { 
+        year: 2020, 
+        tournament: 'World Junior U-20 Championships', 
+        team: 'Germany U-20',
+        gp: 7,
+        goals: 0,
+        assists: 6,
+        points: 6,
+        pim: 6,
+        plusMinus: 0
+      }
+    ];
+    
+    // Mock awards data
+    const awards = [
+      { year: '2021-22', league: 'NHL', award: 'Calder Memorial Trophy' }
+    ];
+    
+    return (
+      <PlayerModal onClick={closePlayerModal}>
+        <PlayerCardContent onClick={(e) => e.stopPropagation()}>
+          <PlayerCardClose onClick={closePlayerModal}>×</PlayerCardClose>
+          
+          <PlayerCardHeader>
+            <PlayerCardInfo>
+              <PlayerCardName>{selectedPlayer.first_name} {selectedPlayer.last_name}</PlayerCardName>
+              <PlayerCardDetails>
+                <PlayerCardDetail>
+                  <span>Position:</span> {selectedPlayer.position_primary || 'N/A'} -- shoots {selectedPlayer.shoots || 'R'}
+                </PlayerCardDetail>
+                <PlayerCardDetail>
+                  <span>Born:</span> {selectedPlayer.birthdate || 'Apr 6 2001'} -- {selectedPlayer.birth_city || 'Zell'}, {selectedPlayer.birth_country || 'Germany'}
+                </PlayerCardDetail>
+                <PlayerCardDetail>
+                  <span>Age:</span> [{selectedPlayer.age || '24'} yrs. ago]
+                </PlayerCardDetail>
+                <PlayerCardDetail>
+                  <span>Height/Weight:</span> {selectedPlayer.height || '6.03'} -- {selectedPlayer.weight || '205'} [{selectedPlayer.height_cm || '191'} cm/{selectedPlayer.weight_kg || '93'} kg]
+                </PlayerCardDetail>
+                <PlayerCardDetail>
+                  <span>Drafted by:</span> <span style={{color: '#ff4b55', fontWeight: 'bold'}}>{selectedPlayer.draft_team || 'Detroit Red Wings'}</span>
+                </PlayerCardDetail>
+                <PlayerCardDetail>
+                  <span>Draft Position:</span> round 1 <span style={{color: '#ff4b55', fontWeight: 'bold'}}>#{selectedPlayer.draft_position || '6'}</span> overall {selectedPlayer.draft_year || '2019'} NHL Entry Draft
+                </PlayerCardDetail>
+              </PlayerCardDetails>
+            </PlayerCardInfo>
+            <PlayerCardImage 
+              style={{
+                backgroundImage: selectedPlayer.image_url ? `url(${selectedPlayer.image_url})` : 'none',
+                backgroundColor: '#B30E16',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                color: 'white',
+                fontSize: '2rem',
+                fontWeight: 'bold'
+              }}
+            >
+              {!selectedPlayer.image_url && (selectedPlayer.number || '#')}
+            </PlayerCardImage>
+          </PlayerCardHeader>
+          
+          <PlayerCardBody>
+            {/* Regular Season / Playoffs Stats Table Header */}
+            <div style={{display: 'flex', backgroundColor: '#1a3042'}}>
+              <div style={{flex: 1, textAlign: 'center', padding: '8px', fontWeight: 'bold', color: 'white'}}>
+                Regular Season
+              </div>
+              <div style={{flex: 1, textAlign: 'center', padding: '8px', fontWeight: 'bold', color: 'white'}}>
+                Playoffs
+              </div>
+            </div>
+            
+            <SeasonStatsTable>
+              <StatsTable>
+                <thead>
+                  <tr>
+                    <StatsTableHeader>Season</StatsTableHeader>
+                    <StatsTableHeader>Team</StatsTableHeader>
+                    <StatsTableHeader>Lge</StatsTableHeader>
+                    <StatsTableHeader>GP</StatsTableHeader>
+                    <StatsTableHeader>G</StatsTableHeader>
+                    <StatsTableHeader>A</StatsTableHeader>
+                    <StatsTableHeader>Pts</StatsTableHeader>
+                    <StatsTableHeader>PIM</StatsTableHeader>
+                    <StatsTableHeader>+/-</StatsTableHeader>
+                    <StatsTableHeader>GP</StatsTableHeader>
+                    <StatsTableHeader>G</StatsTableHeader>
+                    <StatsTableHeader>A</StatsTableHeader>
+                    <StatsTableHeader>Pts</StatsTableHeader>
+                    <StatsTableHeader>PIM</StatsTableHeader>
+                  </tr>
+                </thead>
+                <tbody>
+                  {seasonStats.map((season, index) => {
+                    // Find matching playoff stats
+                    const playoff = playoffStats.find(p => p.season === season.season);
+                    
+                    // Determine text color based on league
+                    const isAHL = season.league === 'AHL';
+                    const isSweHL = season.league === 'SweHL';
+                    const isNHL = season.league === 'NHL';
+                    
+                    let textColor = '#fff'; // Default white text
+                    if (isAHL) textColor = '#e6b5bc'; // Pink for AHL
+                    if (isSweHL) textColor = '#a5d6a7'; // Green for SweHL
+                    if (isNHL) textColor = '#ffcc80'; // Gold/orange for NHL
+                    
+                    // Determine row background based on even/odd
+                    const rowBackground = index % 2 === 0 ? '#2a2a2a' : '#1e1e1e';
+                    
+                    return (
+                      <tr key={index} style={{ color: textColor, backgroundColor: rowBackground }}>
+                        <StatsTableCell>{season.season}</StatsTableCell>
+                        <StatsTableCell>{season.team}</StatsTableCell>
+                        <StatsTableCell>{season.league}</StatsTableCell>
+                        <StatsTableCell>{season.gp}</StatsTableCell>
+                        <StatsTableCell>{season.goals}</StatsTableCell>
+                        <StatsTableCell>{season.assists}</StatsTableCell>
+                        <StatsTableCell>{season.points}</StatsTableCell>
+                        <StatsTableCell>{season.pim}</StatsTableCell>
+                        <StatsTableCell>{season.plusMinus}</StatsTableCell>
+                        <StatsTableCell>{playoff ? playoff.gp : '--'}</StatsTableCell>
+                        <StatsTableCell>{playoff ? playoff.goals : '--'}</StatsTableCell>
+                        <StatsTableCell>{playoff ? playoff.assists : '--'}</StatsTableCell>
+                        <StatsTableCell>{playoff ? playoff.points : '--'}</StatsTableCell>
+                        <StatsTableCell>{playoff ? playoff.pim : '--'}</StatsTableCell>
+                      </tr>
+                    );
+                  })}
+                  {/* NHL Totals row */}
+                  <tr style={{ color: '#ffcc80', fontWeight: 'bold', backgroundColor: '#1e1e1e' }}>
+                    <StatsTableCell>NHL Totals</StatsTableCell>
+                    <StatsTableCell></StatsTableCell>
+                    <StatsTableCell></StatsTableCell>
+                    <StatsTableCell>{nhlTotals.gp}</StatsTableCell>
+                    <StatsTableCell>{nhlTotals.goals}</StatsTableCell>
+                    <StatsTableCell>{nhlTotals.assists}</StatsTableCell>
+                    <StatsTableCell>{nhlTotals.points}</StatsTableCell>
+                    <StatsTableCell>{nhlTotals.pim}</StatsTableCell>
+                    <StatsTableCell></StatsTableCell>
+                    <StatsTableCell></StatsTableCell>
+                    <StatsTableCell></StatsTableCell>
+                    <StatsTableCell></StatsTableCell>
+                    <StatsTableCell></StatsTableCell>
+                    <StatsTableCell></StatsTableCell>
+                  </tr>
+                </tbody>
+              </StatsTable>
+            </SeasonStatsTable>
+            
+            {/* Tournaments Section */}
+            <PlayerCardSection>
+              <PlayerCardSectionTitle>Tournaments</PlayerCardSectionTitle>
+              <SeasonStatsTable>
+                <StatsTable>
+                  <thead>
+                    <tr>
+                      <StatsTableHeader>Year</StatsTableHeader>
+                      <StatsTableHeader>Tournament</StatsTableHeader>
+                      <StatsTableHeader>Team</StatsTableHeader>
+                      <StatsTableHeader>GP</StatsTableHeader>
+                      <StatsTableHeader>G</StatsTableHeader>
+                      <StatsTableHeader>A</StatsTableHeader>
+                      <StatsTableHeader>Pts</StatsTableHeader>
+                      <StatsTableHeader>PIM</StatsTableHeader>
+                      <StatsTableHeader>+/-</StatsTableHeader>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tournaments.map((tournament, index) => {
+                      const rowBackground = index % 2 === 0 ? '#2a2a2a' : '#1e1e1e';
+                      return (
+                        <StatsTableRow key={index} style={{ color: '#e6b5bc', backgroundColor: rowBackground }}>
+                          <StatsTableCell>{tournament.year}</StatsTableCell>
+                          <StatsTableCell>{tournament.tournament}</StatsTableCell>
+                          <StatsTableCell>{tournament.team}</StatsTableCell>
+                          <StatsTableCell>{tournament.gp}</StatsTableCell>
+                          <StatsTableCell>{tournament.goals}</StatsTableCell>
+                          <StatsTableCell>{tournament.assists}</StatsTableCell>
+                          <StatsTableCell>{tournament.points}</StatsTableCell>
+                          <StatsTableCell>{tournament.pim}</StatsTableCell>
+                          <StatsTableCell>{tournament.plusMinus}</StatsTableCell>
+                        </StatsTableRow>
+                      );
+                    })}
+                  </tbody>
+                </StatsTable>
+              </SeasonStatsTable>
+            </PlayerCardSection>
+            
+            {/* Awards Section */}
+            <PlayerCardSection>
+              <PlayerCardSectionTitle>Awards</PlayerCardSectionTitle>
+              <SeasonStatsTable>
+                <StatsTable>
+                  <thead>
+                    <tr>
+                      <StatsTableHeader>Year</StatsTableHeader>
+                      <StatsTableHeader>League</StatsTableHeader>
+                      <StatsTableHeader>Award</StatsTableHeader>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {awards.map((award, index) => {
+                      const rowBackground = index % 2 === 0 ? '#2a2a2a' : '#1e1e1e';
+                      return (
+                        <StatsTableRow key={index} style={{ color: '#81c784', backgroundColor: rowBackground }}>
+                          <StatsTableCell>{award.year}</StatsTableCell>
+                          <StatsTableCell>{award.league}</StatsTableCell>
+                          <StatsTableCell style={{textAlign: 'left'}}>{award.award}</StatsTableCell>
+                        </StatsTableRow>
+                      );
+                    })}
+                  </tbody>
+                </StatsTable>
+              </SeasonStatsTable>
+            </PlayerCardSection>
+            
+            {/* Player Attributes Section */}
+            <PlayerCardSection>
+              <PlayerCardSectionTitle>Player Attributes</PlayerCardSectionTitle>
+              <AttributeGrid>
+                {Object.entries(mockAttributes).map(([key, value]) => (
+                  <AttributeItem key={key}>
+                    <AttributeName>{key.charAt(0).toUpperCase() + key.slice(1)}</AttributeName>
+                    <AttributeValue value={value}>{value}</AttributeValue>
+                  </AttributeItem>
+                ))}
+              </AttributeGrid>
+            </PlayerCardSection>
+          </PlayerCardBody>
+        </PlayerCardContent>
+      </PlayerModal>
+    );
+  };
+  
+  // Add the SelectedTeamSection component definition
   const SelectedTeamSection = ({ teamName, assets }) => (
     <SelectedAssetsContainer>
       <SelectedTeamHeader>{teamName}</SelectedTeamHeader>
       <SelectedAssetsGrid>
         {assets.length > 0 ? (
           assets.map((asset) => (
-            <SelectedAssetCard key={`selected-${asset.id}-${asset.assetType}`}>
+            <SelectedAssetCard 
+              key={`selected-${asset.id}-${asset.assetType}`}
+              onClick={() => asset.assetType === 'player' ? handlePlayerClick(asset) : null}
+              style={{ cursor: asset.assetType === 'player' ? 'pointer' : 'default' }}
+            >
               {asset.assetType === 'player' ? (
                 <>
                   <SelectedAssetName>{asset.first_name} {asset.last_name}</SelectedAssetName>
@@ -1261,7 +1781,11 @@ const AssetMovement = () => {
                       <AssetCard 
                         key={`player1-${player.id}`}
                         selected={isTeam1AssetSelected(player, 'player')}
-                        onClick={() => toggleTeam1Asset({...player, assetType: 'player'})}
+                        onClick={() => {
+                          // Show player card and add to selection
+                          handlePlayerClick({...player, assetType: 'player'});
+                          toggleTeam1Asset({...player, assetType: 'player'});
+                        }}
                       >
                         <AssetName>{player.first_name} {player.last_name}</AssetName>
                         <AssetDetails>
@@ -1348,7 +1872,11 @@ const AssetMovement = () => {
                       <AssetCard 
                         key={`player2-${player.id}`}
                         selected={isTeam2AssetSelected(player, 'player')}
-                        onClick={() => toggleTeam2Asset({...player, assetType: 'player'})}
+                        onClick={() => {
+                          // Show player card and add to selection
+                          handlePlayerClick({...player, assetType: 'player'});
+                          toggleTeam2Asset({...player, assetType: 'player'});
+                        }}
                       >
                         <AssetName>{player.first_name} {player.last_name}</AssetName>
                         <AssetDetails>
@@ -1394,6 +1922,9 @@ const AssetMovement = () => {
           </TradeActionsContainer>
         </>
       )}
+      
+      {/* Add the player modal at the end of the return */}
+      {renderPlayerModal()}
     </PageContainer>
   );
 };

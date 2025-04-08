@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { createClient } from '@supabase/supabase-js';
+import PlayerCard from '../components/PlayerCard';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -189,176 +190,724 @@ const PageButton = styled.button`
   }
 `;
 
+const FilterSummary = styled.div`
+  background-color: #232323;
+  padding: 12px 15px;
+  margin: 0 0 15px 0;
+  border-radius: 8px;
+  color: #C4CED4;
+  font-size: 14px;
+  
+  span {
+    font-weight: 500;
+    color: #fff;
+  }
+  
+  span.highlight {
+    color: #B30E16;
+  }
+`;
+
+// Add this mapping constant near the top of the file, after the styled components
+const LEAGUE_NAME_MAP = {
+  'NHL': 'National Hockey League',
+  'AHL': 'American Hockey League',
+  'SHL': 'Swedish Hockey League',
+  'KHL': 'Kontinental Hockey League',
+  'ECHL': 'East Coast Hockey League',
+  'Liiga': 'Finnish Elite League',
+  'DEL': 'Deutsche Eishockey Liga',
+  'NL': 'Swiss National League',
+  'CZE': 'Czech Extraliga',
+  'VHL': 'Vysshaya Hockey League',
+  'NCAA': 'National Collegiate Athletic Association',
+  'OHL': 'Ontario Hockey League',
+  'WHL': 'Western Hockey League',
+  'QMJHL': 'Quebec Major Junior Hockey League',
+  'USHL': 'United States Hockey League',
+  'BCHL': 'British Columbia Hockey League',
+  'HA': 'Hockeyallsvenskan',
+  'Mestis': 'Mestis',
+  // Add more leagues as needed
+};
+
+// Create a reverse mapping for lookup by full name if needed
+const LEAGUE_REVERSE_MAP = {};
+Object.entries(LEAGUE_NAME_MAP).forEach(([abbr, fullName]) => {
+  LEAGUE_REVERSE_MAP[fullName] = abbr;
+});
+
+// Get full league name with abbreviation
+const getLeagueFullName = (abbreviation) => {
+  if (!abbreviation) return '';
+  
+  // Log to debug potential issues
+  console.log(`[DEBUG] Getting full name for league abbreviation: "${abbreviation}"`);
+  
+  const fullName = LEAGUE_NAME_MAP[abbreviation];
+  if (!fullName) {
+    console.warn(`[DEBUG] No full name found in mapping for abbreviation: "${abbreviation}"`);
+    return abbreviation;
+  }
+  
+  return `${fullName} (${abbreviation})`;
+};
+
+// Get abbreviation from full name if needed
+const getLeagueAbbreviation = (fullNameWithAbbr) => {
+  if (!fullNameWithAbbr) return '';
+  // If it contains parentheses with the abbreviation, extract it
+  const match = fullNameWithAbbr.match(/\(([^)]+)\)$/);
+  if (match) return match[1];
+  
+  // Otherwise check the reverse map
+  return LEAGUE_REVERSE_MAP[fullNameWithAbbr] || fullNameWithAbbr;
+};
+
+// Special hard-coded helper for known team abbreviations that should be supported
+const getTeamId = (abbrev) => {
+  const teamMap = {
+    'PIT': 1, // Example mapping - replace with actual IDs if known
+    'CBJ': 2,
+    'NYR': 3,
+    'WSH': 4
+  };
+  return teamMap[abbrev] || abbrev;
+};
+
+// Add these new styled components before the PlayerEditor component
+const PlayerModal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+`;
+
+const PlayerCardContent = styled.div`
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 900px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  color: white;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+`;
+
+const PlayerCardHeader = styled.div`
+  display: flex;
+  align-items: flex-start;
+  padding: 20px;
+  background-color: #1a3042;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 1px solid #333;
+`;
+
+const PlayerCardBody = styled.div`
+  padding: 20px;
+`;
+
+const PlayerCardClose = styled.button`
+  position: absolute;
+  right: 15px;
+  top: 15px;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  
+  &:hover {
+    color: #B30E16;
+  }
+`;
+
+const PlayerCardImage = styled.div`
+  width: 120px;
+  height: 140px;
+  background-color: #B30E16;
+  border-radius: 8px;
+  margin-right: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 3rem;
+  font-weight: bold;
+  color: white;
+  text-transform: uppercase;
+`;
+
+const PlayerCardInfo = styled.div`
+  flex: 1;
+`;
+
+const PlayerCardName = styled.h2`
+  margin: 0 0 5px 0;
+  font-size: 1.8rem;
+`;
+
+const PlayerCardDetails = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+`;
+
+const PlayerCardDetail = styled.div`
+  margin-right: 20px;
+  margin-bottom: 5px;
+  
+  span {
+    color: #aaa;
+    margin-right: 5px;
+  }
+`;
+
+const PlayerCardSection = styled.div`
+  margin-top: 20px;
+`;
+
+const PlayerCardSectionTitle = styled.h3`
+  background-color: #1a3042;
+  color: white;
+  padding: 8px 15px;
+  margin: 0 0 15px 0;
+  font-size: 1.2rem;
+  border-bottom: 1px solid #333;
+`;
+
+const AttributeGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  
+  @media (max-width: 600px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+`;
+
+const AttributeItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #333;
+`;
+
+const AttributeName = styled.span`
+  color: #aaa;
+`;
+
+const AttributeValue = styled.span`
+  font-weight: bold;
+  color: ${props => {
+    if (props.value >= 90) return '#4CAF50';
+    if (props.value >= 80) return '#8BC34A';
+    if (props.value >= 70) return '#CDDC39';
+    if (props.value >= 60) return '#FFC107';
+    return '#FF5722';
+  }};
+`;
+
+const SeasonStatsTable = styled.div`
+  overflow-x: auto;
+  margin-top: 15px;
+`;
+
+const StatsTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  text-align: center;
+`;
+
+const StatsTableHeader = styled.th`
+  background-color: #1a3042;
+  padding: 8px;
+  font-weight: bold;
+  color: white;
+  border-bottom: 1px solid #333;
+`;
+
+const StatsTableRow = styled.tr`
+  &:nth-child(even) {
+    background-color: #2a2a2a;
+  }
+  
+  &:nth-child(odd) {
+    background-color: #1e1e1e;
+  }
+`;
+
+const StatsTableCell = styled.td`
+  padding: 8px;
+  border-bottom: 1px solid #333;
+`;
+
 const PlayerEditor = () => {
-  // Normalize string for comparison (handle case and whitespace)
+  // Add a utility function for normalizing strings for comparison
   const normalizeString = (str) => {
     if (!str) return '';
-    return str.toLowerCase().trim();
+    return String(str).toLowerCase().trim();
   };
-  
+
+  // Get URL parameters
+  const searchParams = new URLSearchParams(window.location.search);
+  const urlLeagueType = searchParams.get('leagueType');
+  const urlLeague = searchParams.get('league');
+  const urlTeamId = searchParams.get('teamId');
+
+  // Log URL parameters
+  console.log('[DEBUG] URL parameters:');
+  console.log('- urlLeagueType:', urlLeagueType);
+  console.log('- urlLeague:', urlLeague);
+  console.log('- urlTeamId:', urlTeamId, typeof urlTeamId);
+
   // State variables
   const [players, setPlayers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState(null);
-  const [teams, setTeams] = useState([]);
-  const [positions, setPositions] = useState([]);
-  
-  // League-related states
-  const [leagueTypes, setLeagueTypes] = useState([]);
-  const [leagues, setLeagues] = useState([]);
-  
+
+  // Static data
+  const [allLeagueTypesData, setAllLeagueTypesData] = useState([]);
+  const [allLeaguesData, setAllLeaguesData] = useState([]);
+  const [allTeamsData, setAllTeamsData] = useState([]);
+
   // Selected filter values
-  const [selectedLeagueType, setSelectedLeagueType] = useState('');
-  const [selectedLeague, setSelectedLeague] = useState('');
-  const [selectedTeam, setSelectedTeam] = useState('');
+  const [selectedLeagueType, setSelectedLeagueType] = useState(urlLeagueType || '');
+  const [selectedLeague, setSelectedLeague] = useState(urlLeague || '');
+  const [selectedTeam, setSelectedTeam] = useState(urlTeamId || '');
   const [selectedPosition, setSelectedPosition] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Available options based on current selection
-  const [availableLeagueTypes, setAvailableLeagueTypes] = useState([]);
-  const [availableLeagues, setAvailableLeagues] = useState([]);
-  
-  // Sorting state
+
+  // Track initialization status
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
+  const [initializedFromUrl, setInitializedFromUrl] = useState(false);
+
+  // For pagination and sorting
   const [sortColumn, setSortColumn] = useState('last_name');
   const [sortDirection, setSortDirection] = useState('asc');
-  
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [playersPerPage] = useState(15);
-  
-  // New state for league type mapping
-  const [leagueTypeMap, setLeagueTypeMap] = useState({});
-  
-  // Fetch players and teams from Supabase on component mount
+  const [totalPlayerCount, setTotalPlayerCount] = useState(0);
+
+  // Maps for lookup
+  const [leagueToTypeMap, setLeagueToTypeMap] = useState({});
+  const [leagueTypeMap, setLeagueTypeMap] = useState({ counts: {} });
+
+  // Add these new state variables
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [showPlayerModal, setShowPlayerModal] = useState(false);
+
+  // Single initialization effect
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    const initializeComponent = async () => {
+      console.log('[DEBUG] Starting component initialization');
+      setLoadingData(true);
       setError(null);
-      
+      setInitializedFromUrl(false);
+
       try {
-        // First, fetch league data to establish the relationship between leagues and league types
-        const { data: leagueData, error: leagueError } = await supabase
-          .from('League')
-          .select('*')
-          .order('league');
+        // Step 1: Load all static data
+        console.log('[DEBUG] Loading all static data...');
+        
+        // Fetch league types from League_Level_Rules table
+        const [leagueTypesRes, leaguesRes, teamsRes] = await Promise.all([
+          supabase.from('League_Level_Rules').select('*'),
+          supabase.from('League').select('*'),
+          supabase.from('Team').select('*')
+        ]);
+
+        // Check for errors
+        if (leagueTypesRes.error) throw new Error(`League Types Error: ${leagueTypesRes.error.message}`);
+        if (leaguesRes.error) throw new Error(`Leagues Error: ${leaguesRes.error.message}`);
+        if (teamsRes.error) throw new Error(`Teams Error: ${teamsRes.error.message}`);
+
+        // Get league types from League_Level_Rules table
+        const allLeagueTypes = leagueTypesRes.data
+          .map(lt => lt.league_level)
+          .filter(Boolean)
+          .sort();
+        
+        const allLeagues = leaguesRes.data || [];
+        const allTeams = teamsRes.data || [];
+
+        console.log(`[DEBUG] Loaded: ${allLeagueTypes.length} league types, ${allLeagues.length} leagues, ${allTeams.length} teams`);
+        
+        // Log league types from League_Level_Rules
+        console.log('[DEBUG] League types from League_Level_Rules:', allLeagueTypes);
+        
+        // Since the League table returned 0 results, we'll create a dynamic mapping
+        // based on analysis of what teams exist in each league
+        
+        // Get unique leagues from team data
+        const uniqueLeagues = [...new Set(allTeams.map(t => t.league).filter(Boolean))];
+        console.log(`[DEBUG] Found ${uniqueLeagues.length} unique leagues from team data:`, uniqueLeagues.join(', '));
+        
+        // Create a mapping from league to league type
+        const leagueToTypeMapping = {};
+        
+        // Create a dynamic classifier for leagues based on analysis
+        // We analyze which leagues might belong to which league types based on naming patterns
+        allLeagueTypes.forEach(leagueType => {
+          const leaguePatterns = [];
           
-        if (leagueError) {
-          console.error('Error fetching leagues:', leagueError);
-          throw new Error(`Failed to fetch leagues: ${leagueError.message}`);
-        }
-        
-        console.log('Leagues fetched from database:', leagueData?.length || 0);
-        if (leagueData && leagueData.length > 0) {
-          console.log('First few leagues:');
-          leagueData.slice(0, 5).forEach(league => {
-            console.log(` - League: "${league.league}", Level: "${league.league_level}", ID: ${league.id}`);
-          });
-        } else {
-          console.warn('No leagues found in the database!');
-        }
-        
-        // Create mapping of league names to their types
-        const leagueToTypeMap = {};
-        if (leagueData && leagueData.length > 0) {
-          leagueData.forEach(league => {
-            if (league.league && league.league_level) {
-              leagueToTypeMap[league.league] = league.league_level;
-            } else {
-              console.warn(`League record missing data: ID=${league.id}, league=${league.league}, level=${league.league_level}`);
+          // Define patterns that might indicate a league belongs to a specific type
+          // These are just heuristics and can be adjusted
+          switch (leagueType) {
+            case 'Pro':
+              leaguePatterns.push(/^NHL$/, /^KHL$/, /^SHL$/, /^[A-Z]{1,3}$/);
+              break;
+            case 'Minor':
+              leaguePatterns.push(/^AHL$/, /^ECHL$/, /Minor/i, /Farm/i);
+              break;
+            case 'Junior':
+              leaguePatterns.push(/Junior/i, /^[A-Z]HL$/, /^NCAA$/);
+              break;
+            case 'Sub-Junior':
+              leaguePatterns.push(/Youth/i, /U\d+/i, /Midget/i);
+              break;
+            default:
+              // No patterns for unknown types
+          }
+          
+          // Apply the patterns to categorize leagues
+          uniqueLeagues.forEach(league => {
+            // Skip if already categorized
+            if (leagueToTypeMapping[league]) return;
+            
+            // Check if the league matches any pattern for this type
+            const matches = leaguePatterns.some(pattern => pattern.test(league));
+            if (matches) {
+              leagueToTypeMapping[league] = leagueType;
+              console.log(`[DEBUG] Dynamically categorized ${league} as ${leagueType} based on patterns`);
             }
           });
-        }
-        
-        console.log('League to type mapping:', leagueToTypeMap);
-        
-        // Store the mapping in state so we can use it in the table display
-        setLeagueTypeMap(leagueToTypeMap);
-        
-        // Extract unique league types
-        const uniqueLeagueTypes = [...new Set(
-          leagueData
-            .map(league => league.league_level)
-            .filter(Boolean)
-        )].sort();
-        
-        console.log('Unique league types:', uniqueLeagueTypes);
-        
-        // Make sure all league types are properly normalized
-        // This ensures consistent filtering regardless of case/whitespace
-        const normalizedLeagueTypes = uniqueLeagueTypes.map(type => ({
-          original: type,
-          normalized: normalizeString(type)
-        }));
-        
-        console.log('Normalized league types:');
-        normalizedLeagueTypes.forEach(({ original, normalized }) => {
-          console.log(`- Original: "${original}", Normalized: "${normalized}"`);
         });
         
-        setLeagueTypes(uniqueLeagueTypes);
-        setAvailableLeagueTypes(uniqueLeagueTypes);
+        // Handle any uncategorized leagues - assign to the first league type (usually 'Pro')
+        const defaultLeagueType = allLeagueTypes[0] || 'Unknown';
+        uniqueLeagues.forEach(league => {
+          if (!leagueToTypeMapping[league]) {
+            leagueToTypeMapping[league] = defaultLeagueType;
+            console.log(`[DEBUG] Assigned uncategorized league ${league} to default type ${defaultLeagueType}`);
+          }
+        });
         
-        // Fetch teams with relevant league data
-        const { data: teamsData, error: teamsError } = await supabase
-          .from('Team')
-          .select('id, team, abbreviation, league, League(league_level)')
-          .order('team');
+        // Log the mapping to verify
+        console.log('[DEBUG] League to League Type mapping:');
+        Object.entries(leagueToTypeMapping).forEach(([league, type]) => {
+          console.log(`  "${league}" => "${type}"`);
+        });
+        
+        // Count teams by league type for the dropdown
+        const typeCounts = {};
+        
+        // For each type, count teams that have leagues of that type
+        allLeagueTypes.forEach(type => {
+          // Find leagues of this type
+          const leaguesOfType = Object.entries(leagueToTypeMapping)
+            .filter(([_, typeValue]) => typeValue === type)
+            .map(([league, _]) => league);
+            
+          // Count teams in these leagues
+          typeCounts[type] = allTeams.filter(t => leaguesOfType.includes(t.league)).length;
           
-        if (teamsError) {
-          throw teamsError;
+          console.log(`[DEBUG] League type "${type}" has ${typeCounts[type]} teams across ${leaguesOfType.length} leagues`);
+        });
+        
+        // Set all the static data states
+        setAllLeagueTypesData(allLeagueTypes);
+        setAllLeaguesData(allLeagues);
+        setAllTeamsData(allTeams);
+        setLeagueToTypeMap(leagueToTypeMapping);
+        setLeagueTypeMap({ counts: typeCounts });
+        
+        console.log('[DEBUG] Static data processed and set in state');
+        
+        // Step 2: Determine initial selections based on URL parameters
+        let derivedLeagueType = '';
+        let derivedLeague = '';
+        let derivedTeam = '';
+        let didInitFromUrl = false;
+
+        // If we have a team ID from URL
+        if (urlTeamId) {
+          console.log(`[DEBUG] Initializing from team abbreviation: ${urlTeamId}`);
+          
+          // Find the team
+          const team = allTeams.find(t => t.abbreviation === urlTeamId);
+          if (team) {
+            derivedTeam = team.abbreviation;
+            derivedLeague = team.league;
+            derivedLeagueType = leagueToTypeMapping[team.league];
+            
+            console.log(`[DEBUG] Found team ${team.team} (${derivedTeam})`);
+            console.log(`[DEBUG] Derived league: ${derivedLeague}, type: ${derivedLeagueType}`);
+            didInitFromUrl = true;
+          } else {
+            console.warn(`[DEBUG] Team ${urlTeamId} not found in loaded data`);
+            derivedTeam = urlTeamId; // Keep the team abbr even if not found
+            didInitFromUrl = true;
+          }
+        }
+        // Check league parameter
+        else if (urlLeague) {
+          derivedLeague = urlLeague;
+          derivedLeagueType = leagueToTypeMapping[urlLeague];
+          didInitFromUrl = true;
+        }
+        // Check league type parameter
+        else if (urlLeagueType) {
+          derivedLeagueType = urlLeagueType;
+          didInitFromUrl = true;
+        }
+
+        // Set selected values based on derived data
+        setSelectedLeagueType(derivedLeagueType);
+        setSelectedLeague(derivedLeague);
+        setSelectedTeam(derivedTeam);
+        setInitializedFromUrl(didInitFromUrl);
+
+        // Log the final initialization state
+        console.log('[DEBUG] Initialization complete with:');
+        console.log(`- League Type: ${derivedLeagueType || 'Not set'}`);
+        console.log(`- League: ${derivedLeague || 'Not set'}`);
+        console.log(`- Team: ${derivedTeam || 'Not set'}`);
+        
+        setInitialDataLoaded(true);
+      } catch (error) {
+        console.error('[DEBUG] Initialization error:', error);
+        setError(`Failed to initialize: ${error.message}`);
+        setInitialDataLoaded(true); // Mark as loaded even on error
+      } finally {
+        setLoadingData(false);
+      }
+    };
+
+    if (!initialDataLoaded) {
+      initializeComponent();
+    }
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Helper functions for filtering teams (similar to AssetMovement.js)
+  const getFilteredLeagues = () => {
+    // First, check if data is loaded
+    if (!initialDataLoaded || !allTeamsData || allTeamsData.length === 0) {
+      console.log('[DEBUG] Cannot filter leagues - initialization not complete');
+      return [];
+    }
+
+    // If no league type is selected, return all leagues referenced by teams
+    if (!selectedLeagueType) {
+      // Get all unique leagues from teams
+      const uniqueLeagues = [...new Set(allTeamsData.map(t => t.league).filter(Boolean))];
+      
+      // Convert to League objects for consistency
+      return uniqueLeagues.map(league => ({ 
+        league, 
+        league_level: leagueToTypeMap[league] || 'Unknown'
+      }));
+    }
+    
+    // If a league type is selected:
+    // 1. Find all leagues of that type from our mapping
+    const leaguesOfSelectedType = Object.entries(leagueToTypeMap)
+      .filter(([_, type]) => type === selectedLeagueType)
+      .map(([league, _]) => league);
+      
+    console.log(`[DEBUG] Found ${leaguesOfSelectedType.length} leagues of type ${selectedLeagueType}:`, 
+                leaguesOfSelectedType.join(', '));
+    
+    // 2. Check which of these leagues have teams
+    const leaguesWithTeams = leaguesOfSelectedType.filter(league => 
+      allTeamsData.some(team => team.league === league)
+    );
+    
+    console.log(`[DEBUG] Of these, ${leaguesWithTeams.length} have teams:`, leaguesWithTeams.join(', '));
+    
+    // 3. Convert to League objects for consistency
+    return leaguesWithTeams.map(league => ({ 
+      league, 
+      league_level: selectedLeagueType 
+    }));
+  };
+
+  const getFilteredTeams = () => {
+    // First, check if data is loaded
+    if (!initialDataLoaded || !allTeamsData || allTeamsData.length === 0) {
+      console.log('[DEBUG] Cannot filter teams - initialization not complete');
+      return [];
+    }
+
+    return allTeamsData.filter(team => {
+      // Skip teams with no league information
+      if (!team.league) return false;
+      
+      // Filter by league type if selected
+      if (selectedLeagueType) {
+        const teamLeagueType = leagueToTypeMap[team.league];
+        if (teamLeagueType !== selectedLeagueType) {
+          return false;
+        }
+      }
+      
+      // Filter by league if selected
+      if (selectedLeague && team.league !== selectedLeague) {
+        return false;
+      }
+      
+      return true;
+    });
+  };
+
+  // Handle league type change
+  const handleLeagueTypeChange = (e) => {
+    const value = e.target.value;
+    console.log(`[DEBUG] League type changed to: ${value}`);
+    
+    setSelectedLeagueType(value);
+    
+    // Reset league and team if they don't match the new type
+    if (selectedLeague) {
+      const leagueType = leagueToTypeMap[selectedLeague];
+      if (value && leagueType !== value) {
+        console.log(`[DEBUG] Resetting league ${selectedLeague} as it doesn't match new type ${value}`);
+        setSelectedLeague('');
+        setSelectedTeam('');
+      }
+    } else {
+      // If no league is selected, also reset the team
+      setSelectedTeam('');
+    }
+    
+    setCurrentPage(1); // Reset pagination
+  };
+
+  // Handle league change
+  const handleLeagueChange = (e) => {
+    const value = e.target.value;
+    console.log(`[DEBUG] League changed to: "${value}"`);
+    
+    // Check if this league exists in our League table data
+    const leagueExists = allLeaguesData.some(l => l.league === value);
+    if (!leagueExists) {
+      console.warn(`[DEBUG] Selected league "${value}" not found in League table!`);
+    }
+    
+    // Log all teams with this league value to verify our data
+    const teamsWithThisLeague = allTeamsData.filter(t => t.league === value);
+    console.log(`[DEBUG] Found ${teamsWithThisLeague.length} teams with league="${value}":`, 
+      teamsWithThisLeague.map(t => `${t.team} (${t.abbreviation})`).join(', '));
+    
+    // Set the selected league
+    setSelectedLeague(value);
+    
+    // Reset team if it doesn't belong to the new league
+    if (selectedTeam) {
+      const teamObject = allTeamsData.find(t => t.abbreviation === selectedTeam);
+      const teamLeague = teamObject?.league;
+      if (value && teamLeague !== value) {
+        console.log(`[DEBUG] Resetting team ${selectedTeam} as it doesn't belong to new league ${value}`);
+        setSelectedTeam('');
+      }
+    } else {
+      // If no team is selected yet, just reset it for consistency
+      setSelectedTeam('');
+    }
+    
+    setCurrentPage(1); // Reset pagination
+  };
+
+  // Handle team change
+  const handleTeamChange = (e) => {
+    const value = e.target.value;
+    console.log(`[DEBUG] Team changed to: ${value}`);
+    setSelectedTeam(value);
+    setCurrentPage(1);
+  };
+
+  // Fetch players based on current filters
+  useEffect(() => {
+    if (!initialDataLoaded) {
+      console.log('[DEBUG] Skipping player fetch - initialization not complete');
+      return;
+    }
+
+    const fetchPlayers = async () => {
+      console.log('[DEBUG] Fetching players with filters:', {
+        team: selectedTeam,
+        league: selectedLeague,
+        leagueType: selectedLeagueType,
+        position: selectedPosition,
+        search: searchQuery
+      });
+      
+      setLoadingData(true);
+      
+      try {
+        // Build the query
+        let query = supabase.from('Player').select('*', { count: 'exact' });
+        
+        // Get teams matching our filters - similar to AssetMovement.js approach
+        let filteredTeams = allTeamsData;
+        
+        // Apply league type filter if selected
+        if (selectedLeagueType) {
+          // Find all leagues of this type first
+          const leaguesOfType = Object.entries(leagueToTypeMap)
+            .filter(([_, type]) => type === selectedLeagueType)
+            .map(([league, _]) => league);
+            
+          console.log(`[DEBUG] Leagues of type "${selectedLeagueType}": ${leaguesOfType.join(', ')}`);
+          
+          // Then filter teams to only those in these leagues
+          filteredTeams = filteredTeams.filter(team => 
+            team.league && leaguesOfType.includes(team.league)
+          );
         }
         
-        // Enhance teams with league_type from League relationship
-        const enhancedTeams = teamsData.map(team => ({
-          ...team,
-          league_type: team.League?.league_level || leagueToTypeMap[team.league] || 'Unknown'
-        }));
-        
-        console.log('Enhanced teams with league types:', enhancedTeams);
-        setTeams(enhancedTeams);
-        
-        // Extract unique leagues from teams
-        const uniqueLeagues = [...new Set(
-          enhancedTeams
-            .map(team => team.league)
-            .filter(Boolean)
-        )].sort();
-        
-        setLeagues(uniqueLeagues);
-        setAvailableLeagues(uniqueLeagues);
-        
-        // Fetch players data - Update to respect the actual schema
-        // First, check the structure of a player record to understand the relationship
-        const { data: playerStructure, error: structureError } = await supabase
-          .from('Player')
-          .select('*')
-          .limit(1);
-          
-        if (structureError) {
-          console.error('Error fetching player structure:', structureError);
-          throw structureError;
+        // Apply league filter if selected
+        if (selectedLeague) {
+          filteredTeams = filteredTeams.filter(team => team.league === selectedLeague);
         }
         
-        // Examine the player record to determine how team reference is stored
-        console.log('Player record structure:', playerStructure[0]);
+        // Extract team abbreviations
+        const teamAbbreviations = filteredTeams.map(t => t.abbreviation).filter(Boolean);
         
-        // Now construct our query based on the database schema
-        let query = supabase
-          .from('Player')
-          .select(`
-            *,
-            team:Team(id, team, abbreviation, league, League(league_level))
-          `);
+        // Apply team filter if selected
+        if (selectedTeam) {
+          // Direct team filter
+          query = query.eq('team', selectedTeam);
+        } else if (teamAbbreviations.length > 0) {
+          // Filter by all teams matching our league/type filters
+          console.log(`[DEBUG] Filtering by ${teamAbbreviations.length} teams:`, 
+                      teamAbbreviations.slice(0, 10).join(', ') + 
+                      (teamAbbreviations.length > 10 ? '...' : ''));
+          query = query.in('team', teamAbbreviations);
+        } else {
+          console.log('[DEBUG] No teams match the filters, returning empty result');
+          setPlayers([]);
+          setTotalPages(0);
+          setTotalPlayerCount(0);
+          setLoadingData(false);
+          return;
+        }
         
-        // We'll apply minimal filters on the server side and do most filtering client-side
-        // since we need to handle league_type which is derived from the league
-        
-        // Only apply direct filters to the query
+        // Apply position filter
         if (selectedPosition) {
           query = query.eq('position_primary', selectedPosition);
         }
         
+        // Apply search filter
         if (searchQuery) {
           query = query.or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%`);
         }
@@ -366,288 +915,543 @@ const PlayerEditor = () => {
         // Apply sorting
         query = query.order(sortColumn, { ascending: sortDirection === 'asc' });
         
-        // Get all the data first to apply client-side filtering
-        const { data: allPlayersData, error: allPlayersError } = await query;
+        // Apply pagination
+        const startIndex = (currentPage - 1) * playersPerPage;
+        query = query.range(startIndex, startIndex + playersPerPage - 1);
         
-        if (allPlayersError) {
-          throw allPlayersError;
+        // Execute the query
+        const { data: playersData, error: playersError, count } = await query;
+        
+        if (playersError) {
+          throw new Error(`Player query error: ${playersError.message}`);
         }
         
-        console.log('All players fetched from DB:', allPlayersData?.length || 0);
+        console.log(`[DEBUG] Player query successful. Count: ${count}, Fetched: ${playersData?.length || 0}`);
         
-        // Apply client-side filtering for league type, league, and team
-        let filteredPlayers = allPlayersData || [];
-        
-        // Log some sample players to see their structure
-        if (filteredPlayers.length > 0) {
-          console.log('Sample player before filtering:', filteredPlayers[0]);
-          console.log('Player team relationship:', filteredPlayers[0]?.team);
-        }
-        
-        // Apply league type filter
-        if (selectedLeagueType) {
-          console.log(`Filtering by league type: ${selectedLeagueType}`);
-          console.log('League to type mapping available:', Object.keys(leagueToTypeMap));
+        // Enhance players with team and league information
+        const enhancedPlayers = playersData.map(player => {
+          // Find team for this player
+          const teamObj = allTeamsData.find(t => t.abbreviation === player.team);
           
-          const normalizedSelectedType = normalizeString(selectedLeagueType);
-          console.log(`Normalized selected league type: "${normalizedSelectedType}"`);
+          // Get league information if team found
+          let league = null;
+          let league_type = null;
           
-          // Debug all league types available in the mapping
-          console.log('Available league types in mapping:');
-          Object.entries(leagueToTypeMap).forEach(([league, type]) => {
-            console.log(`- League "${league}" has type "${type}" (normalized: "${normalizeString(type)}")`);
-          });
-          
-          filteredPlayers = filteredPlayers.filter(player => {
-            // First check if player has a team
-            if (!player || !player.team) {
-              return false;
-            }
-            
-            // First try to get league type directly from the League relationship
-            let leagueType = null;
-            
-            if (player.team.League && player.team.League.league_level) {
-              // If we have League data directly from the relationship
-              leagueType = player.team.League.league_level;
-              console.log(`Using direct League relationship for player ${player.id}: ${leagueType}`);
-            }
-            else if (player.team.league) {
-              // Otherwise use our mapping (this is a fallback)
-              leagueType = leagueToTypeMap[player.team.league];
-              console.log(`Using league mapping for player ${player.id}: league=${player.team.league} -> type=${leagueType}`);
-            }
-            
-            if (!leagueType) {
-              console.log(`Player ${player.id} (${player.first_name} ${player.last_name}) has no determinable league type`);
-              return false;
-            }
-            
-            const normalizedLeagueType = normalizeString(leagueType);
-            const matches = normalizedLeagueType === normalizedSelectedType;
-            
-            if (Math.random() < 0.1) { // Log ~10% of checks to avoid flooding console
-              console.log(`Player ${player.id} (${player.first_name} ${player.last_name}): league="${player.team.league}", leagueType="${leagueType}" (normalized: "${normalizedLeagueType}"), selectedType="${selectedLeagueType}" (normalized: "${normalizedSelectedType}"), matches=${matches}`);
-            }
-            
-            return matches;
-          });
-          
-          console.log(`After league type filter: ${filteredPlayers.length} players`);
-        }
-        
-        // Apply league filter
-        if (selectedLeague) {
-          console.log(`Filtering by league: ${selectedLeague}`);
-          filteredPlayers = filteredPlayers.filter(player => 
-            player.team && player.team.league === selectedLeague
-          );
-          
-          console.log(`After league filter: ${filteredPlayers.length} players`);
-        }
-        
-        // Apply team filter
-        if (selectedTeam) {
-          console.log(`Filtering by team ID: ${selectedTeam}`);
-          
-          // Check if we have players with this team ID
-          const teamMatches = filteredPlayers.filter(player => 
-            player.team && player.team.id && player.team.id.toString() === selectedTeam.toString()
-          );
-          
-          console.log(`Found ${teamMatches.length} players with team.id=${selectedTeam}`);
-          
-          // If we didn't find any matches with the team relation, check direct properties
-          if (teamMatches.length === 0) {
-            // Look for team references in the raw player record
-            for (const field of ['team', 'team_id', 'teamId']) {
-              if (filteredPlayers.some(p => p[field] !== undefined)) {
-                const directMatches = filteredPlayers.filter(p => 
-                  p[field] !== null && p[field].toString() === selectedTeam.toString()
-                );
-                console.log(`Found ${directMatches.length} players with ${field}=${selectedTeam}`);
-                
-                if (directMatches.length > 0) {
-                  // If we found matches using a direct field, use that instead
-                  filteredPlayers = directMatches;
-                  console.log(`Using direct field ${field} to match team ID`);
-                  break;
-                }
-              }
-            }
-          } else {
-            // Use the relation-based filtering as originally intended
-            filteredPlayers = teamMatches;
+          if (teamObj) {
+            league = teamObj.league;
+            league_type = getTeamLeagueType(teamObj);
           }
           
-          console.log(`After team filter: ${filteredPlayers.length} players`);
-        }
+          return {
+            ...player,
+            teamObj: teamObj || null,
+            league: league,
+            league_type: league_type
+          };
+        });
         
-        // Log number of players after all filters
-        console.log(`Final filtered players: ${filteredPlayers.length}`);
-        
-        // Calculate total count for pagination
-        const totalCount = filteredPlayers.length;
-        
-        // Apply pagination to filtered results
-        const from = (currentPage - 1) * playersPerPage;
-        const to = Math.min(from + playersPerPage, filteredPlayers.length);
-        
-        // Get the slice for current page
-        const playersForCurrentPage = filteredPlayers.slice(from, to);
-        
-        console.log(`Players for page ${currentPage}: ${playersForCurrentPage.length}`);
-        
-        // Update state
-        setPlayers(playersForCurrentPage);
-        setTotalPages(Math.max(1, Math.ceil(totalCount / playersPerPage)));
-        
-        // Extract unique positions for filtering
-        const uniquePositions = [...new Set(
-          playersForCurrentPage
-            .map(player => player.position_primary)
-            .filter(Boolean)
-        )];
-        
-        setPositions(uniquePositions);
+        // Process results
+        setPlayers(enhancedPlayers || []);
+        setTotalPlayerCount(count || 0);
+        setTotalPages(Math.ceil((count || 0) / playersPerPage));
         
       } catch (error) {
-        console.error('Error fetching data:', error);
-        setError(`Failed to load data: ${error.message}`);
+        console.error('[DEBUG] Error fetching players:', error);
+        setError(`Failed to fetch players: ${error.message}`);
+        setPlayers([]);
+        setTotalPages(0);
+        setTotalPlayerCount(0);
       } finally {
-        setLoading(false);
+        setLoadingData(false);
       }
     };
     
-    fetchData();
-  }, [selectedLeagueType, selectedLeague, selectedTeam, selectedPosition, searchQuery, sortColumn, sortDirection, currentPage, playersPerPage]);
-  
+    fetchPlayers();
+    
+  }, [
+    initialDataLoaded,
+    selectedTeam,
+    selectedLeague,
+    selectedLeagueType,
+    selectedPosition,
+    searchQuery,
+    sortColumn,
+    sortDirection,
+    currentPage,
+    playersPerPage,
+    allTeamsData,
+    allLeaguesData
+  ]);
+
+  // Format player salary to display as millions
+  const formatSalary = (salary) => {
+    if (salary === null || salary === undefined) return 'N/A';
+    // Ensure salary is a number before division
+    const numericSalary = Number(salary);
+    if (isNaN(numericSalary)) return 'Invalid';
+    return `$${(numericSalary / 1000000).toFixed(1)}M`;
+  };
+
   // Handler for sorting
   const handleSort = (column) => {
+    console.log(`[DEBUG] handleSort called for column: ${column}`);
     if (sortColumn === column) {
-      // Toggle direction if clicking the same column
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      // Toggle direction
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
-      // Default to ascending for a new column
+      // Set new column, default to ascending
       setSortColumn(column);
       setSortDirection('asc');
     }
-    
-    // Reset to first page when sorting changes
-    setCurrentPage(1);
+    setCurrentPage(1); // Reset to first page when sorting changes
   };
-  
-  // Format player salary to display as millions
-  const formatSalary = (salary) => {
-    if (!salary) return 'N/A';
-    return `$${(salary / 1000000).toFixed(1)}M`;
-  };
-  
-  // Handler for league type selection change
-  const handleLeagueTypeChange = (e) => {
-    const value = e.target.value;
-    console.log(`League type selected: "${value}"`);
+
+  const getTeamLeagueType = (team) => {
+    if (!team) {
+      console.warn('[DEBUG] getTeamLeagueType called with null/undefined team');
+      return null;
+    }
     
-    // Log all league types in the teams data
-    console.log('League types in teams data:');
-    const leagueTypesByTeam = {};
-    teams.forEach(team => {
-      if (team.league_type) {
-        if (!leagueTypesByTeam[team.league_type]) {
-          leagueTypesByTeam[team.league_type] = [];
+    if (!team.league) {
+      console.warn(`[DEBUG] Team ${team.team || team.abbreviation} has no league`);
+      return null;
+    }
+    
+    console.log(`[DEBUG] Getting league type for team ${team.team} (${team.abbreviation}), league: "${team.league}"`);
+    
+    // Get the league type from our mapping
+    const leagueType = leagueToTypeMap[team.league];
+    
+    if (!leagueType) {
+      console.warn(`[DEBUG] No league type mapping found for league "${team.league}"`);
+      return null;
+    }
+    
+    console.log(`[DEBUG] Found league type "${leagueType}" for team ${team.team}`);
+    return leagueType;
+  };
+
+  // Add handlePlayerClick function
+  const handlePlayerClick = (player) => {
+    setSelectedPlayer(player);
+    setShowPlayerModal(true);
+  };
+
+  // Add closePlayerModal function
+  const closePlayerModal = () => {
+    setShowPlayerModal(false);
+    setSelectedPlayer(null);
+  };
+
+  // Add renderPlayerModal function
+  const renderPlayerModal = () => {
+    if (!showPlayerModal || !selectedPlayer) return null;
+    
+    // Mock player attributes (would come from the API in a real implementation)
+    const mockAttributes = {
+      skating: Math.floor(Math.random() * 20) + 70,
+      shooting: Math.floor(Math.random() * 20) + 70,
+      hands: Math.floor(Math.random() * 20) + 70,
+      checking: Math.floor(Math.random() * 20) + 70,
+      defense: Math.floor(Math.random() * 20) + 70,
+      physical: Math.floor(Math.random() * 20) + 70
+    };
+    
+    // Format team name safely - important for avoiding the React child error
+    const getTeamDisplay = () => {
+      if (selectedPlayer.team_id) {
+        return getTeamNameById(selectedPlayer.team_id);
+      } else if (selectedPlayer.team) {
+        if (typeof selectedPlayer.team === 'object') {
+          return selectedPlayer.team.team || 'N/A';
+        } else {
+          return String(selectedPlayer.team);
         }
-        leagueTypesByTeam[team.league_type].push(`${team.team} (${team.abbreviation})`);
       }
-    });
+      return 'N/A';
+    };
     
-    Object.entries(leagueTypesByTeam).forEach(([type, teamsList]) => {
-      console.log(`- "${type}" (${teamsList.length} teams): ${teamsList.slice(0, 3).join(', ')}${teamsList.length > 3 ? '...' : ''}`);
-    });
-    
-    // Log out available teams for this league type
-    if (value) {
-      const matchingTeams = teams.filter(team => 
-        normalizeString(team.league_type) === normalizeString(value)
-      );
-      
-      console.log(`Found ${matchingTeams.length} teams with league type "${value}":`);
-      matchingTeams.slice(0, 10).forEach(team => {
-        console.log(` - ${team.team} (${team.abbreviation}): league="${team.league}", league_type="${team.league_type}"`);
-      });
-      
-      if (matchingTeams.length === 0) {
-        console.warn(`No teams found with league type "${value}" - this may indicate a data issue`);
-      }
-    }
-    
-    // Set the selected league type
-    setSelectedLeagueType(value);
-    
-    // Reset subsequent filters
-    setSelectedLeague('');
-    setSelectedTeam('');
-    
-    // Reset to first page
-    setCurrentPage(1);
-    
-    // Filter available leagues based on selected league type
-    if (value) {
-      const normalizedValue = normalizeString(value);
-      console.log(`Filtering leagues by normalized league type: "${normalizedValue}"`);
-      
-      const filteredLeagues = [...new Set(
-        teams
-          .filter(team => {
-            const normalizedTeamType = normalizeString(team.league_type);
-            const matches = normalizedTeamType === normalizedValue;
-            if (Math.random() < 0.1) { // Log some examples
-              console.log(`Team: ${team.team}, league_type: "${team.league_type}" (normalized: "${normalizedTeamType}"), matches: ${matches}`);
-            }
-            return matches;
-          })
-          .map(team => team.league)
-          .filter(Boolean)
-      )].sort();
-      
-      console.log(`Found ${filteredLeagues.length} leagues for league type "${value}":`, filteredLeagues);
-      
-      if (filteredLeagues.length === 0) {
-        console.warn(`No leagues found for league type "${value}" (normalized: "${normalizedValue}"). This could indicate a data issue.`);
+    // Get team abbreviation safely
+    const getTeamAbbr = () => {
+      if (!selectedPlayer.team) {
+        return 'N/A'; // No team assigned (prospect)
       }
       
-      setAvailableLeagues(filteredLeagues);
-    } else {
-      // If no league type selected, show all leagues
-      const allLeagues = [...new Set(
-        teams
-          .map(team => team.league)
-          .filter(Boolean)
-      )].sort();
+      if (typeof selectedPlayer.team === 'object') {
+        return selectedPlayer.team.abbreviation || 'N/A';
+      } else {
+        const teamObj = allTeamsData.find(t => 
+          isSameId(t.id, selectedPlayer.team) || 
+          t.abbreviation === selectedPlayer.team
+        );
+        return teamObj ? teamObj.abbreviation : String(selectedPlayer.team);
+      }
+    };
+    
+    const isProspect = !selectedPlayer.team || selectedPlayer.team === 'N/A';
+    const teamAbbr = getTeamAbbr();
+    
+    // Get actual league based on team or default to prospect league
+    const getLeague = () => {
+      if (isProspect) {
+        return selectedPlayer.prospect_league || 'Prospect';
+      }
       
-      setAvailableLeagues(allLeagues);
-    }
+      if (selectedPlayer.teamObj?.league) {
+        return selectedPlayer.teamObj.league;
+      } else if (selectedPlayer.league) {
+        return selectedPlayer.league;
+      }
+      
+      return 'NHL'; // Default to NHL if not available
+    };
+    
+    const league = getLeague();
+    
+    // Mock season stats data with the safely obtained team abbreviation
+    const seasonStats = isProspect ? 
+      // For prospects, show prospect league stats if available
+      [
+        { season: '2023-24', team: selectedPlayer.prospect_team || 'NCAA', league: selectedPlayer.prospect_league || 'NCAA', gp: 32, goals: 12, assists: 18, points: 30, plusMinus: 8, pim: 16 },
+        { season: '2022-23', team: selectedPlayer.prospect_team || 'NCAA', league: selectedPlayer.prospect_league || 'NCAA', gp: 28, goals: 8, assists: 12, points: 20, plusMinus: 5, pim: 14 }
+      ] : 
+      // For NHL/pro players, show regular career path
+      [
+        { season: '2023-24', team: teamAbbr, league: league, gp: 82, goals: 9, assists: 33, points: 42, plusMinus: -7, pim: 51 },
+        { season: '2022-23', team: teamAbbr, league: league, gp: 82, goals: 5, assists: 37, points: 42, plusMinus: -11, pim: 40 },
+        { season: '2021-22', team: teamAbbr, league: league, gp: 82, goals: 7, assists: 43, points: 50, plusMinus: -9, pim: 34 },
+        { season: '2020-21', team: 'SWE', league: 'SweHL', gp: 41, goals: 7, assists: 21, points: 28, plusMinus: 14, pim: 16 },
+        { season: '2019-20', team: 'GRG', league: 'AHL', gp: 49, goals: 2, assists: 20, points: 22, plusMinus: -5, pim: 28 },
+        { season: '2018-19', team: 'MEA', league: 'DEL', gp: 29, goals: 2, assists: 4, points: 6, plusMinus: 2, pim: 8 },
+        { season: '2017-18', team: 'MEA', league: 'DEL', gp: 4, goals: 0, assists: 0, points: 0, plusMinus: 0, pim: 0 },
+      ];
+    
+    // Mock playoff stats
+    const playoffStats = [
+      { season: '2020-21', team: 'SWE', gp: 13, goals: 1, assists: 4, points: 5, pim: 8 },
+      { season: '2018-19', team: 'MEA', gp: 14, goals: 0, assists: 5, points: 5, pim: 0 },
+    ];
+    
+    // Get NHL totals
+    const nhlStats = seasonStats.filter(s => s.league === 'NHL');
+    const hasNhlStats = nhlStats.length > 0;
+    const nhlTotals = hasNhlStats ? {
+      gp: nhlStats.reduce((sum, s) => sum + s.gp, 0),
+      goals: nhlStats.reduce((sum, s) => sum + s.goals, 0),
+      assists: nhlStats.reduce((sum, s) => sum + s.assists, 0),
+      points: nhlStats.reduce((sum, s) => sum + (s.points || s.goals + s.assists), 0),
+      pim: nhlStats.reduce((sum, s) => sum + s.pim, 0)
+    } : {
+      gp: 0,
+      goals: 0,
+      assists: 0,
+      points: 0,
+      pim: 0
+    };
+    
+    // Mock tournaments data
+    const tournaments = [
+      { 
+        year: 2020, 
+        tournament: 'World Junior U-20 Championships', 
+        team: 'Germany U-20',
+        gp: 7,
+        goals: 0,
+        assists: 6,
+        points: 6,
+        pim: 6,
+        plusMinus: 0
+      }
+    ];
+    
+    // Mock awards data
+    const awards = [
+      { year: '2021-22', league: 'NHL', award: 'Calder Memorial Trophy' }
+    ];
+    
+    return (
+      <PlayerModal onClick={closePlayerModal}>
+        <PlayerCardContent onClick={(e) => e.stopPropagation()}>
+          <PlayerCardClose onClick={closePlayerModal}>×</PlayerCardClose>
+          
+          <PlayerCardHeader>
+            <PlayerCardInfo>
+              <PlayerCardName>{selectedPlayer.first_name} {selectedPlayer.last_name}</PlayerCardName>
+              <PlayerCardDetails>
+                <PlayerCardDetail>
+                  <span>Position:</span> {selectedPlayer.position_primary || 'N/A'} -- shoots {selectedPlayer.shoots || 'R'}
+                </PlayerCardDetail>
+                <PlayerCardDetail>
+                  <span>Born:</span> {selectedPlayer.birthdate || 'Apr 6 2001'} -- {selectedPlayer.birth_city || 'Zell'}, {selectedPlayer.birth_country || 'Germany'}
+                </PlayerCardDetail>
+                <PlayerCardDetail>
+                  <span>Age:</span> [{selectedPlayer.age || '24'} yrs. ago]
+                </PlayerCardDetail>
+                <PlayerCardDetail>
+                  <span>Height/Weight:</span> {selectedPlayer.height || '6.03'} -- {selectedPlayer.weight || '205'} [{selectedPlayer.height_cm || '191'} cm/{selectedPlayer.weight_kg || '93'} kg]
+                </PlayerCardDetail>
+                
+                {/* Team or Prospect Status */}
+                <PlayerCardDetail>
+                  <span>Status:</span> {isProspect ? (
+                    <span style={{color: '#4CAF50', fontWeight: 'bold'}}>Prospect{selectedPlayer.prospect_league ? ` (${selectedPlayer.prospect_league})` : ''}</span>
+                  ) : (
+                    <span>{getTeamDisplay()}</span>
+                  )}
+                </PlayerCardDetail>
+                
+                {isProspect && selectedPlayer.prospect_team && (
+                  <PlayerCardDetail>
+                    <span>Current Team:</span> {selectedPlayer.prospect_team}
+                  </PlayerCardDetail>
+                )}
+                
+                <PlayerCardDetail>
+                  <span>Drafted by:</span> <span style={{color: '#B30E16', fontWeight: 'bold'}}>{selectedPlayer.draft_team || 'Detroit Red Wings'}</span>
+                </PlayerCardDetail>
+                <PlayerCardDetail>
+                  <span>Draft Position:</span> round 1 <span style={{color: '#B30E16', fontWeight: 'bold'}}>#{selectedPlayer.draft_position || '6'}</span> overall {selectedPlayer.draft_year || '2019'} NHL Entry Draft
+                </PlayerCardDetail>
+              </PlayerCardDetails>
+            </PlayerCardInfo>
+            <PlayerCardImage 
+              style={{
+                backgroundImage: selectedPlayer.image_url ? `url(${selectedPlayer.image_url})` : 'none',
+                backgroundColor: '#B30E16',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                color: 'white',
+                fontSize: '2rem',
+                fontWeight: 'bold'
+              }}
+            >
+              {!selectedPlayer.image_url && (selectedPlayer.jersey_number || '#')}
+            </PlayerCardImage>
+          </PlayerCardHeader>
+          
+          <PlayerCardBody>
+            {/* Regular Season / Playoffs Stats Table Header */}
+            <div style={{display: 'flex', backgroundColor: '#1a3042'}}>
+              <div style={{flex: 1, textAlign: 'center', padding: '8px', fontWeight: 'bold', color: 'white'}}>
+                Regular Season
+              </div>
+              <div style={{flex: 1, textAlign: 'center', padding: '8px', fontWeight: 'bold', color: 'white'}}>
+                Playoffs
+              </div>
+            </div>
+            
+            <SeasonStatsTable>
+              <StatsTable>
+                <thead>
+                  <tr>
+                    <StatsTableHeader>Season</StatsTableHeader>
+                    <StatsTableHeader>Team</StatsTableHeader>
+                    <StatsTableHeader>Lge</StatsTableHeader>
+                    <StatsTableHeader>GP</StatsTableHeader>
+                    <StatsTableHeader>G</StatsTableHeader>
+                    <StatsTableHeader>A</StatsTableHeader>
+                    <StatsTableHeader>Pts</StatsTableHeader>
+                    <StatsTableHeader>PIM</StatsTableHeader>
+                    <StatsTableHeader>+/-</StatsTableHeader>
+                    <StatsTableHeader>GP</StatsTableHeader>
+                    <StatsTableHeader>G</StatsTableHeader>
+                    <StatsTableHeader>A</StatsTableHeader>
+                    <StatsTableHeader>Pts</StatsTableHeader>
+                    <StatsTableHeader>PIM</StatsTableHeader>
+                  </tr>
+                </thead>
+                <tbody>
+                  {seasonStats.map((season, index) => {
+                    // Find matching playoff stats
+                    const playoff = playoffStats.find(p => p.season === season.season);
+                    
+                    // Determine text color based on league
+                    const isAHL = season.league === 'AHL';
+                    const isSweHL = season.league === 'SweHL';
+                    const isNHL = season.league === 'NHL';
+                    
+                    let textColor = '#fff'; // Default white text
+                    if (isAHL) textColor = '#e6b5bc'; // Pink for AHL
+                    if (isSweHL) textColor = '#a5d6a7'; // Green for SweHL
+                    if (isNHL) textColor = '#ffcc80'; // Gold/orange for NHL
+                    
+                    return (
+                      <tr key={index} style={{ color: textColor, backgroundColor: index % 2 === 0 ? '#2a2a2a' : '#1e1e1e' }}>
+                        <StatsTableCell>{season.season}</StatsTableCell>
+                        <StatsTableCell>{season.team}</StatsTableCell>
+                        <StatsTableCell>{season.league}</StatsTableCell>
+                        <StatsTableCell>{season.gp}</StatsTableCell>
+                        <StatsTableCell>{season.goals}</StatsTableCell>
+                        <StatsTableCell>{season.assists}</StatsTableCell>
+                        <StatsTableCell>{season.points}</StatsTableCell>
+                        <StatsTableCell>{season.pim}</StatsTableCell>
+                        <StatsTableCell>{season.plusMinus}</StatsTableCell>
+                        <StatsTableCell>{playoff ? playoff.gp : '--'}</StatsTableCell>
+                        <StatsTableCell>{playoff ? playoff.goals : '--'}</StatsTableCell>
+                        <StatsTableCell>{playoff ? playoff.assists : '--'}</StatsTableCell>
+                        <StatsTableCell>{playoff ? playoff.points : '--'}</StatsTableCell>
+                        <StatsTableCell>{playoff ? playoff.pim : '--'}</StatsTableCell>
+                      </tr>
+                    );
+                  })}
+                  {/* NHL Totals row */}
+                  {hasNhlStats && (
+                    <tr style={{ color: '#ffcc80', fontWeight: 'bold', backgroundColor: '#1e1e1e' }}>
+                      <StatsTableCell>NHL Totals</StatsTableCell>
+                      <StatsTableCell></StatsTableCell>
+                      <StatsTableCell></StatsTableCell>
+                      <StatsTableCell>{nhlTotals.gp}</StatsTableCell>
+                      <StatsTableCell>{nhlTotals.goals}</StatsTableCell>
+                      <StatsTableCell>{nhlTotals.assists}</StatsTableCell>
+                      <StatsTableCell>{nhlTotals.points}</StatsTableCell>
+                      <StatsTableCell>{nhlTotals.pim}</StatsTableCell>
+                      <StatsTableCell></StatsTableCell>
+                      <StatsTableCell></StatsTableCell>
+                      <StatsTableCell></StatsTableCell>
+                      <StatsTableCell></StatsTableCell>
+                      <StatsTableCell></StatsTableCell>
+                      <StatsTableCell></StatsTableCell>
+                    </tr>
+                  )}
+                </tbody>
+              </StatsTable>
+            </SeasonStatsTable>
+            
+            {/* Tournaments Section */}
+            <PlayerCardSection>
+              <PlayerCardSectionTitle>Tournaments</PlayerCardSectionTitle>
+              <SeasonStatsTable>
+                <StatsTable>
+                  <thead>
+                    <tr>
+                      <StatsTableHeader>Year</StatsTableHeader>
+                      <StatsTableHeader>Tournament</StatsTableHeader>
+                      <StatsTableHeader>Team</StatsTableHeader>
+                      <StatsTableHeader>GP</StatsTableHeader>
+                      <StatsTableHeader>G</StatsTableHeader>
+                      <StatsTableHeader>A</StatsTableHeader>
+                      <StatsTableHeader>Pts</StatsTableHeader>
+                      <StatsTableHeader>PIM</StatsTableHeader>
+                      <StatsTableHeader>+/-</StatsTableHeader>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tournaments.map((tournament, index) => {
+                      const rowBackground = index % 2 === 0 ? '#2a2a2a' : '#1e1e1e';
+                      return (
+                        <StatsTableRow key={index} style={{ color: '#e6b5bc', backgroundColor: rowBackground }}>
+                          <StatsTableCell>{tournament.year}</StatsTableCell>
+                          <StatsTableCell>{tournament.tournament}</StatsTableCell>
+                          <StatsTableCell>{tournament.team}</StatsTableCell>
+                          <StatsTableCell>{tournament.gp}</StatsTableCell>
+                          <StatsTableCell>{tournament.goals}</StatsTableCell>
+                          <StatsTableCell>{tournament.assists}</StatsTableCell>
+                          <StatsTableCell>{tournament.points}</StatsTableCell>
+                          <StatsTableCell>{tournament.pim}</StatsTableCell>
+                          <StatsTableCell>{tournament.plusMinus}</StatsTableCell>
+                        </StatsTableRow>
+                      );
+                    })}
+                  </tbody>
+                </StatsTable>
+              </SeasonStatsTable>
+            </PlayerCardSection>
+            
+            {/* Awards Section */}
+            <PlayerCardSection>
+              <PlayerCardSectionTitle>Awards</PlayerCardSectionTitle>
+              <SeasonStatsTable>
+                <StatsTable>
+                  <thead>
+                    <tr>
+                      <StatsTableHeader>Year</StatsTableHeader>
+                      <StatsTableHeader>League</StatsTableHeader>
+                      <StatsTableHeader>Award</StatsTableHeader>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {awards.map((award, index) => {
+                      const rowBackground = index % 2 === 0 ? '#2a2a2a' : '#1e1e1e';
+                      return (
+                        <StatsTableRow key={index} style={{ color: '#81c784', backgroundColor: rowBackground }}>
+                          <StatsTableCell>{award.year}</StatsTableCell>
+                          <StatsTableCell>{award.league}</StatsTableCell>
+                          <StatsTableCell style={{textAlign: 'left'}}>{award.award}</StatsTableCell>
+                        </StatsTableRow>
+                      );
+                    })}
+                  </tbody>
+                </StatsTable>
+              </SeasonStatsTable>
+            </PlayerCardSection>
+            
+            {/* Player Attributes Section */}
+            <PlayerCardSection>
+              <PlayerCardSectionTitle>Player Attributes</PlayerCardSectionTitle>
+              <AttributeGrid>
+                {Object.entries(mockAttributes).map(([key, value]) => (
+                  <AttributeItem key={key}>
+                    <AttributeName>{key.charAt(0).toUpperCase() + key.slice(1)}</AttributeName>
+                    <AttributeValue value={value}>{value}</AttributeValue>
+                  </AttributeItem>
+                ))}
+              </AttributeGrid>
+            </PlayerCardSection>
+          </PlayerCardBody>
+        </PlayerCardContent>
+      </PlayerModal>
+    );
+  };
+
+  // --- Render Logic ---
+  const renderPositionIcon = (position) => {
+    // ... existing code ...
   };
   
-  // Handler for league selection change
-  const handleLeagueChange = (e) => {
-    const value = e.target.value;
-    console.log('League selected:', value);
+  // Fix missing helper functions - move inside component
+  const getTeamNameById = (id) => {
+    if (!id) return 'Unknown';
     
-    // Set the selected league
-    setSelectedLeague(value);
-    
-    // Reset team selection
-    setSelectedTeam('');
-    
-    // Reset to first page
-    setCurrentPage(1);
+    const team = allTeamsData.find(t => t.id == id); // Use loose equality for id comparison
+    if (team) {
+      return team.team || 'Unknown';
+    }
+    return 'Unknown';
   };
-  
+
+  // Helper for safe ID comparison  
+  const isSameId = (id1, id2) => {
+    if (id1 === undefined || id1 === null || id2 === undefined || id2 === null) return false;
+    return String(id1).trim() === String(id2).trim();
+  };
+
+  // Add this logging before the return statement for easier debugging
+  console.log('[DEBUG] Render state:', {
+    initialDataLoaded,
+    loadingData, // Is any loading happening (init or player fetch)
+    error,
+    selectedLeagueType,
+    selectedLeague,
+    selectedTeam,
+    availableLeagueTypesCount: allLeagueTypesData.length, // Use static data length
+    availableLeaguesDropdownCount: getFilteredLeagues().length, // Dynamic dropdown state
+    teamsDropdownCount: getFilteredTeams().length, // Dynamic dropdown state
+    playersDisplayed: players.length,
+    totalPlayerCount, // From query
+    currentPage,
+    totalPages,
+  });
+  // *** Add specific log for league types before render ***
+  console.log(`[DEBUG] Pre-render check: allLeagueTypesData length = ${allLeagueTypesData.length}`);
+
   return (
     <Container>
       <Title>Player Management</Title>
       
+      {/* Filters Section */}
       <FiltersContainer>
+        {/* Search Input */}
         <FilterGroup>
           <FilterLabel>Search Players</FilterLabel>
           <FilterInput 
@@ -656,101 +1460,74 @@ const PlayerEditor = () => {
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
-              setCurrentPage(1); // Reset to first page on new search
+              setCurrentPage(1);
             }}
           />
         </FilterGroup>
         
+        {/* League Type Dropdown */}
         <FilterGroup>
           <FilterLabel>League Type</FilterLabel>
           <FilterSelect 
             value={selectedLeagueType}
             onChange={handleLeagueTypeChange}
+            disabled={!initialDataLoaded || loadingData}
           >
             <option value="">All League Types</option>
-            {availableLeagueTypes.map(leagueType => {
-              // Count teams in this league type
-              const count = teams.filter(team => 
-                normalizeString(team.league_type) === normalizeString(leagueType)
-              ).length;
-              
+            {initialDataLoaded && allLeagueTypesData && allLeagueTypesData.map(leagueType => (
+              <option key={leagueType} value={leagueType}>
+                {leagueType} ({leagueTypeMap.counts[leagueType] || 0} teams)
+              </option>
+            ))}
+          </FilterSelect>
+        </FilterGroup>
+        
+        {/* League Dropdown */}
+        <FilterGroup>
+          <FilterLabel>League</FilterLabel>
+          <FilterSelect 
+            value={selectedLeague}
+            onChange={handleLeagueChange}
+            disabled={!initialDataLoaded || loadingData}
+          >
+            <option value="">All Leagues</option>
+            {initialDataLoaded && getFilteredLeagues().map(league => {
+              // Count teams in this league
+              const teamsInLeague = allTeamsData.filter(t => t.league === league.league);
               return (
-                <option key={leagueType} value={leagueType}>
-                  {leagueType} ({count} teams)
+                <option key={league.league} value={league.league}>
+                  {league.league} ({teamsInLeague.length} teams)
                 </option>
               );
             })}
           </FilterSelect>
         </FilterGroup>
         
+        {/* Team Dropdown */}
         <FilterGroup>
-          <FilterLabel>League</FilterLabel>
+          <FilterLabel>Team</FilterLabel>
           <FilterSelect 
-            value={selectedLeague}
-            onChange={handleLeagueChange}
-            disabled={availableLeagues.length === 0}
+            value={selectedTeam}
+            onChange={handleTeamChange}
+            disabled={!initialDataLoaded || loadingData}
           >
-            <option value="">All Leagues</option>
-            {availableLeagues.map(league => (
-              <option key={league} value={league}>
-                {league}
+            <option value="">All Teams</option>
+            {initialDataLoaded && getFilteredTeams().map(team => (
+              <option key={team.id} value={team.abbreviation}>
+                {team.team} ({team.abbreviation})
               </option>
             ))}
           </FilterSelect>
         </FilterGroup>
         
-        <FilterGroup>
-          <FilterLabel>Team</FilterLabel>
-          <FilterSelect 
-            value={selectedTeam}
-            onChange={(e) => {
-              const value = e.target.value;
-              console.log(`Team selected: ID=${value}`);
-              
-              // Find the team in our data
-              const team = teams.find(t => t.id.toString() === value.toString());
-              if (team) {
-                console.log(`Found team: ${team.team} (${team.abbreviation}), ID=${team.id}, type=${typeof team.id}`);
-              } else {
-                console.log(`Couldn't find team with ID=${value} in teams array`);
-              }
-              
-              setSelectedTeam(value);
-              setCurrentPage(1); // Reset to first page on filter change
-            }}
-          >
-            <option value="">All Teams</option>
-            {teams
-              .filter(team => 
-                (!selectedLeagueType || normalizeString(team.league_type) === normalizeString(selectedLeagueType)) &&
-                (!selectedLeague || team.league === selectedLeague)
-              )
-              .map(team => {
-                // Log team details once to help with debugging
-                if (!window.teamsLogged) {
-                  window.teamsLogged = {};
-                }
-                if (!window.teamsLogged[team.id]) {
-                  console.log(`Team option: ${team.team} (${team.abbreviation}), ID=${team.id}, type=${typeof team.id}, league_type="${team.league_type}"`);
-                  window.teamsLogged[team.id] = true;
-                }
-                
-                return (
-                  <option key={team.id} value={team.id}>
-                    {team.team} ({team.abbreviation})
-                  </option>
-                );
-              })}
-          </FilterSelect>
-        </FilterGroup>
-        
+        {/* Position Dropdown */}
         <FilterGroup>
           <FilterLabel>Position</FilterLabel>
           <FilterSelect 
             value={selectedPosition}
             onChange={(e) => {
               setSelectedPosition(e.target.value);
-              setCurrentPage(1); // Reset to first page on filter change
+              setCurrentPage(1);
             }}
           >
             <option value="">All Positions</option>
@@ -761,126 +1538,110 @@ const PlayerEditor = () => {
         </FilterGroup>
       </FiltersContainer>
       
-      {loading ? (
+      {/* Filter Summary */}
+      <FilterSummary>
+        {(selectedLeagueType || selectedLeague || selectedTeam || selectedPosition || searchQuery) ? (
+          <>
+            {totalPlayerCount > 0 ? (
+              <>Displaying <span>{players.length}</span> of <span>{totalPlayerCount}</span> player{totalPlayerCount !== 1 ? 's' : ''}</>
+            ) : (
+              <>No players found</>
+            )}
+            {selectedLeagueType && <> from <span className="highlight">{selectedLeagueType}</span> level</>}
+            {selectedLeague && <> in <span className="highlight">{getLeagueFullName(selectedLeague)}</span></>}
+            {selectedTeam && (
+              <> on <span className="highlight">
+                {(() => {
+                  const team = allTeamsData.find(t => t.abbreviation === selectedTeam);
+                  return team ? `${team.team} (${selectedTeam})` : selectedTeam;
+                })()}
+              </span></>
+            )}
+            {selectedPosition && <> playing <span className="highlight">{selectedPosition}</span></>}
+            {searchQuery && <> matching "<span>{searchQuery}</span>"</>}
+          </>
+        ) : (
+          <>Use the filters above to find players</>
+        )}
+      </FilterSummary>
+      
+      {/* Main Content Area: Loading / Error / Table */}
+      {loadingData && !initialDataLoaded ? (
+        // Initial loading state
         <LoadingSpinner />
-      ) : error ? (
-        <ErrorMessage>{error}</ErrorMessage>
-      ) : players.length === 0 ? (
-        <ErrorMessage>No players found matching your criteria.</ErrorMessage>
-      ) : (
-        <>
-          <PlayersTable>
-            <thead>
-              <tr>
-                <TableHeader 
-                  onClick={() => handleSort('last_name')}
-                  sorted={sortColumn === 'last_name' ? sortDirection : null}
-                >
-                  Name
-                </TableHeader>
-                <TableHeader 
-                  onClick={() => handleSort('position_primary')}
-                  sorted={sortColumn === 'position_primary' ? sortDirection : null}
-                >
-                  Position
-                </TableHeader>
-                <TableHeader 
-                  onClick={() => handleSort('age')}
-                  sorted={sortColumn === 'age' ? sortDirection : null}
-                >
-                  Age
-                </TableHeader>
-                <TableHeader 
-                  onClick={() => handleSort('height')}
-                  sorted={sortColumn === 'height' ? sortDirection : null}
-                >
-                  Height
-                </TableHeader>
-                <TableHeader 
-                  onClick={() => handleSort('weight')}
-                  sorted={sortColumn === 'weight' ? sortDirection : null}
-                >
-                  Weight
-                </TableHeader>
-                <TableHeader 
-                  onClick={() => handleSort('overall')}
-                  sorted={sortColumn === 'overall' ? sortDirection : null}
-                >
-                  OVR
-                </TableHeader>
-                <TableHeader 
-                  onClick={() => handleSort('salary')}
-                  sorted={sortColumn === 'salary' ? sortDirection : null}
-                >
-                  Salary
-                </TableHeader>
-                <TableHeader>
-                  League
-                </TableHeader>
-                <TableHeader>
-                  League Type
-                </TableHeader>
-                <TableHeader 
-                  onClick={() => handleSort('team')}
-                  sorted={sortColumn === 'team' ? sortDirection : null}
-                >
-                  Team
-                </TableHeader>
-              </tr>
-            </thead>
-            <tbody>
-              {players.map(player => (
-                <TableRow key={player.id}>
-                  <TableCell>{player.first_name} {player.last_name}</TableCell>
-                  <TableCell>{player.position_primary || 'N/A'}</TableCell>
-                  <TableCell>{player.age || 'N/A'}</TableCell>
-                  <TableCell>{player.height || 'N/A'}</TableCell>
-                  <TableCell>{player.weight || 'N/A'}</TableCell>
-                  <TableCell>{player.overall || 'N/A'}</TableCell>
-                  <TableCell>{formatSalary(player.salary)}</TableCell>
-                  <TableCell>{player.team?.league || 'N/A'}</TableCell>
-                  <TableCell>{leagueTypeMap?.[player.team?.league] || 'N/A'}</TableCell>
-                  <TableCell>{player.team ? player.team.abbreviation : 'N/A'}</TableCell>
-                </TableRow>
-              ))}
-            </tbody>
-          </PlayersTable>
-          
-          <PaginationContainer>
-            <PageInfo>
-              Page {currentPage} of {totalPages} 
-              ({(currentPage - 1) * playersPerPage + 1}-
-              {Math.min(currentPage * playersPerPage, players.length + (currentPage - 1) * playersPerPage)} players)
-            </PageInfo>
-            <PageButtons>
-              <PageButton 
-                onClick={() => setCurrentPage(1)} 
-                disabled={currentPage === 1}
-              >
-                First
-              </PageButton>
-              <PageButton 
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                disabled={currentPage === 1}
-              >
-                Previous
-              </PageButton>
-              <PageButton 
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </PageButton>
-              <PageButton 
-                onClick={() => setCurrentPage(totalPages)} 
-                disabled={currentPage === totalPages}
-              >
-                Last
-              </PageButton>
-            </PageButtons>
-          </PaginationContainer>
-        </>
+      ) : error && !initialDataLoaded ? (
+          // Show only critical initialization error if it prevents loading
+         <ErrorMessage>{error}</ErrorMessage>
+      ) : !initialDataLoaded ? (
+          // Fallback if stuck somehow before initial load completes without error
+         <ErrorMessage>Component initialization pending...</ErrorMessage>
+      ): (
+         // After initial load: show loading for player fetches, errors, or the table
+         <>
+           {loadingData && <LoadingSpinner />}
+           {error && <ErrorMessage>{error}</ErrorMessage>}
+           {!loadingData && !error && players.length === 0 && (
+             <ErrorMessage>No players found matching your criteria.</ErrorMessage>
+           )}
+           {!loadingData && !error && players.length > 0 && (
+             <>
+               <PlayersTable>
+                 <thead>
+                    {/* Table Headers - No Changes Needed */}
+                   <tr>
+                      <TableHeader onClick={() => handleSort('last_name')} sorted={sortColumn === 'last_name' ? sortDirection : null}>Name</TableHeader>
+                      <TableHeader onClick={() => handleSort('position_primary')} sorted={sortColumn === 'position_primary' ? sortDirection : null}>Position</TableHeader>
+                      <TableHeader onClick={() => handleSort('age')} sorted={sortColumn === 'age' ? sortDirection : null}>Age</TableHeader>
+                      <TableHeader onClick={() => handleSort('height')} sorted={sortColumn === 'height' ? sortDirection : null}>Height</TableHeader>
+                      <TableHeader onClick={() => handleSort('weight')} sorted={sortColumn === 'weight' ? sortDirection : null}>Weight</TableHeader>
+                      <TableHeader onClick={() => handleSort('overall')} sorted={sortColumn === 'overall' ? sortDirection : null}>OVR</TableHeader>
+                      <TableHeader onClick={() => handleSort('salary')} sorted={sortColumn === 'salary' ? sortDirection : null}>Salary</TableHeader>
+                      <TableHeader>League</TableHeader>
+                      <TableHeader>League Type</TableHeader>
+                      <TableHeader onClick={() => handleSort('team')} sorted={sortColumn === 'team' ? sortDirection : null}>Team</TableHeader>
+                   </tr>
+                 </thead>
+                 <tbody>
+                   {players.map(player => (
+                     <TableRow 
+                       key={player.id} 
+                       onClick={() => handlePlayerClick(player)}
+                       style={{ cursor: 'pointer' }}
+                     >
+                       <TableCell>{player.first_name} {player.last_name}</TableCell>
+                       <TableCell>{player.position_primary || 'N/A'}</TableCell>
+                       <TableCell>{player.age || 'N/A'}</TableCell>
+                       <TableCell>{player.height || 'N/A'}</TableCell>
+                       <TableCell>{player.weight || 'N/A'}</TableCell>
+                       <TableCell>{player.overall || 'N/A'}</TableCell>
+                       <TableCell>{formatSalary(player.salary)}</TableCell>
+                       <TableCell>{player.league ? getLeagueFullName(player.league) : 'N/A'}</TableCell>
+                       <TableCell>{player.league_type || 'N/A'}</TableCell>
+                       <TableCell>{player.teamObj ? `${player.teamObj.team} (${player.team})` : (player.team || 'N/A')}</TableCell>
+                     </TableRow>
+                   ))}
+                 </tbody>
+               </PlayersTable>
+
+               {/* Pagination Controls */}
+               <PaginationContainer>
+                 <PageInfo>
+                   Page {currentPage} of {totalPages} ({totalPlayerCount} total players)
+                 </PageInfo>
+                 <PageButtons>
+                   <PageButton onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>First</PageButton>
+                   <PageButton onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</PageButton>
+                   <PageButton onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>Next</PageButton>
+                   <PageButton onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>Last</PageButton>
+                 </PageButtons>
+               </PaginationContainer>
+             </>
+           )}
+         </>
       )}
+      
+      {/* Render the player modal */}
+      {renderPlayerModal()}
     </Container>
   );
 };

@@ -912,13 +912,73 @@ const TeamManager = () => {
   }, [teams, selectedLeagueType, selectedLeague, selectedConference, selectedDivision]);
   
   // Add function to handle navigation to Line Combinations
-  const handleEditLines = (teamId, teamName) => {
-    // Find the full team data
-    const team = teams.find(t => t.id === teamId);
-    if (!team) return;
+  const handleEditLines = async (teamId) => {
+    try {
+      // Get the full team data including league information
+      const { data: team, error: teamError } = await supabase
+        .from('Team')
+        .select(`
+          *,
+          League!inner (
+            league_level
+          )
+        `)
+        .eq('id', teamId)
+        .single();
+        
+      if (teamError) throw teamError;
+      
+      if (!team) {
+        console.error('Team not found:', teamId);
+        return;
+      }
+      
+      // Navigate to line combinations with team info
+      window.location.href = `/lines/${team.league}/${teamId}`;
+      
+    } catch (error) {
+      console.error('Error handling edit lines:', error);
+    }
+  };
 
-    // Navigate to line combinations with team info
-    window.location.href = `/line-combinations/${team.league}/${teamId}`;
+  // Add function to handle navigation to Player Editor
+  const handleEditPlayers = async (teamId) => {
+    try {
+      console.log(`[DEBUG] handleEditPlayers called with teamId: ${teamId}`);
+      
+      // Get the team data with league relationship info
+      const { data: team, error: teamError } = await supabase
+        .from('Team')
+        .select('*, League:league(league_level)')
+        .eq('id', teamId)
+        .single();
+        
+      if (teamError) {
+        console.error('[DEBUG] Error fetching team data:', teamError);
+        throw teamError;
+      }
+      
+      if (!team || !team.abbreviation) {
+        console.error('[DEBUG] Team or team abbreviation not found');
+        throw new Error('Team not found');
+      }
+      
+      // Verify we have the league information
+      if (!team.League || !team.League.league_level) {
+        console.error(`[DEBUG] League information missing for team ${team.team} (${team.abbreviation})`);
+        console.log('[DEBUG] Available team data:', team);
+        // Still continue with just the team
+      } else {
+        console.log(`[DEBUG] Team ${team.team} (${team.abbreviation}) has league ${team.league} at level ${team.League.league_level}`);
+      }
+      
+      // Just pass team abbreviation to PlayerEditor
+      console.log(`[DEBUG] Navigating to PlayerEditor with team abbreviation: ${team.abbreviation}`);
+      window.location.href = `/players?teamId=${team.abbreviation}`;
+    } catch (error) {
+      console.error('[DEBUG] Error in handleEditPlayers:', error);
+      alert(`Error loading players: ${error.message}`);
+    }
   };
   
   return (
@@ -1270,11 +1330,11 @@ const TeamManager = () => {
                   </TeamDetails>
                         <TeamActions>
                           <TeamButton 
-                            onClick={() => handleEditLines(team.id, team.name)}
+                            onClick={() => handleEditLines(team.id)}
                           >
                             Edit Lines
                           </TeamButton>
-                          <TeamButton>
+                          <TeamButton onClick={() => handleEditPlayers(team.id)}>
                             Edit Players
                           </TeamButton>
                         </TeamActions>

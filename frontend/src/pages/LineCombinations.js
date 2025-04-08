@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import PlayerCard from '../components/PlayerCard';
 
 // Styled components
 const Container = styled.div`
@@ -189,64 +190,6 @@ const ClickMessage = styled.div`
   color: #aaa;
   font-size: 0.9rem;
   margin: 20px 0;
-`;
-
-const PlayerCard = styled.div`
-  background-color: #1e1e1e;
-  border-radius: 6px;
-  padding: 12px;
-  display: flex;
-  align-items: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  position: relative;
-  width: 100%;
-  max-width: 280px;
-  
-  &:hover {
-    background-color: #2a2a2a;
-    cursor: pointer;
-  }
-`;
-
-const PlayerNumberCircle = styled.div`
-  font-weight: bold;
-  font-size: 1.2rem;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background-color: transparent;
-  color: #B30E16;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 15px;
-`;
-
-const PlayerInfo = styled.div`
-  flex: 1;
-`;
-
-const PlayerName = styled.div`
-  font-weight: bold;
-  color: #fff;
-`;
-
-const PlayerPosition = styled.div`
-  font-size: 0.8rem;
-  color: #aaa;
-`;
-
-const PlayerOverall = styled.div`
-  background-color: #B30E16;
-  color: white;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 0.9rem;
 `;
 
 const EmptySlot = styled.div`
@@ -523,7 +466,7 @@ const PlayerCardContent = styled.div`
   background-color: #1e1e1e;
   border-radius: 8px;
   width: 90%;
-  max-width: 800px;
+  max-width: 900px;
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
@@ -533,11 +476,11 @@ const PlayerCardContent = styled.div`
 
 const PlayerCardHeader = styled.div`
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   padding: 20px;
-  background-color: #162040;
-  border-bottom: 3px solid #B30E16;
+  background-color: #333;
   border-radius: 8px 8px 0 0;
+  border-bottom: 3px solid #B30E16;
 `;
 
 const PlayerCardBody = styled.div`
@@ -571,6 +514,7 @@ const PlayerCardImage = styled.div`
   font-size: 3rem;
   font-weight: bold;
   color: white;
+  text-transform: uppercase;
 `;
 
 const PlayerCardInfo = styled.div`
@@ -696,6 +640,96 @@ const OtherLinesContainer = styled.div`
   background-color: rgba(26, 48, 66, 0.2);
   display: ${props => props.visible ? 'block' : 'none'};
 `;
+
+// Add back the PlayerCard styled component with a different name to avoid conflicts
+const PlayerCardItem = styled.div`
+  background-color: #1e1e1e;
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  position: relative;
+  width: 100%;
+  max-width: 280px;
+  
+  &:hover {
+    background-color: #2a2a2a;
+    cursor: pointer;
+  }
+`;
+
+const PlayerNumberCircle = styled.div`
+  font-weight: bold;
+  font-size: 1.2rem;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: transparent;
+  color: #B30E16;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 15px;
+`;
+
+const PlayerInfo = styled.div`
+  flex: 1;
+`;
+
+const PlayerName = styled.div`
+  font-weight: bold;
+  color: #fff;
+`;
+
+const PlayerPosition = styled.div`
+  font-size: 0.8rem;
+  color: #aaa;
+`;
+
+const PlayerOverall = styled.div`
+  background-color: #B30E16;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+`;
+
+// These functions don't depend on component state so can stay outside
+// Function to calculate weighted average for any array of players with weights
+const calculateWeightedOverall = (players, weights) => {
+  if (!players || players.length === 0 || !weights || weights.length === 0) return 0;
+  
+  // Make sure we only use as many weights as we have players
+  const usedWeights = weights.slice(0, players.length);
+  const sumOfWeights = usedWeights.reduce((sum, weight) => sum + weight, 0);
+  
+  // Normalize weights if they don't sum to 1
+  const normalizedWeights = usedWeights.map(weight => weight / sumOfWeights);
+  
+  // Calculate weighted average
+  let weightedSum = 0;
+  players.forEach((player, index) => {
+    weightedSum += (player?.overall || 0) * normalizedWeights[index];
+  });
+  
+  return Math.round(weightedSum);
+};
+
+// Function to render section title with optional overall rating
+const renderSectionTitleWithOverall = (title, overall = null) => {
+  return (
+    <SectionTitle>
+      {title}
+      {overall !== null && <SectionOverall>{overall}</SectionOverall>}
+    </SectionTitle>
+  );
+};
 
 const LineCombinations = () => {
   const { league, teamId } = useParams();
@@ -966,13 +1000,14 @@ const LineCombinations = () => {
     };
   };
 
+  // Move the renderPlayer function inside the component
   const renderPlayer = (player, showBadge = false) => {
     if (!player) {
       return <EmptySlot>Empty Slot</EmptySlot>;
     }
     
     return (
-      <PlayerCard key={player.id} onClick={() => handlePlayerClick(player)}>
+      <PlayerCardItem key={player.id} onClick={() => handlePlayerClick(player)}>
         {player.isStarter && showBadge && <StarterBadge>STARTER</StarterBadge>}
         {player.injuryStatus && <InjuryBadge type={player.injuryStatus}>{player.injuryStatus}</InjuryBadge>}
         {player.player_type && <PlayerTypeTag>{player.player_type}</PlayerTypeTag>}
@@ -982,37 +1017,7 @@ const LineCombinations = () => {
           <PlayerPosition>{player.position}</PlayerPosition>
         </PlayerInfo>
         <PlayerOverall>{player.overall}</PlayerOverall>
-      </PlayerCard>
-    );
-  };
-
-  // Function to calculate weighted average for any array of players with weights
-  const calculateWeightedOverall = (players, weights) => {
-    if (!players || players.length === 0 || !weights || weights.length === 0) return 0;
-    
-    // Make sure we only use as many weights as we have players
-    const usedWeights = weights.slice(0, players.length);
-    const sumOfWeights = usedWeights.reduce((sum, weight) => sum + weight, 0);
-    
-    // Normalize weights if they don't sum to 1
-    const normalizedWeights = usedWeights.map(weight => weight / sumOfWeights);
-    
-    // Calculate weighted average
-    let weightedSum = 0;
-    players.forEach((player, index) => {
-      weightedSum += (player?.overall || 0) * normalizedWeights[index];
-    });
-    
-    return Math.round(weightedSum);
-  };
-
-  // Function to render section title with optional overall rating
-  const renderSectionTitleWithOverall = (title, overall = null) => {
-    return (
-      <SectionTitle>
-        {title}
-        {overall !== null && <SectionOverall>{overall}</SectionOverall>}
-      </SectionTitle>
+      </PlayerCardItem>
     );
   };
 
@@ -1843,18 +1848,82 @@ const LineCombinations = () => {
     
     const isGoalie = selectedPlayer.position === 'G';
     
-    // Mock season stats data
+    // Mock player attributes
+    const attributes = selectedPlayer.attributes || {
+      skating: Math.floor(Math.random() * 20) + 70,
+      shooting: Math.floor(Math.random() * 20) + 70,
+      hands: Math.floor(Math.random() * 20) + 70,
+      checking: Math.floor(Math.random() * 20) + 70,
+      defense: Math.floor(Math.random() * 20) + 70,
+      physical: Math.floor(Math.random() * 20) + 70
+    };
+    
+    // Format team name safely - important for avoiding the React child error
+    const getTeamDisplay = () => {
+      const teamName = selectedPlayer.team || 'N/A';
+      return typeof teamName === 'object' ? teamName.name || 'N/A' : teamName;
+    };
+    
+    // Get team abbreviation safely
+    const getTeamAbbr = () => {
+      const team = selectedPlayer.team;
+      return typeof team === 'object' ? team.abbreviation || 'CAR' : 'CAR';
+    };
+    
+    const teamAbbr = getTeamAbbr();
+    
+    // Mock season stats data with the safely obtained team abbreviation
     const seasonStats = [
-      { season: '2024-2025', team: 'CAR', gp: 78, goals: 27, assists: 38, points: 65, plusMinus: 12 },
-      { season: '2023-2024', team: 'CAR', gp: 81, goals: 32, assists: 41, points: 73, plusMinus: 15 },
-      { season: '2022-2023', team: 'CAR', gp: 79, goals: 25, assists: 35, points: 60, plusMinus: 8 },
+      { season: '2023-24', team: teamAbbr, league: 'NHL', gp: 82, goals: isGoalie ? null : 9, assists: isGoalie ? null : 33, points: isGoalie ? null : 42, plusMinus: isGoalie ? null : -7, pim: 51, wins: isGoalie ? 29 : null, losses: isGoalie ? 11 : null, gaa: isGoalie ? 2.38 : null, svp: isGoalie ? .919 : null },
+      { season: '2022-23', team: teamAbbr, league: 'NHL', gp: 82, goals: isGoalie ? null : 5, assists: isGoalie ? null : 37, points: isGoalie ? null : 42, plusMinus: isGoalie ? null : -11, pim: 40, wins: isGoalie ? 32 : null, losses: isGoalie ? 10 : null, gaa: isGoalie ? 2.41 : null, svp: isGoalie ? .922 : null },
+      { season: '2021-22', team: teamAbbr, league: 'NHL', gp: 82, goals: isGoalie ? null : 7, assists: isGoalie ? null : 43, points: isGoalie ? null : 50, plusMinus: isGoalie ? null : -9, pim: 34, wins: isGoalie ? 24 : null, losses: isGoalie ? 12 : null, gaa: isGoalie ? 2.51 : null, svp: isGoalie ? .915 : null },
+      { season: '2020-21', team: 'SWE', league: 'SweHL', gp: 41, goals: isGoalie ? null : 7, assists: isGoalie ? null : 21, points: isGoalie ? null : 28, plusMinus: isGoalie ? null : 14, pim: 16, wins: isGoalie ? 18 : null, losses: isGoalie ? 8 : null, gaa: isGoalie ? 2.22 : null, svp: isGoalie ? .925 : null }
     ];
     
-    // Mock goalie stats
-    const goalieStats = [
-      { season: '2024-2025', team: 'CAR', gp: 42, wins: 29, losses: 11, gaa: 2.38, svp: .919, shutouts: 3 },
-      { season: '2023-2024', team: 'CAR', gp: 46, wins: 32, losses: 10, gaa: 2.41, svp: .922, shutouts: 4 },
-      { season: '2022-2023', team: 'CAR', gp: 39, wins: 24, losses: 12, gaa: 2.51, svp: .915, shutouts: 2 },
+    // Mock playoff stats
+    const playoffStats = [
+      { season: '2020-21', team: 'SWE', gp: 13, goals: isGoalie ? null : 1, assists: isGoalie ? null : 4, points: isGoalie ? null : 5, pim: 8, wins: isGoalie ? 9 : null, losses: isGoalie ? 4 : null, gaa: isGoalie ? 2.11 : null, svp: isGoalie ? .931 : null }
+    ];
+    
+    // Get NHL totals
+    const nhlStats = seasonStats.filter(s => s.league === 'NHL');
+    const nhlTotals = isGoalie ? {
+      gp: nhlStats.reduce((sum, s) => sum + s.gp, 0),
+      wins: nhlStats.reduce((sum, s) => sum + s.wins, 0),
+      losses: nhlStats.reduce((sum, s) => sum + s.losses, 0),
+      gaa: (nhlStats.reduce((sum, s) => sum + s.gaa, 0) / nhlStats.length).toFixed(2),
+      svp: (nhlStats.reduce((sum, s) => sum + s.svp, 0) / nhlStats.length).toFixed(3),
+      pim: nhlStats.reduce((sum, s) => sum + s.pim, 0)
+    } : {
+      gp: nhlStats.reduce((sum, s) => sum + s.gp, 0),
+      goals: nhlStats.reduce((sum, s) => sum + s.goals, 0),
+      assists: nhlStats.reduce((sum, s) => sum + s.assists, 0),
+      points: nhlStats.reduce((sum, s) => sum + s.points, 0),
+      pim: nhlStats.reduce((sum, s) => sum + s.pim, 0)
+    };
+    
+    // Mock tournaments data
+    const tournaments = [
+      { 
+        year: 2020, 
+        tournament: 'World Junior U-20 Championships', 
+        team: 'Germany U-20',
+        gp: 7,
+        goals: isGoalie ? null : 0,
+        assists: isGoalie ? null : 6,
+        points: isGoalie ? null : 6,
+        pim: 6,
+        plusMinus: isGoalie ? null : 0,
+        wins: isGoalie ? 4 : null,
+        losses: isGoalie ? 3 : null,
+        gaa: isGoalie ? 2.45 : null, 
+        svp: isGoalie ? .914 : null
+      }
+    ];
+    
+    // Mock awards data
+    const awards = [
+      { year: '2021-22', league: 'NHL', award: isGoalie ? 'Vezina Trophy' : 'Calder Memorial Trophy' }
     ];
     
     return (
@@ -1863,19 +1932,28 @@ const LineCombinations = () => {
           <PlayerCardClose onClick={closePlayerModal}>×</PlayerCardClose>
           
           <PlayerCardHeader>
-            <PlayerCardImage>{selectedPlayer.number}</PlayerCardImage>
             <PlayerCardInfo>
               <PlayerCardName>{selectedPlayer.name}</PlayerCardName>
               <PlayerCardDetails>
                 <PlayerCardDetail>
-                  <span>Position:</span> {selectedPlayer.position}
+                  <span>Position:</span> {selectedPlayer.position || 'N/A'} -- shoots {selectedPlayer.handedness || 'R'}
                 </PlayerCardDetail>
                 <PlayerCardDetail>
-                  <span>Overall:</span> {selectedPlayer.overall}
+                  <span>Age:</span> {selectedPlayer.age || '24'} years
                 </PlayerCardDetail>
                 <PlayerCardDetail>
-                  <span>Type:</span> {selectedPlayer.player_type || 'N/A'}
+                  <span>Height/Weight:</span> {selectedPlayer.height || '6.03'} -- {selectedPlayer.weight || '205'} lbs
                 </PlayerCardDetail>
+                {selectedPlayer.overall && (
+                  <PlayerCardDetail>
+                    <span>Overall:</span> {selectedPlayer.overall}
+                  </PlayerCardDetail>
+                )}
+                {selectedPlayer.player_type && (
+                  <PlayerCardDetail>
+                    <span>Type:</span> {selectedPlayer.player_type || 'N/A'}
+                  </PlayerCardDetail>
+                )}
                 {selectedPlayer.injuryStatus && (
                   <PlayerCardDetail>
                     <span>Status:</span> <span style={{ color: '#e74c3c' }}>{selectedPlayer.injuryStatus}</span>
@@ -1886,30 +1964,192 @@ const LineCombinations = () => {
                     <span>Return:</span> {selectedPlayer.returnTime}
                   </PlayerCardDetail>
                 )}
+                {selectedPlayer.isStarter && (
+                  <PlayerCardDetail>
+                    <span>Status:</span> <span style={{ color: '#4CAF50' }}>Starter</span>
+                  </PlayerCardDetail>
+                )}
               </PlayerCardDetails>
             </PlayerCardInfo>
+            <PlayerCardImage 
+              style={{
+                backgroundColor: '#B30E16',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                color: 'white',
+                fontSize: '2rem',
+                fontWeight: 'bold'
+              }}
+            >
+              {selectedPlayer.number || '#'}
+            </PlayerCardImage>
           </PlayerCardHeader>
           
           <PlayerCardBody>
-            <PlayerCardSection>
-              <PlayerCardSectionTitle>Attributes</PlayerCardSectionTitle>
-              <AttributeGrid>
-                {selectedPlayer.attributes && Object.entries(selectedPlayer.attributes).map(([key, value]) => (
-                  <AttributeItem key={key}>
-                    <AttributeName>{key.charAt(0).toUpperCase() + key.slice(1).replace('_', ' ')}</AttributeName>
-                    <AttributeValue value={value}>{value}</AttributeValue>
-                  </AttributeItem>
-                ))}
-              </AttributeGrid>
-            </PlayerCardSection>
+            {/* Regular Season / Playoffs Stats Table Header */}
+            <div style={{display: 'flex', backgroundColor: '#1a3042'}}>
+              <div style={{flex: 1, textAlign: 'center', padding: '8px', fontWeight: 'bold', color: 'white'}}>
+                Regular Season
+              </div>
+              <div style={{flex: 1, textAlign: 'center', padding: '8px', fontWeight: 'bold', color: 'white'}}>
+                Playoffs
+              </div>
+            </div>
             
+            <SeasonStatsTable>
+              <StatsTable>
+                <thead>
+                  <tr>
+                    <TableHeader>Season</TableHeader>
+                    <TableHeader>Team</TableHeader>
+                    <TableHeader>Lge</TableHeader>
+                    <TableHeader>GP</TableHeader>
+                    {isGoalie ? (
+                      <>
+                        <TableHeader>W</TableHeader>
+                        <TableHeader>L</TableHeader>
+                        <TableHeader>GAA</TableHeader>
+                        <TableHeader>SV%</TableHeader>
+                        <TableHeader>PIM</TableHeader>
+                      </>
+                    ) : (
+                      <>
+                        <TableHeader>G</TableHeader>
+                        <TableHeader>A</TableHeader>
+                        <TableHeader>PTS</TableHeader>
+                        <TableHeader>PIM</TableHeader>
+                        <TableHeader>+/-</TableHeader>
+                      </>
+                    )}
+                    <TableHeader>GP</TableHeader>
+                    {isGoalie ? (
+                      <>
+                        <TableHeader>W</TableHeader>
+                        <TableHeader>L</TableHeader>
+                        <TableHeader>GAA</TableHeader>
+                        <TableHeader>SV%</TableHeader>
+                      </>
+                    ) : (
+                      <>
+                        <TableHeader>G</TableHeader>
+                        <TableHeader>A</TableHeader>
+                        <TableHeader>PTS</TableHeader>
+                        <TableHeader>PIM</TableHeader>
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {seasonStats.map((season, index) => {
+                    // Find matching playoff stats
+                    const playoff = playoffStats.find(p => p.season === season.season);
+                    
+                    // Determine row styling based on league
+                    const isAHL = season.league === 'AHL';
+                    const isSweHL = season.league === 'SweHL';
+                    const isNHL = season.league === 'NHL';
+                    
+                    let rowStyle = {};
+                    if (isAHL) rowStyle.backgroundColor = '#f9d6db';
+                    if (isSweHL) rowStyle.backgroundColor = '#d6e5d6';
+                    if (isNHL) rowStyle.backgroundColor = '#ffe3c0';
+                    
+                    return (
+                      <tr key={index} style={rowStyle}>
+                        <TableCell>{season.season}</TableCell>
+                        <TableCell>{season.team}</TableCell>
+                        <TableCell>{season.league}</TableCell>
+                        <TableCell>{season.gp}</TableCell>
+                        {isGoalie ? (
+                          <>
+                            <TableCell>{season.wins}</TableCell>
+                            <TableCell>{season.losses}</TableCell>
+                            <TableCell>{season.gaa}</TableCell>
+                            <TableCell>{season.svp}</TableCell>
+                            <TableCell>{season.pim}</TableCell>
+                          </>
+                        ) : (
+                          <>
+                            <TableCell>{season.goals}</TableCell>
+                            <TableCell>{season.assists}</TableCell>
+                            <TableCell>{season.points}</TableCell>
+                            <TableCell>{season.pim}</TableCell>
+                            <TableCell>{season.plusMinus}</TableCell>
+                          </>
+                        )}
+                        <TableCell>{playoff ? playoff.gp : '--'}</TableCell>
+                        {isGoalie ? (
+                          <>
+                            <TableCell>{playoff ? playoff.wins : '--'}</TableCell>
+                            <TableCell>{playoff ? playoff.losses : '--'}</TableCell>
+                            <TableCell>{playoff ? playoff.gaa : '--'}</TableCell>
+                            <TableCell>{playoff ? playoff.svp : '--'}</TableCell>
+                          </>
+                        ) : (
+                          <>
+                            <TableCell>{playoff ? playoff.goals : '--'}</TableCell>
+                            <TableCell>{playoff ? playoff.assists : '--'}</TableCell>
+                            <TableCell>{playoff ? playoff.points : '--'}</TableCell>
+                            <TableCell>{playoff ? playoff.pim : '--'}</TableCell>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
+                  {/* NHL Totals row */}
+                  <tr style={{backgroundColor: '#ffe3c0'}}>
+                    <TableCell>NHL Totals</TableCell>
+                    <TableCell></TableCell>
+                    <TableCell></TableCell>
+                    <TableCell>{nhlTotals.gp}</TableCell>
+                    {isGoalie ? (
+                      <>
+                        <TableCell>{nhlTotals.wins}</TableCell>
+                        <TableCell>{nhlTotals.losses}</TableCell>
+                        <TableCell>{nhlTotals.gaa}</TableCell>
+                        <TableCell>{nhlTotals.svp}</TableCell>
+                        <TableCell>{nhlTotals.pim}</TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell>{nhlTotals.goals}</TableCell>
+                        <TableCell>{nhlTotals.assists}</TableCell>
+                        <TableCell>{nhlTotals.points}</TableCell>
+                        <TableCell>{nhlTotals.pim}</TableCell>
+                        <TableCell></TableCell>
+                      </>
+                    )}
+                    <TableCell></TableCell>
+                    {isGoalie ? (
+                      <>
+                        <TableCell></TableCell>
+                        <TableCell></TableCell>
+                        <TableCell></TableCell>
+                        <TableCell></TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell></TableCell>
+                        <TableCell></TableCell>
+                        <TableCell></TableCell>
+                        <TableCell></TableCell>
+                      </>
+                    )}
+                  </tr>
+                </tbody>
+              </StatsTable>
+            </SeasonStatsTable>
+            
+            {/* Tournaments Section */}
             <PlayerCardSection>
-              <PlayerCardSectionTitle>Career Stats</PlayerCardSectionTitle>
+              <PlayerCardSectionTitle>Tournaments</PlayerCardSectionTitle>
               <SeasonStatsTable>
                 <StatsTable>
                   <thead>
                     <tr>
-                      <TableHeader>Season</TableHeader>
+                      <TableHeader>Year</TableHeader>
+                      <TableHeader>Tournament</TableHeader>
                       <TableHeader>Team</TableHeader>
                       <TableHeader>GP</TableHeader>
                       {isGoalie ? (
@@ -1918,38 +2158,41 @@ const LineCombinations = () => {
                           <TableHeader>L</TableHeader>
                           <TableHeader>GAA</TableHeader>
                           <TableHeader>SV%</TableHeader>
-                          <TableHeader>SO</TableHeader>
+                          <TableHeader>PIM</TableHeader>
                         </>
                       ) : (
                         <>
                           <TableHeader>G</TableHeader>
                           <TableHeader>A</TableHeader>
                           <TableHeader>PTS</TableHeader>
+                          <TableHeader>PIM</TableHeader>
                           <TableHeader>+/-</TableHeader>
                         </>
                       )}
                     </tr>
                   </thead>
                   <tbody>
-                    {(isGoalie ? goalieStats : seasonStats).map((season, index) => (
+                    {tournaments.map((tournament, index) => (
                       <TableRow key={index}>
-                        <TableCell>{season.season}</TableCell>
-                        <TableCell>{season.team}</TableCell>
-                        <TableCell>{season.gp}</TableCell>
+                        <TableCell>{tournament.year}</TableCell>
+                        <TableCell>{tournament.tournament}</TableCell>
+                        <TableCell>{tournament.team}</TableCell>
+                        <TableCell>{tournament.gp}</TableCell>
                         {isGoalie ? (
                           <>
-                            <TableCell>{season.wins}</TableCell>
-                            <TableCell>{season.losses}</TableCell>
-                            <TableCell>{season.gaa}</TableCell>
-                            <TableCell>{season.svp}</TableCell>
-                            <TableCell>{season.shutouts}</TableCell>
+                            <TableCell>{tournament.wins}</TableCell>
+                            <TableCell>{tournament.losses}</TableCell>
+                            <TableCell>{tournament.gaa}</TableCell>
+                            <TableCell>{tournament.svp}</TableCell>
+                            <TableCell>{tournament.pim}</TableCell>
                           </>
                         ) : (
                           <>
-                            <TableCell>{season.goals}</TableCell>
-                            <TableCell>{season.assists}</TableCell>
-                            <TableCell>{season.points}</TableCell>
-                            <TableCell>{season.plusMinus}</TableCell>
+                            <TableCell>{tournament.goals}</TableCell>
+                            <TableCell>{tournament.assists}</TableCell>
+                            <TableCell>{tournament.points}</TableCell>
+                            <TableCell>{tournament.pim}</TableCell>
+                            <TableCell>{tournament.plusMinus}</TableCell>
                           </>
                         )}
                       </TableRow>
@@ -1957,6 +2200,44 @@ const LineCombinations = () => {
                   </tbody>
                 </StatsTable>
               </SeasonStatsTable>
+            </PlayerCardSection>
+            
+            {/* Awards Section */}
+            <PlayerCardSection>
+              <PlayerCardSectionTitle>Awards</PlayerCardSectionTitle>
+              <SeasonStatsTable>
+                <StatsTable>
+                  <thead>
+                    <tr>
+                      <TableHeader>Year</TableHeader>
+                      <TableHeader>League</TableHeader>
+                      <TableHeader>Award</TableHeader>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {awards.map((award, index) => (
+                      <TableRow key={index}>
+                        <TableCell>{award.year}</TableCell>
+                        <TableCell>{award.league}</TableCell>
+                        <TableCell style={{textAlign: 'left'}}>{award.award}</TableCell>
+                      </TableRow>
+                    ))}
+                  </tbody>
+                </StatsTable>
+              </SeasonStatsTable>
+            </PlayerCardSection>
+            
+            {/* Player Attributes Section */}
+            <PlayerCardSection>
+              <PlayerCardSectionTitle>Attributes</PlayerCardSectionTitle>
+              <AttributeGrid>
+                {Object.entries(attributes).map(([key, value]) => (
+                  <AttributeItem key={key}>
+                    <AttributeName>{key.charAt(0).toUpperCase() + key.slice(1)}</AttributeName>
+                    <AttributeValue value={value}>{value}</AttributeValue>
+                  </AttributeItem>
+                ))}
+              </AttributeGrid>
             </PlayerCardSection>
           </PlayerCardBody>
         </PlayerCardContent>

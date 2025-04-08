@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { createClient } from '@supabase/supabase-js';
 import PlayerCard from '../components/PlayerCard';
+import { useParams } from 'react-router-dom';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -236,22 +237,6 @@ const LEAGUE_REVERSE_MAP = {};
 Object.entries(LEAGUE_NAME_MAP).forEach(([abbr, fullName]) => {
   LEAGUE_REVERSE_MAP[fullName] = abbr;
 });
-
-// Get full league name with abbreviation
-const getLeagueFullName = (abbreviation) => {
-  if (!abbreviation) return '';
-  
-  // Log to debug potential issues
-  console.log(`[DEBUG] Getting full name for league abbreviation: "${abbreviation}"`);
-  
-  const fullName = LEAGUE_NAME_MAP[abbreviation];
-  if (!fullName) {
-    console.warn(`[DEBUG] No full name found in mapping for abbreviation: "${abbreviation}"`);
-    return abbreviation;
-  }
-  
-  return `${fullName} (${abbreviation})`;
-};
 
 // Get abbreviation from full name if needed
 const getLeagueAbbreviation = (fullNameWithAbbr) => {
@@ -517,11 +502,11 @@ const PlayerEditor = () => {
         // Step 1: Load all static data
         console.log('[DEBUG] Loading all static data...');
         
-        // Fetch league types from League_Level_Rules table
+        // Fetch league types from League_Level_Rules table and leagues/teams with proper relationships
         const [leagueTypesRes, leaguesRes, teamsRes] = await Promise.all([
           supabase.from('League_Level_Rules').select('*'),
           supabase.from('League').select('*'),
-          supabase.from('Team').select('*')
+          supabase.from('Team').select('*, League(league_level)')
         ]);
 
         // Check for errors
@@ -540,68 +525,18 @@ const PlayerEditor = () => {
 
         console.log(`[DEBUG] Loaded: ${allLeagueTypes.length} league types, ${allLeagues.length} leagues, ${allTeams.length} teams`);
         
-        // Log league types from League_Level_Rules
-        console.log('[DEBUG] League types from League_Level_Rules:', allLeagueTypes);
-        
-        // Since the League table returned 0 results, we'll create a dynamic mapping
-        // based on analysis of what teams exist in each league
-        
-        // Get unique leagues from team data
-        const uniqueLeagues = [...new Set(allTeams.map(t => t.league).filter(Boolean))];
-        console.log(`[DEBUG] Found ${uniqueLeagues.length} unique leagues from team data:`, uniqueLeagues.join(', '));
-        
-        // Create a mapping from league to league type
+        // Create a mapping from league abbreviation to league type
+        // This is the key part that was missing before
         const leagueToTypeMapping = {};
         
-        // Create a dynamic classifier for leagues based on analysis
-        // We analyze which leagues might belong to which league types based on naming patterns
-        allLeagueTypes.forEach(leagueType => {
-          const leaguePatterns = [];
-          
-          // Define patterns that might indicate a league belongs to a specific type
-          // These are just heuristics and can be adjusted
-          switch (leagueType) {
-            case 'Pro':
-              leaguePatterns.push(/^NHL$/, /^KHL$/, /^SHL$/, /^[A-Z]{1,3}$/);
-              break;
-            case 'Minor':
-              leaguePatterns.push(/^AHL$/, /^ECHL$/, /Minor/i, /Farm/i);
-              break;
-            case 'Junior':
-              leaguePatterns.push(/Junior/i, /^[A-Z]HL$/, /^NCAA$/);
-              break;
-            case 'Sub-Junior':
-              leaguePatterns.push(/Youth/i, /U\d+/i, /Midget/i);
-              break;
-            default:
-              // No patterns for unknown types
-          }
-          
-          // Apply the patterns to categorize leagues
-          uniqueLeagues.forEach(league => {
-            // Skip if already categorized
-            if (leagueToTypeMapping[league]) return;
-            
-            // Check if the league matches any pattern for this type
-            const matches = leaguePatterns.some(pattern => pattern.test(league));
-            if (matches) {
-              leagueToTypeMapping[league] = leagueType;
-              console.log(`[DEBUG] Dynamically categorized ${league} as ${leagueType} based on patterns`);
-            }
-          });
-        });
-        
-        // Handle any uncategorized leagues - assign to the first league type (usually 'Pro')
-        const defaultLeagueType = allLeagueTypes[0] || 'Unknown';
-        uniqueLeagues.forEach(league => {
-          if (!leagueToTypeMapping[league]) {
-            leagueToTypeMapping[league] = defaultLeagueType;
-            console.log(`[DEBUG] Assigned uncategorized league ${league} to default type ${defaultLeagueType}`);
+        // Populate the mapping directly from the League table data
+        allLeagues.forEach(league => {
+          if (league.abbreviation && league.league_level) {
+            leagueToTypeMapping[league.abbreviation] = league.league_level;
           }
         });
         
-        // Log the mapping to verify
-        console.log('[DEBUG] League to League Type mapping:');
+        console.log('[DEBUG] League to League Type mapping created from database:');
         Object.entries(leagueToTypeMapping).forEach(([league, type]) => {
           console.log(`  "${league}" => "${type}"`);
         });
@@ -611,15 +546,17 @@ const PlayerEditor = () => {
         
         // For each type, count teams that have leagues of that type
         allLeagueTypes.forEach(type => {
-          // Find leagues of this type
-          const leaguesOfType = Object.entries(leagueToTypeMapping)
-            .filter(([_, typeValue]) => typeValue === type)
-            .map(([league, _]) => league);
-            
           // Count teams in these leagues
-          typeCounts[type] = allTeams.filter(t => leaguesOfType.includes(t.league)).length;
+          typeCounts[type] = allTeams.filter(team => {
+            // First try to get league type from the League relation
+            if (team.League && team.League.league_level === type) {
+              return true;
+            }
+            // Fallback to our mapping
+            return leagueToTypeMapping[team.league] === type;
+          }).length;
           
-          console.log(`[DEBUG] League type "${type}" has ${typeCounts[type]} teams across ${leaguesOfType.length} leagues`);
+          console.log(`[DEBUG] League type "${type}" has ${typeCounts[type]} teams`);
         });
         
         // Set all the static data states
@@ -646,7 +583,9 @@ const PlayerEditor = () => {
           if (team) {
             derivedTeam = team.abbreviation;
             derivedLeague = team.league;
-            derivedLeagueType = leagueToTypeMapping[team.league];
+            
+            // Get league type from League relation or mapping
+            derivedLeagueType = team.League?.league_level || leagueToTypeMapping[team.league];
             
             console.log(`[DEBUG] Found team ${team.team} (${derivedTeam})`);
             console.log(`[DEBUG] Derived league: ${derivedLeague}, type: ${derivedLeagueType}`);
@@ -698,47 +637,17 @@ const PlayerEditor = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Helper functions for filtering teams (similar to AssetMovement.js)
+  // Get leagues filtered by selected league type
   const getFilteredLeagues = () => {
-    // First, check if data is loaded
-    if (!initialDataLoaded || !allTeamsData || allTeamsData.length === 0) {
-      console.log('[DEBUG] Cannot filter leagues - initialization not complete');
-      return [];
-    }
-
-    // If no league type is selected, return all leagues referenced by teams
-    if (!selectedLeagueType) {
-      // Get all unique leagues from teams
-      const uniqueLeagues = [...new Set(allTeamsData.map(t => t.league).filter(Boolean))];
-      
-      // Convert to League objects for consistency
-      return uniqueLeagues.map(league => ({ 
-        league, 
-        league_level: leagueToTypeMap[league] || 'Unknown'
-      }));
+    if (!initialDataLoaded || !allLeaguesData) return [];
+    
+    if (selectedLeagueType) {
+      // Filter leagues to only those of the selected type
+      return allLeaguesData.filter(league => league.league_level === selectedLeagueType);
     }
     
-    // If a league type is selected:
-    // 1. Find all leagues of that type from our mapping
-    const leaguesOfSelectedType = Object.entries(leagueToTypeMap)
-      .filter(([_, type]) => type === selectedLeagueType)
-      .map(([league, _]) => league);
-      
-    console.log(`[DEBUG] Found ${leaguesOfSelectedType.length} leagues of type ${selectedLeagueType}:`, 
-                leaguesOfSelectedType.join(', '));
-    
-    // 2. Check which of these leagues have teams
-    const leaguesWithTeams = leaguesOfSelectedType.filter(league => 
-      allTeamsData.some(team => team.league === league)
-    );
-    
-    console.log(`[DEBUG] Of these, ${leaguesWithTeams.length} have teams:`, leaguesWithTeams.join(', '));
-    
-    // 3. Convert to League objects for consistency
-    return leaguesWithTeams.map(league => ({ 
-      league, 
-      league_level: selectedLeagueType 
-    }));
+    // Return all leagues if no league type is selected
+    return allLeaguesData;
   };
 
   const getFilteredTeams = () => {
@@ -754,7 +663,8 @@ const PlayerEditor = () => {
       
       // Filter by league type if selected
       if (selectedLeagueType) {
-        const teamLeagueType = leagueToTypeMap[team.league];
+        // First check if team has a League relation with league_level
+        const teamLeagueType = team.League?.league_level || leagueToTypeMap[team.league];
         if (teamLeagueType !== selectedLeagueType) {
           return false;
         }
@@ -798,9 +708,11 @@ const PlayerEditor = () => {
     console.log(`[DEBUG] League changed to: "${value}"`);
     
     // Check if this league exists in our League table data
-    const leagueExists = allLeaguesData.some(l => l.league === value);
-    if (!leagueExists) {
+    const leagueData = allLeaguesData.find(l => l.league === value);
+    if (!leagueData) {
       console.warn(`[DEBUG] Selected league "${value}" not found in League table!`);
+    } else {
+      console.log(`[DEBUG] Found league data:`, leagueData);
     }
     
     // Log all teams with this league value to verify our data
@@ -1019,7 +931,13 @@ const PlayerEditor = () => {
     
     console.log(`[DEBUG] Getting league type for team ${team.team} (${team.abbreviation}), league: "${team.league}"`);
     
-    // Get the league type from our mapping
+    // First try to get the league type directly from the League relation
+    if (team.League && team.League.league_level) {
+      console.log(`[DEBUG] Found league type "${team.League.league_level}" from League relation for team ${team.team}`);
+      return team.League.league_level;
+    }
+    
+    // Fallback to our mapping
     const leagueType = leagueToTypeMap[team.league];
     
     if (!leagueType) {
@@ -1027,7 +945,7 @@ const PlayerEditor = () => {
       return null;
     }
     
-    console.log(`[DEBUG] Found league type "${leagueType}" for team ${team.team}`);
+    console.log(`[DEBUG] Found league type "${leagueType}" for team ${team.team} from mapping`);
     return leagueType;
   };
 
@@ -1426,6 +1344,29 @@ const PlayerEditor = () => {
     return String(id1).trim() === String(id2).trim();
   };
 
+  // Get full league name with abbreviation
+  const getLeagueFullName = (abbreviation) => {
+    if (!abbreviation) return '';
+    
+    // Log to debug potential issues
+    console.log(`[DEBUG] Getting full name for league abbreviation: "${abbreviation}"`);
+    
+    // First try to get from our database
+    const leagueData = allLeaguesData?.find(l => l.abbreviation === abbreviation);
+    if (leagueData && leagueData.league) {
+      return `${leagueData.league} (${abbreviation})`;
+    }
+    
+    // Fallback to the static mapping
+    const fullName = LEAGUE_NAME_MAP[abbreviation];
+    if (!fullName) {
+      console.warn(`[DEBUG] No full name found in mapping for abbreviation: "${abbreviation}"`);
+      return abbreviation;
+    }
+    
+    return `${fullName} (${abbreviation})`;
+  };
+
   // Add this logging before the return statement for easier debugging
   console.log('[DEBUG] Render state:', {
     initialDataLoaded,
@@ -1492,11 +1433,18 @@ const PlayerEditor = () => {
           >
             <option value="">All Leagues</option>
             {initialDataLoaded && getFilteredLeagues().map(league => {
+              // Handle cases where either league.league or league.abbreviation might be missing
+              const abbreviation = league.abbreviation || league.league;
+              const leagueName = league.league || league.abbreviation;
+              
+              // Skip if we don't have either a name or abbreviation
+              if (!abbreviation) return null;
+              
               // Count teams in this league
-              const teamsInLeague = allTeamsData.filter(t => t.league === league.league);
+              const teamsInLeague = allTeamsData.filter(t => t.league === abbreviation);
               return (
-                <option key={league.league} value={league.league}>
-                  {league.league} ({teamsInLeague.length} teams)
+                <option key={abbreviation} value={abbreviation}>
+                  {leagueName} ({teamsInLeague.length} teams)
                 </option>
               );
             })}

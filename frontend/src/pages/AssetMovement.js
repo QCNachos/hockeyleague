@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { createClient } from '@supabase/supabase-js';
-import PlayerCard from '../components/PlayerCard';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -104,6 +103,8 @@ const AssetCategoryTitle = styled.h3`
   color: #B30E16;
   margin: 15px 0 10px;
   font-size: 1.2rem;
+  display: flex;
+  align-items: center;
 `;
 
 const AssetGrid = styled.div`
@@ -120,6 +121,7 @@ const AssetCard = styled.div`
   padding: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  position: relative;
   
   &:hover {
     background-color: ${props => props.selected ? '#304050' : '#303030'};
@@ -127,15 +129,31 @@ const AssetCard = styled.div`
   }
 `;
 
+const InfoIcon = styled.div`
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #1a3042;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 2;
+  
+  &:hover {
+    background-color: #B30E16;
+  }
+`;
+
 const AssetDetails = styled.div`
   font-size: 12px;
   color: #666;
-`;
-
-const AssetDetail = styled.div`
-  font-size: 12px;
-  color: #666;
-  margin-top: 2px;
 `;
 
 const AssetName = styled.div`
@@ -183,6 +201,22 @@ const SelectedAssetCard = styled.div`
   display: flex;
   flex-direction: column;
   gap: 4px;
+  position: relative;
+  
+  ${InfoIcon} {
+    width: 16px;
+    height: 16px;
+    top: 4px;
+    right: 4px;
+    font-size: 10px;
+    cursor: pointer;
+    opacity: 0.7;
+    
+    &:hover {
+      opacity: 1;
+      background-color: #B30E16;
+    }
+  }
 `;
 
 const SelectedAssetName = styled.div`
@@ -201,40 +235,6 @@ const TransferArrowSection = styled.div`
   justify-content: center;
   align-items: center;
   padding: 10px;
-`;
-
-const AssetMovementFooter = styled.div`
-  display: flex;
-  justify-content: center;
-  margin-top: 30px;
-`;
-
-const ConfirmButton = styled.button`
-  padding: 15px 30px;
-  background-color: #B30E16;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 1.1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  
-  &:hover {
-    background-color: #950b12;
-  }
-  
-  &:disabled {
-    background-color: #555;
-    cursor: not-allowed;
-  }
-`;
-
-const SelectedAssetGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 15px;
-  margin-top: 15px;
 `;
 
 const TransferArrow = styled.div`
@@ -276,6 +276,14 @@ const SmallAssetCard = styled(AssetCard)`
   min-width: 80px;
   max-width: 120px;
   text-align: center;
+  
+  ${InfoIcon} {
+    width: 16px;
+    height: 16px;
+    top: 4px;
+    right: 4px;
+    font-size: 10px;
+  }
 `;
 
 const PickRound = styled.div`
@@ -497,6 +505,22 @@ const EmptySlot = styled.div`
   text-align: center;
 `;
 
+// Add these styled components for collapsible sections
+const SectionHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  padding: 5px 0;
+  margin-bottom: 10px;
+`;
+
+const CollapseIcon = styled.div`
+  color: #C4CED4;
+  font-size: 1.2rem;
+  margin-left: 10px;
+`;
+
 const AssetMovement = () => {
   // Helper for safe ID comparison
   const isSameId = (id1, id2) => {
@@ -519,12 +543,11 @@ const AssetMovement = () => {
   const [players, setPlayers] = useState([]);
   const [draftPicksData, setDraftPicksData] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
-  const [error, setError] = useState(null);
   
-  // Filter states - similar to TeamManager.js
+  // Filter states
   const [, setLeagueTypes] = useState([]);
   const [, setLeagues] = useState([]);
-  const [, setDivisions] = useState([]);
+  // const [, setDivisions] = useState([]); // Will be used in future version
   
   // Filters for Team 1
   const [selectedLeagueType1, setSelectedLeagueType1] = useState('');
@@ -540,7 +563,7 @@ const AssetMovement = () => {
   
   // Added state variable for league type mapping
   const [leagueToTypeMap, setLeagueToTypeMap] = useState({});
-  const [enhancedTeams, setEnhancedTeams] = useState([]);
+  // const [enhancedTeams, setEnhancedTeams] = useState([]); // Will be used in future version
   
   // Selected assets
   const [selectedTeam1Assets, setSelectedTeam1Assets] = useState([]);
@@ -549,6 +572,10 @@ const AssetMovement = () => {
   // Add player modal state variables
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [showPlayerModal, setShowPlayerModal] = useState(false);
+  
+  // Add state for collapsible sections
+  const [team1DraftPicksCollapsed, setTeam1DraftPicksCollapsed] = useState(false);
+  const [team2DraftPicksCollapsed, setTeam2DraftPicksCollapsed] = useState(false);
   
   // Add this function near the top of the component
   const listAvailableTables = async () => {
@@ -580,7 +607,6 @@ const AssetMovement = () => {
   useEffect(() => {
     const fetchData = async () => {
       setLoadingData(true);
-      setError(null);
       
       try {
         console.log('Fetching data for AssetMovement...');
@@ -658,7 +684,6 @@ const AssetMovement = () => {
         }
         
         setTeams(enhancedTeams || []);
-        setEnhancedTeams(enhancedTeams || []);
         
         // Check the structure of a player to understand the relationship
         const { data: playerStructure, error: structureError } = await supabase
@@ -750,7 +775,6 @@ const AssetMovement = () => {
         
       } catch (error) {
         console.error('Error in fetchData:', error);
-        setError(`Failed to load data: ${error.message}`);
       } finally {
         setLoadingData(false);
       }
@@ -849,7 +873,6 @@ const AssetMovement = () => {
     setSelectedLeague1(value);
     
     // Reset subsequent filters
-    setSelectedLeague1('');
     setTeam1(''); // Reset team selection
     setSelectedTeam1Assets([]);
   };
@@ -860,7 +883,6 @@ const AssetMovement = () => {
     setSelectedLeague2(value);
     
     // Reset subsequent filters
-    setSelectedLeague2('');
     setTeam2(''); // Reset team selection
     setSelectedTeam2Assets([]);
   };
@@ -913,16 +935,38 @@ const AssetMovement = () => {
   
   // Toggle for team 1 asset selection
   const toggleTeam1Asset = (asset) => {
-    if (asset && asset.assetType === 'player') {
-      handlePlayerClick(asset);
-    }
+    if (!asset) return;
+    
+    // Toggle the asset selection
+    setSelectedTeam1Assets(prev => {
+      const isAlreadySelected = prev.some(a => a.id === asset.id && a.assetType === asset.assetType);
+      
+      if (isAlreadySelected) {
+        // Remove from selection
+        return prev.filter(a => !(a.id === asset.id && a.assetType === asset.assetType));
+      } else {
+        // Add to selection
+        return [...prev, asset];
+      }
+    });
   };
   
   // Toggle for team 2 asset selection
   const toggleTeam2Asset = (asset) => {
-    if (asset && asset.assetType === 'player') {
-      handlePlayerClick(asset);
-    }
+    if (!asset) return;
+    
+    // Toggle the asset selection
+    setSelectedTeam2Assets(prev => {
+      const isAlreadySelected = prev.some(a => a.id === asset.id && a.assetType === asset.assetType);
+      
+      if (isAlreadySelected) {
+        // Remove from selection
+        return prev.filter(a => !(a.id === asset.id && a.assetType === asset.assetType));
+      } else {
+        // Add to selection
+        return [...prev, asset];
+      }
+    });
   };
   
   // Helper function to get league type from team
@@ -1072,44 +1116,6 @@ const AssetMovement = () => {
     return normalizeAbbreviation(abbr1) === normalizeAbbreviation(abbr2);
   };
   
-  // Updated getDraftPicksForTeam function to match by team abbreviation
-  const getDraftPicksForTeam = (teamId) => {
-    if (!teamId || !draftPicksData) {
-      console.log('No team ID or draft picks data');
-      return [];
-    }
-    
-    // Find the team to get its abbreviation
-    const team = teams.find(t => isSameId(t.id, teamId));
-    if (!team || !team.abbreviation) {
-      console.log(`No abbreviation found for team ID: ${teamId}`);
-      return [];
-    }
-    
-    const teamAbbr = team.abbreviation;
-    console.log(`Looking for draft picks for ${team.team} (${teamAbbr})`);
-    
-    // Log the first few draft picks to verify structure
-    if (draftPicksData.length > 0) {
-      console.log('Sample draft pick structure:', draftPicksData[0]);
-    }
-    
-    // Filter picks based on team abbreviation - case insensitive and trim whitespace
-    const teamPicks = draftPicksData.filter(pick => {
-      const pickTeam = pick.team;
-      const matches = abbreviationsMatch(pickTeam, teamAbbr);
-      console.log(`Comparing pick team "${pickTeam}" with "${teamAbbr}": ${matches}`);
-      return matches;
-    });
-    
-    console.log(`Found ${teamPicks.length} draft picks for ${teamAbbr}`);
-    if (teamPicks.length > 0) {
-      console.log('First matching pick:', teamPicks[0]);
-    }
-    
-    return teamPicks;
-  };
-  
   // Group draft picks by year and original team
   const groupDraftPicksByYear = (picks) => {
     if (!picks || picks.length === 0) return {};
@@ -1169,7 +1175,8 @@ const AssetMovement = () => {
     return result;
   };
   
-  // Helper to get team abbreviation from team ID
+  // Helper function to get team abbreviation from team ID - currently unused but will be used in future versions
+  /* 
   const getTeamAbbreviation = (id) => {
     if (!id) return '';
     
@@ -1178,6 +1185,18 @@ const AssetMovement = () => {
       return team.abbreviation || '';
     }
     return '';
+  };
+  */
+  
+  // Helper function to get team name by abbreviation
+  const getTeamByAbbreviation = (abbreviation) => {
+    if (!abbreviation) return 'Unknown';
+    
+    // Case insensitive search using our helper
+    const team = teams.find(t => 
+      t.abbreviation && abbreviationsMatch(t.abbreviation, abbreviation)
+    );
+    return team ? team.team : abbreviation;
   };
   
   // Handle confirming the trade
@@ -1203,7 +1222,7 @@ const AssetMovement = () => {
   };
   
   // Update draft picks rendering to match the database structure
-  const renderDraftPicks = (teamId) => {
+  const renderDraftPicks = (teamId, isCollapsed) => {
     if (!teamId) {
       return <div>Select a team to view draft picks</div>;
     }
@@ -1235,64 +1254,55 @@ const AssetMovement = () => {
     
     console.log(`Found ${teamPicks.length} draft picks for ${teamAbbr}`);
     
-    if (teamPicks.length === 0) {
-      return <div>No draft picks available for this team</div>;
-    }
-    
-    // Group picks by year and team
-    const groupedPicks = groupDraftPicksByYear(teamPicks);
-    console.log('Grouped picks:', groupedPicks);
-    
     return (
-      <DraftPicksContainer>
-        {Object.entries(groupedPicks).map(([year, picksByTeam]) => (
-          <YearRow key={year}>
-            <YearLabel>{year}</YearLabel>
-            {Object.entries(picksByTeam).map(([teamKey, picks]) => (
-              <div key={`${year}-${teamKey}`}>
-                <TeamPicksLabel>
-                  {teamKey === 'Own' ? 'Own' : `From ${getTeamByAbbreviation(teamKey) || teamKey}`}
-                </TeamPicksLabel>
-                <PicksRow>
-                  {picks.map(pick => (
-                    <SmallAssetCard 
-                      key={pick.id}
-                      onClick={() => isSameId(teamId, team1)
-                        ? toggleTeam1Asset({...pick, assetType: 'pick'}) 
-                        : toggleTeam2Asset({...pick, assetType: 'pick'})
-                      }
-                      selected={isSameId(teamId, team1)
-                        ? selectedTeam1Assets.some(asset => asset.id === pick.id && asset.assetType === 'pick')
-                        : selectedTeam2Assets.some(asset => asset.id === pick.id && asset.assetType === 'pick')
-                      }
-                    >
-                      <PickRound>Round {pick.round}</PickRound>
-                      <PickTeam>
-                        {pick.received_pick_1 
-                          ? `From ${getTeamByAbbreviation(pick.received_pick_1) || pick.received_pick_1}`
-                          : "Own Pick"
-                        }
-                      </PickTeam>
-                    </SmallAssetCard>
-                  ))}
-                </PicksRow>
-              </div>
-            ))}
-          </YearRow>
-        ))}
-      </DraftPicksContainer>
+      <div>
+        {!isCollapsed && (
+          <DraftPicksContainer>
+            {teamPicks.length === 0 ? (
+              <div>No draft picks available for this team</div>
+            ) : (
+              <>
+                {Object.entries(groupDraftPicksByYear(teamPicks)).map(([year, picksByTeam]) => (
+                  <YearRow key={year}>
+                    <YearLabel>{year}</YearLabel>
+                    {Object.entries(picksByTeam).map(([teamKey, picks]) => (
+                      <div key={`${year}-${teamKey}`}>
+                        <TeamPicksLabel>
+                          {teamKey === 'Own' ? 'Own' : `From ${getTeamByAbbreviation(teamKey) || teamKey}`}
+                        </TeamPicksLabel>
+                        <PicksRow>
+                          {picks.map(pick => (
+                            <SmallAssetCard 
+                              key={pick.id}
+                              onClick={() => isSameId(teamId, team1)
+                                ? toggleTeam1Asset({...pick, assetType: 'pick'}) 
+                                : toggleTeam2Asset({...pick, assetType: 'pick'})
+                              }
+                              selected={isSameId(teamId, team1)
+                                ? selectedTeam1Assets.some(asset => asset.id === pick.id && asset.assetType === 'pick')
+                                : selectedTeam2Assets.some(asset => asset.id === pick.id && asset.assetType === 'pick')
+                              }
+                            >
+                              <PickRound>Round {pick.round}</PickRound>
+                              <PickTeam>
+                                {pick.received_pick_1 
+                                  ? `From ${getTeamByAbbreviation(pick.received_pick_1) || pick.received_pick_1}`
+                                  : "Own Pick"
+                                }
+                              </PickTeam>
+                            </SmallAssetCard>
+                          ))}
+                        </PicksRow>
+                      </div>
+                    ))}
+                  </YearRow>
+                ))}
+              </>
+            )}
+          </DraftPicksContainer>
+        )}
+      </div>
     );
-  };
-  
-  // Helper function to get team name by abbreviation
-  const getTeamByAbbreviation = (abbreviation) => {
-    if (!abbreviation) return 'Unknown';
-    
-    // Case insensitive search using our helper
-    const team = teams.find(t => 
-      t.abbreviation && abbreviationsMatch(t.abbreviation, abbreviation)
-    );
-    return team ? team.team : abbreviation;
   };
   
   // Add these functions
@@ -1308,41 +1318,6 @@ const AssetMovement = () => {
     setSelectedPlayer(null);
   };
   
-  // Modify the existing renderPlayer function to add support for clicking players
-  const renderPlayer = (player, showBadge = false) => {
-    if (!player) {
-      return <EmptySlot>Empty Slot</EmptySlot>;
-    }
-    
-    return (
-      <AssetCard 
-        key={player.id}
-        selected={isTeam1AssetSelected(player, 'player') || isTeam2AssetSelected(player, 'player')}
-        onClick={(e) => {
-          // First show the player modal if it's a player
-          if (player.assetType === 'player') {
-            // Don't stop propagation to allow toggling too
-            handlePlayerClick(player);
-          }
-          
-          // Then handle the original toggle behavior
-          if (isSameId(player.team_id, team1)) {
-            toggleTeam1Asset(player);
-          } else if (isSameId(player.team_id, team2)) {
-            toggleTeam2Asset(player);
-          }
-        }}
-      >
-        <AssetName>{player.first_name} {player.last_name}</AssetName>
-        <AssetDetails>
-          {player.position_primary || 'N/A'} • {player.age || 'N/A'} yrs • {player.overall || 'N/A'} OVR
-          <br />
-          {getPlayerContractInfo(player)}
-        </AssetDetails>
-      </AssetCard>
-    );
-  };
-
   // Add the render function for the player modal
   const renderPlayerModal = () => {
     if (!showPlayerModal || !selectedPlayer) return null;
@@ -1656,7 +1631,7 @@ const AssetMovement = () => {
     );
   };
   
-  // Add the SelectedTeamSection component definition
+  // Component for displaying selected assets 
   const SelectedTeamSection = ({ teamName, assets }) => (
     <SelectedAssetsContainer>
       <SelectedTeamHeader>{teamName}</SelectedTeamHeader>
@@ -1665,9 +1640,21 @@ const AssetMovement = () => {
           assets.map((asset) => (
             <SelectedAssetCard 
               key={`selected-${asset.id}-${asset.assetType}`}
-              onClick={() => asset.assetType === 'player' ? handlePlayerClick(asset) : null}
-              style={{ cursor: asset.assetType === 'player' ? 'pointer' : 'default' }}
+              onClick={asset.assetType === 'player' ? 
+                () => null  // No selection action needed here
+                : null}
+              style={asset.assetType === 'player' ? { position: 'relative' } : {}}
             >
+              {asset.assetType === 'player' && (
+                <InfoIcon 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePlayerClick(asset);
+                  }}
+                >
+                  i
+                </InfoIcon>
+              )}
               {asset.assetType === 'player' ? (
                 <>
                   <SelectedAssetName>{asset.first_name} {asset.last_name}</SelectedAssetName>
@@ -1703,8 +1690,6 @@ const AssetMovement = () => {
       
       {loadingData ? (
         <p>Loading data...</p>
-      ) : error ? (
-        <p style={{ color: '#B30E16' }}>{error}</p>
       ) : (
         <>
           {/* If there are issues with league filters, this debug info might help */}
@@ -1781,12 +1766,16 @@ const AssetMovement = () => {
                       <AssetCard 
                         key={`player1-${player.id}`}
                         selected={isTeam1AssetSelected(player, 'player')}
-                        onClick={() => {
-                          // Show player card and add to selection
-                          handlePlayerClick({...player, assetType: 'player'});
-                          toggleTeam1Asset({...player, assetType: 'player'});
-                        }}
+                        onClick={() => toggleTeam1Asset({...player, assetType: 'player'})}
                       >
+                        <InfoIcon 
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent card click handler from firing
+                            handlePlayerClick({...player, assetType: 'player'});
+                          }}
+                        >
+                          i
+                        </InfoIcon>
                         <AssetName>{player.first_name} {player.last_name}</AssetName>
                         <AssetDetails>
                           {player.position_primary || 'N/A'} • {player.age || 'N/A'} yrs • {player.overall || 'N/A'} OVR
@@ -1800,8 +1789,13 @@ const AssetMovement = () => {
                     )}
                   </AssetGrid>
                   
-                  <AssetCategoryTitle>Draft Picks</AssetCategoryTitle>
-                  {renderDraftPicks(team1)}
+                  <SectionHeader onClick={() => setTeam1DraftPicksCollapsed(!team1DraftPicksCollapsed)}>
+                    <AssetCategoryTitle>
+                      Draft Picks
+                      <CollapseIcon>{team1DraftPicksCollapsed ? '▼' : '▲'}</CollapseIcon>
+                    </AssetCategoryTitle>
+                  </SectionHeader>
+                  {renderDraftPicks(team1, team1DraftPicksCollapsed)}
                 </AssetList>
               )}
             </AssetSection>
@@ -1872,12 +1866,16 @@ const AssetMovement = () => {
                       <AssetCard 
                         key={`player2-${player.id}`}
                         selected={isTeam2AssetSelected(player, 'player')}
-                        onClick={() => {
-                          // Show player card and add to selection
-                          handlePlayerClick({...player, assetType: 'player'});
-                          toggleTeam2Asset({...player, assetType: 'player'});
-                        }}
+                        onClick={() => toggleTeam2Asset({...player, assetType: 'player'})}
                       >
+                        <InfoIcon 
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent card click handler from firing
+                            handlePlayerClick({...player, assetType: 'player'});
+                          }}
+                        >
+                          i
+                        </InfoIcon>
                         <AssetName>{player.first_name} {player.last_name}</AssetName>
                         <AssetDetails>
                           {player.position_primary || 'N/A'} • {player.age || 'N/A'} yrs • {player.overall || 'N/A'} OVR
@@ -1891,8 +1889,13 @@ const AssetMovement = () => {
                     )}
                   </AssetGrid>
                   
-                  <AssetCategoryTitle>Draft Picks</AssetCategoryTitle>
-                  {renderDraftPicks(team2)}
+                  <SectionHeader onClick={() => setTeam2DraftPicksCollapsed(!team2DraftPicksCollapsed)}>
+                    <AssetCategoryTitle>
+                      Draft Picks
+                      <CollapseIcon>{team2DraftPicksCollapsed ? '▼' : '▲'}</CollapseIcon>
+                    </AssetCategoryTitle>
+                  </SectionHeader>
+                  {renderDraftPicks(team2, team2DraftPicksCollapsed)}
                 </AssetList>
               )}
             </AssetSection>

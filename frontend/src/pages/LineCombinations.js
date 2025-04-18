@@ -93,6 +93,7 @@ const TeamSelector = styled.div`
 const ContentArea = styled.div`
   max-width: 900px;
   margin: 0 auto;
+  padding-bottom: 50px; // Add more bottom padding
 `;
 
 const SectionTitle = styled.h2`
@@ -203,12 +204,6 @@ const EmptySlot = styled.div`
   max-width: 280px;
 `;
 
-const LoadingSpinner = styled.div`
-  text-align: center;
-  padding: 40px;
-  color: #C4CED4;
-`;
-
 const Badge = styled.div`
   position: absolute;
   top: -10px;
@@ -305,89 +300,6 @@ const InjuryPairGrid = styled.div`
   justify-content: center;
   gap: 15px;
   margin-bottom: 5px;
-`;
-
-// New components for the Team News view
-const NewsContainer = styled.div`
-  background-color: #1e2133;
-  border-radius: 6px;
-  margin-bottom: 30px;
-`;
-
-const NewsHeader = styled.h1`
-  color: white;
-  font-size: 2rem;
-  text-align: center;
-  padding: 20px;
-  margin: 0;
-  background-color: #162040;
-  border-bottom: 3px solid #B30E16;
-`;
-
-const NewsItem = styled.div`
-  padding: 20px;
-  border-bottom: 1px solid #333;
-  
-  &:last-child {
-    border-bottom: none;
-  }
-`;
-
-const NewsPlayerHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-`;
-
-const NewsPlayerName = styled.h3`
-  color: white;
-  font-size: 1.2rem;
-  margin: 0;
-  
-  span {
-    color: #B30E16;
-    font-weight: normal;
-    margin-left: 5px;
-  }
-`;
-
-const NewsBadge = styled.div`
-  background-color: ${props => props.type === 'injury' ? '#e74c3c' : 
-                              props.type === 'starter' ? '#4CAF50' : '#3498db'};
-  color: white;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-weight: bold;
-  margin-left: auto;
-`;
-
-const NewsContent = styled.p`
-  color: #C4CED4;
-  margin: 0 0 10px 0;
-  line-height: 1.4;
-`;
-
-const NewsSource = styled.div`
-  color: #999;
-  font-size: 0.8rem;
-  font-style: italic;
-`;
-
-const PlayerJersey = styled.div`
-  width: 100px;
-  height: 120px;
-  border-radius: 6px;
-  overflow: hidden;
-  margin-left: 15px;
-  background-color: #B30E16;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: white;
-  font-size: 2rem;
-  font-weight: bold;
 `;
 
 // New components for the Stats views
@@ -648,7 +560,7 @@ const OtherLinesContainer = styled.div`
   display: ${props => props.visible ? 'block' : 'none'};
 `;
 
-// Add back the PlayerCard styled component with a different name to avoid conflicts
+// Update PlayerCardItem to include chemistry badge
 const PlayerCardItem = styled.div`
   background-color: #1e1e1e;
   border-radius: 6px;
@@ -707,6 +619,45 @@ const PlayerOverall = styled.div`
   font-size: 0.9rem;
 `;
 
+// Add this styled component after PlayerOverall
+// const ChemistryBadge = styled.div`
+//   position: absolute;
+//   top: 10px;
+//   right: 10px;
+//   padding: 2px 6px;
+//   border-radius: 4px;
+//   font-weight: bold;
+//   font-size: 0.8rem;
+//   color: white;
+//   background-color: ${props => {
+//     if (props.value > 0) return '#4CAF50'; // Green for positive
+//     if (props.value < 0) return '#B30E16'; // Red for negative
+//     return '#F1C40F'; // Yellow for neutral
+//   }};
+// `;
+
+// Add a LineBadge styled component after ChemistryBadge
+const LineBadge = styled.div`
+  position: absolute;
+  right: -35px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+  color: white;
+  background-color: ${props => {
+    if (props.value > 0) return '#4CAF50'; // Green for positive
+    if (props.value < 0) return '#B30E16'; // Red for negative
+    return '#F1C40F'; // Yellow for neutral
+  }};
+`;
+
 // These functions don't depend on component state so can stay outside
 // Function to calculate weighted average for any array of players with weights
 const calculateWeightedOverall = (players, weights) => {
@@ -722,10 +673,11 @@ const calculateWeightedOverall = (players, weights) => {
   // Calculate weighted average
   let weightedSum = 0;
   players.forEach((player, index) => {
-    weightedSum += (player?.overall || 0) * normalizedWeights[index];
+    const overall = parseInt(player?.overall || 0);
+    weightedSum += (isNaN(overall) ? 0 : overall) * normalizedWeights[index];
   });
   
-  return Math.round(weightedSum);
+  return Math.round(weightedSum) || 0;
 };
 
 // Function to render section title with optional overall rating
@@ -736,6 +688,54 @@ const renderSectionTitleWithOverall = (title, overall = null) => {
       {overall !== null && <SectionOverall>{overall}</SectionOverall>}
     </SectionTitle>
   );
+};
+
+// Add a function to sort forwards respecting positions
+const sortForwardsByPosition = (forwards) => {
+  // First, separate forwards by their natural positions
+  const leftWingers = forwards.filter(p => p.position_primary === 'LW');
+  const centers = forwards.filter(p => p.position_primary === 'C');
+  const rightWingers = forwards.filter(p => p.position_primary === 'RW');
+  
+  // Sort each group by overall rating
+  leftWingers.sort((a, b) => (b.overall_rating || 0) - (a.overall_rating || 0));
+  centers.sort((a, b) => (b.overall_rating || 0) - (a.overall_rating || 0));
+  rightWingers.sort((a, b) => (b.overall_rating || 0) - (a.overall_rating || 0));
+  
+  // Prepare the output array of forwards
+  const sortedForwards = [];
+  
+  // Fill each line with the appropriate position players
+  for (let line = 0; line < 4; line++) {
+    // Add left winger if available
+    if (line < leftWingers.length) {
+      sortedForwards.push(leftWingers[line]);
+    }
+    
+    // Add center if available
+    if (line < centers.length) {
+      sortedForwards.push(centers[line]);
+    }
+    
+    // Add right winger if available
+    if (line < rightWingers.length) {
+      sortedForwards.push(rightWingers[line]);
+    }
+  }
+  
+  // If we didn't fill all 12 forward spots, add any remaining forwards
+  const remainingForwards = forwards.filter(p => 
+    !sortedForwards.includes(p) && 
+    ['LW', 'C', 'RW'].includes(p.position_primary)
+  );
+  
+  remainingForwards.sort((a, b) => (b.overall_rating || 0) - (a.overall_rating || 0));
+  
+  while (sortedForwards.length < 12 && remainingForwards.length > 0) {
+    sortedForwards.push(remainingForwards.shift());
+  }
+  
+  return sortedForwards;
 };
 
 const LineCombinations = () => {
@@ -763,6 +763,287 @@ const LineCombinations = () => {
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [showPlayerModal, setShowPlayerModal] = useState(false);
   const [showOtherLines, setShowOtherLines] = useState(false);
+
+  // Process line data from the API - now inside component with access to state
+  const processLineData = (formationData) => {
+    const { lines, chemistry } = formationData; // Remove unused team_ratings
+    
+    // Map API line data to our roster structure
+    const forwards = [];
+    const defensemen = [];
+    const goalies = [];
+    const benchedPlayers = [];
+    
+    // Process forward lines
+    if (lines.forward_lines) {
+      lines.forward_lines.forEach((line, lineIndex) => {
+        Object.entries(line).forEach(([position, player]) => {
+          if (player !== 'Empty') {
+            const mappedPlayer = {
+              ...player,
+              name: player.name || `${player.first_name} ${player.last_name}`,
+              position: position,
+              number: player.jersey,
+              overall: player.overall_rating,
+              player_type: player.player_type,
+              lineNumber: lineIndex + 1,
+              chemistry: 0, // Will be updated from chemistry data
+              attributes: {
+                skating: player.skating,
+                shooting: player.shooting,
+                hands: player.puck_skills,
+                checking: player.physical,
+                defense: player.defense
+              }
+            };
+            forwards.push(mappedPlayer);
+          }
+        });
+      });
+    }
+    
+    // Process defense pairs
+    if (lines.defense_pairs) {
+      lines.defense_pairs.forEach((pair, pairIndex) => {
+        Object.entries(pair).forEach(([position, player]) => {
+          if (player !== 'Empty') {
+            const mappedPlayer = {
+              ...player,
+              name: player.name || `${player.first_name} ${player.last_name}`,
+              position: position,
+              number: player.jersey,
+              overall: player.overall_rating,
+              player_type: player.player_type,
+              pairNumber: pairIndex + 1,
+              chemistry: 0, // Will be updated from chemistry data
+              attributes: {
+                skating: player.skating,
+                shooting: player.shooting,
+                hands: player.puck_skills,
+                checking: player.physical,
+                defense: player.defense
+              }
+            };
+            defensemen.push(mappedPlayer);
+          }
+        });
+      });
+    }
+    
+    // Process goalies
+    if (lines.goalies) {
+      lines.goalies.forEach((goalie, index) => {
+        if (goalie.G !== 'Empty') {
+          const player = goalie.G;
+          goalies.push({
+            ...player,
+            name: player.name || `${player.first_name} ${player.last_name}`,
+            position: 'G',
+            number: player.jersey,
+            overall: player.overall_rating,
+            isStarter: index === 0,
+            split: index === 0 ? 65 : 35,
+            player_type: player.player_type,
+            attributes: {
+              agility: player.agility,
+              positioning: player.positioning,
+              reflexes: player.reflexes,
+              puck_control: player.puck_control,
+              mental: player.mental
+            }
+          });
+        }
+      });
+    }
+    
+    // Process extra players (benched)
+    if (lines.extra) {
+      lines.extra.forEach(player => {
+        if (player) {
+          benchedPlayers.push({
+            ...player,
+            name: player.name || `${player.first_name} ${player.last_name}`,
+            position: player.position_primary,
+            number: player.jersey,
+            overall: player.overall_rating,
+            player_type: player.player_type
+          });
+        }
+      });
+    }
+    
+    // Process special teams
+    const powerPlay1 = [];
+    const powerPlay2 = [];
+    const penaltyKill1 = [];
+    const penaltyKill2 = [];
+    
+    if (lines.power_play_1) {
+      // Add forwards
+      lines.power_play_1.forwards.forEach(player => {
+        if (player !== 'Empty') {
+          powerPlay1.push({
+            ...player,
+            name: player.name || `${player.first_name} ${player.last_name}`,
+            position: player.position_primary,
+            number: player.jersey,
+            overall: player.overall_rating,
+            player_type: player.player_type
+          });
+        }
+      });
+      
+      // Add defense
+      lines.power_play_1.defense.forEach(player => {
+        if (player !== 'Empty') {
+          powerPlay1.push({
+            ...player,
+            name: player.name || `${player.first_name} ${player.last_name}`,
+            position: player.position_primary,
+            number: player.jersey,
+            overall: player.overall_rating,
+            player_type: player.player_type
+          });
+        }
+      });
+    }
+    
+    if (lines.power_play_2) {
+      // Add forwards
+      lines.power_play_2.forwards.forEach(player => {
+        if (player !== 'Empty') {
+          powerPlay2.push({
+            ...player,
+            name: player.name || `${player.first_name} ${player.last_name}`,
+            position: player.position_primary,
+            number: player.jersey,
+            overall: player.overall_rating,
+            player_type: player.player_type
+          });
+        }
+      });
+      
+      // Add defense
+      lines.power_play_2.defense.forEach(player => {
+        if (player !== 'Empty') {
+          powerPlay2.push({
+            ...player,
+            name: player.name || `${player.first_name} ${player.last_name}`,
+            position: player.position_primary,
+            number: player.jersey,
+            overall: player.overall_rating,
+            player_type: player.player_type
+          });
+        }
+      });
+    }
+    
+    if (lines.penalty_kill_1) {
+      // Add forwards
+      lines.penalty_kill_1.forwards.forEach(player => {
+        if (player !== 'Empty') {
+          penaltyKill1.push({
+            ...player,
+            name: player.name || `${player.first_name} ${player.last_name}`,
+            position: player.position_primary,
+            number: player.jersey,
+            overall: player.overall_rating,
+            player_type: player.player_type
+          });
+        }
+      });
+      
+      // Add defense
+      lines.penalty_kill_1.defense.forEach(player => {
+        if (player !== 'Empty') {
+          penaltyKill1.push({
+            ...player,
+            name: player.name || `${player.first_name} ${player.last_name}`,
+            position: player.position_primary,
+            number: player.jersey,
+            overall: player.overall_rating,
+            player_type: player.player_type
+          });
+        }
+      });
+    }
+    
+    if (lines.penalty_kill_2) {
+      // Add forwards
+      lines.penalty_kill_2.forwards.forEach(player => {
+        if (player !== 'Empty') {
+          penaltyKill2.push({
+            ...player,
+            name: player.name || `${player.first_name} ${player.last_name}`,
+            position: player.position_primary,
+            number: player.jersey,
+            overall: player.overall_rating,
+            player_type: player.player_type
+          });
+        }
+      });
+      
+      // Add defense
+      lines.penalty_kill_2.defense.forEach(player => {
+        if (player !== 'Empty') {
+          penaltyKill2.push({
+            ...player,
+            name: player.name || `${player.first_name} ${player.last_name}`,
+            position: player.position_primary,
+            number: player.jersey,
+            overall: player.overall_rating,
+            player_type: player.player_type
+          });
+        }
+      });
+    }
+    
+    // Apply chemistry data if available
+    if (chemistry) {
+      // Apply forward line chemistry
+      if (chemistry.forward_lines) {
+        chemistry.forward_lines.forEach(lineData => {
+          const lineChemistry = lineData.chemistry;
+          
+          // Apply to each player in the line
+          forwards.filter(p => p.lineNumber === lineData.line).forEach(player => {
+            player.chemistry = lineChemistry;
+          });
+        });
+      }
+      
+      // Apply defense pair chemistry
+      if (chemistry.defense_pairs) {
+        chemistry.defense_pairs.forEach(pairData => {
+          const pairChemistry = pairData.chemistry;
+          
+          // Apply to each player in the pair
+          defensemen.filter(p => p.pairNumber === pairData.pair).forEach(player => {
+            player.chemistry = pairChemistry;
+          });
+        });
+      }
+    }
+    
+    // Find injured players
+    const injured = [];
+    
+    // Set the complete roster
+    setRoster({
+      forwards,
+      defensemen,
+      goalies,
+      powerPlay1,
+      powerPlay2,
+      penaltyKill1,
+      penaltyKill2,
+      fourOnFour: forwards.slice(0, 2).concat(defensemen.slice(0, 2)),
+      threeOnThree: forwards.slice(0, 2).concat(defensemen.slice(0, 1)),
+      shootout: forwards.slice(0, 5),
+      injured,
+      benched: benchedPlayers
+    });
+  };
 
   // Effect to fetch teams when league changes
   useEffect(() => {
@@ -832,18 +1113,279 @@ const LineCombinations = () => {
     };
 
     fetchTeamInfo();
-  }, [teamId, league]);
+  }, [teamId, league, setSelectedTeam, setSelectedLeague]); // Remove teamInfo from dependencies
 
-  // Effect to set mock roster data
+  // Effect to fetch roster data
   useEffect(() => {
     const fetchRoster = async () => {
       setLoading(true);
       try {
-        // Always use mock data
-        setTimeout(() => {
-          setRoster(getMockRoster());
+        if (!selectedTeam || !teamInfo) {
           setLoading(false);
-        }, 500);
+          return;
+        }
+        
+        // Get the team abbreviation
+        const teamAbbr = teamInfo.abbreviation;
+        console.log('Fetching roster for team:', teamAbbr);
+        
+        // First approach - try to fetch from our optimized lines API
+        try {
+          // Fetch formation data from API
+          const formationResponse = await fetch(`/api/lines/formation/${teamAbbr}`);
+          if (formationResponse.ok) {
+            const formationData = await formationResponse.json();
+            console.log('Formation data:', formationData);
+            
+            if (formationData && formationData.lines) {
+              // Process the optimized lines from the backend
+              processLineData(formationData);
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (apiError) {
+          console.error('API fetch error, falling back to direct DB query:', apiError);
+        }
+        
+        // Fallback - fetch directly from Supabase if API fails
+        const { data: players, error } = await supabase
+          .from('Player')
+          .select('*')
+          .eq('team', teamAbbr);
+          
+        if (error) {
+          console.error('Supabase query error:', error);
+          throw error;
+        }
+        
+        if (!players || players.length === 0) {
+          console.log('No players found for team:', teamAbbr);
+          // Initialize empty roster
+          setRoster({
+            forwards: [],
+            defensemen: [],
+            goalies: [],
+            powerPlay1: [],
+            powerPlay2: [],
+            penaltyKill1: [],
+            penaltyKill2: [],
+            fourOnFour: [],
+            threeOnThree: [],
+            shootout: [],
+            injured: [],
+            benched: []
+          });
+          setLoading(false);
+          return;
+        }
+        
+        console.log('Players fetched:', players.length);
+        
+        // Organize players by position - handle both "G" and "Goalie" for goalies
+        const forwards = players.filter(p => ['LW', 'C', 'RW'].includes(p.position_primary));
+        const defensemen = players.filter(p => ['LD', 'RD'].includes(p.position_primary));
+        const goalies = players.filter(p => ['G', 'Goalie'].includes(p.position_primary));
+        const injured = players.filter(p => p.injury_status);
+        
+        console.log(`Found ${forwards.length} forwards, ${defensemen.length} defensemen, ${goalies.length} goalies`);
+        
+        // Sort by overall rating
+        const sortByRating = (a, b) => (b.overall_rating || 0) - (a.overall_rating || 0);
+        forwards.sort(sortByRating);
+        defensemen.sort(sortByRating);
+        goalies.sort(sortByRating);
+        
+        // Sort forwards respecting positions
+        const sortedForwards = sortForwardsByPosition(forwards);
+        
+        // Assign line numbers based on sorted position
+        sortedForwards.forEach((player, index) => {
+          const lineNumber = Math.floor(index / 3) + 1;
+          player.lineNumber = lineNumber <= 4 ? lineNumber : 4;
+        });
+        
+        defensemen.forEach((player, index) => {
+          const pairNumber = Math.floor(index / 2) + 1;
+          player.pairNumber = pairNumber <= 3 ? pairNumber : 3;
+        });
+        
+        // Create basic line combinations
+        const roster = {
+          forwards: sortedForwards.slice(0, 12).map(p => ({
+            ...p,
+            name: p.name || `${p.first_name} ${p.last_name}`,
+            position: p.position_primary,
+            number: p.jersey,
+            overall: p.overall_rating,
+            player_type: p.player_type,
+            chemistry: Math.floor(Math.random() * 11) - 5, // Mock chemistry from -5 to +5
+            attributes: {
+              skating: p.skating,
+              shooting: p.shooting,
+              hands: p.puck_skills,
+              checking: p.physical,
+              defense: p.defense
+            }
+          })),
+          defensemen: defensemen.slice(0, 6).map(p => ({
+            ...p,
+            name: p.name || `${p.first_name} ${p.last_name}`,
+            position: p.position_primary,
+            number: p.jersey,
+            overall: p.overall_rating,
+            player_type: p.player_type,
+            chemistry: Math.floor(Math.random() * 11) - 5, // Mock chemistry from -5 to +5
+            attributes: {
+              skating: p.skating,
+              shooting: p.shooting,
+              hands: p.puck_skills,
+              checking: p.physical,
+              defense: p.defense
+            }
+          })),
+          goalies: goalies.slice(0, 2).map((p, idx) => ({
+            ...p,
+            name: p.name || `${p.first_name} ${p.last_name}`,
+            position: 'G',
+            number: p.jersey,
+            overall: p.overall_rating,
+            isStarter: idx === 0,
+            split: idx === 0 ? 65 : 35,
+            player_type: p.player_type,
+            attributes: {
+              agility: p.agility,
+              positioning: p.positioning,
+              reflexes: p.reflexes,
+              puck_control: p.puck_control,
+              mental: p.mental
+            }
+          })),
+          powerPlay1: [],
+          powerPlay2: [],
+          penaltyKill1: [],
+          penaltyKill2: [],
+          fourOnFour: [],
+          threeOnThree: [],
+          shootout: [],
+          injured: injured.map(p => ({
+            ...p,
+            name: p.name || `${p.first_name} ${p.last_name}`,
+            position: p.position_primary,
+            number: p.jersey,
+            overall: p.overall_rating,
+            player_type: p.player_type,
+            injuryStatus: p.injury_status,
+            returnTime: p.return_timeline || 'Unknown'
+          })),
+          benched: []
+        };
+        
+        // Populate special teams based on player attributes
+        if (sortedForwards.length > 0) {
+          // Power play units with chemistry
+          roster.powerPlay1 = [...sortedForwards.slice(0, 3), ...defensemen.slice(0, 2)].filter(Boolean).map(p => ({
+            ...p,
+            name: p.name || `${p.first_name} ${p.last_name}`,
+            position: p.position_primary,
+            number: p.jersey,
+            overall: p.overall_rating,
+            player_type: p.player_type,
+            chemistry: Math.floor(Math.random() * 11) - 5 // Mock chemistry from -5 to +5
+          }));
+          
+          roster.powerPlay2 = [...sortedForwards.slice(3, 6), ...defensemen.slice(2, 4)].filter(Boolean).map(p => ({
+            ...p,
+            name: p.name || `${p.first_name} ${p.last_name}`,
+            position: p.position_primary,
+            number: p.jersey,
+            overall: p.overall_rating,
+            player_type: p.player_type,
+            chemistry: Math.floor(Math.random() * 11) - 5 // Mock chemistry from -5 to +5
+          }));
+          
+          // Penalty kill units with chemistry
+          roster.penaltyKill1 = [...sortedForwards.slice(0, 2), ...defensemen.slice(0, 2)].filter(Boolean).map(p => ({
+            ...p,
+            name: p.name || `${p.first_name} ${p.last_name}`,
+            position: p.position_primary,
+            number: p.jersey,
+            overall: p.overall_rating,
+            player_type: p.player_type,
+            chemistry: Math.floor(Math.random() * 11) - 5 // Mock chemistry from -5 to +5
+          }));
+          
+          roster.penaltyKill2 = [...sortedForwards.slice(2, 4), ...defensemen.slice(0, 2)].filter(Boolean).map(p => ({
+            ...p,
+            name: p.name || `${p.first_name} ${p.last_name}`,
+            position: p.position_primary,
+            number: p.jersey,
+            overall: p.overall_rating,
+            player_type: p.player_type,
+            chemistry: Math.floor(Math.random() * 11) - 5 // Mock chemistry from -5 to +5
+          }));
+          
+          // Other formations
+          roster.fourOnFour = [...sortedForwards.slice(0, 2), ...defensemen.slice(0, 2)].filter(Boolean).map(p => ({
+            ...p,
+            name: p.name || `${p.first_name} ${p.last_name}`,
+            position: p.position_primary,
+            number: p.jersey,
+            overall: p.overall_rating,
+            player_type: p.player_type
+          }));
+          
+          roster.threeOnThree = [...sortedForwards.slice(0, 2), ...defensemen.slice(0, 1)].filter(Boolean).map(p => ({
+            ...p,
+            name: p.name || `${p.first_name} ${p.last_name}`,
+            position: p.position_primary,
+            number: p.jersey,
+            overall: p.overall_rating,
+            player_type: p.player_type
+          }));
+          
+          roster.shootout = sortedForwards.slice(0, 5).filter(Boolean).map(p => ({
+            ...p,
+            name: p.name || `${p.first_name} ${p.last_name}`,
+            position: p.position_primary,
+            number: p.jersey,
+            overall: p.overall_rating,
+            player_type: p.player_type
+          }));
+        }
+        
+        // Find benched players (players not in the active lineup)
+        const activePlayerIds = new Set([
+          ...roster.forwards.map(p => p.id),
+          ...roster.defensemen.map(p => p.id),
+          ...roster.goalies.map(p => p.id),
+          ...injured.map(p => p.id)
+        ]);
+        
+        // Add extra forwards and defensemen to benched
+        const benchedSkaters = players.filter(p => 
+          !activePlayerIds.has(p.id) && 
+          !p.injury_status &&
+          !['G', 'Goalie'].includes(p.position_primary)
+        );
+        
+        // Add extra goalies (3rd string and beyond) to benched
+        const benchedGoalies = goalies.slice(2).filter(p => !p.injury_status);
+        
+        // Combine all benched players
+        roster.benched = [...benchedSkaters, ...benchedGoalies].map(p => ({
+          ...p,
+          name: p.name || `${p.first_name} ${p.last_name}`,
+          position: p.position_primary,
+          number: p.jersey,
+          overall: p.overall_rating,
+          player_type: p.player_type
+        }));
+        
+        // Update roster state
+        console.log('Setting roster from database with data:', roster);
+        setRoster(roster);
+        setLoading(false);
       } catch (error) {
         console.error('Error fetching roster:', error);
         setLoading(false);
@@ -851,7 +1393,7 @@ const LineCombinations = () => {
     };
 
     fetchRoster();
-  }, [selectedTeam]); // Update roster when team changes
+  }, [selectedTeam, teamInfo]); // Update roster when team changes
 
   const handleLeagueChange = (e) => {
     setSelectedLeague(e.target.value);
@@ -895,119 +1437,6 @@ const LineCombinations = () => {
     ];
   };
 
-  const getMockRoster = () => {
-    return {
-      forwards: [
-        { id: 1, name: 'Seth Jarvis', position: 'LW', number: 24, overall: 86, player_type: 'Playmaker',
-          attributes: { skating: 87, shooting: 84, hands: 88, checking: 81, defense: 82 } },
-        { id: 2, name: 'Sebastian Aho', position: 'C', number: 20, overall: 91, player_type: 'Sniper',
-          attributes: { skating: 90, shooting: 92, hands: 91, checking: 85, defense: 87 } },
-        { id: 3, name: 'Jackson Blake', position: 'RW', number: 53, overall: 83, player_type: '2 Way',
-          attributes: { skating: 82, shooting: 81, hands: 83, checking: 84, defense: 85 } },
-        { id: 4, name: 'Eric Robinson', position: 'LW', number: 50, overall: 79, player_type: 'Power Forward',
-          attributes: { skating: 80, shooting: 78, hands: 76, checking: 84, defense: 77 } },
-        { id: 5, name: 'Jack Roslovic', position: 'C', number: 98, overall: 82, player_type: 'Playmaker',
-          attributes: { skating: 84, shooting: 81, hands: 85, checking: 78, defense: 80 } },
-        { id: 6, name: 'Taylor Hall', position: 'RW', number: 71, overall: 85, player_type: 'Sniper',
-          attributes: { skating: 87, shooting: 88, hands: 86, checking: 80, defense: 79 } },
-        { id: 7, name: 'Jordan Martinook', position: 'LW', number: 48, overall: 81, player_type: '2 Way',
-          attributes: { skating: 81, shooting: 79, hands: 80, checking: 84, defense: 83 } },
-        { id: 8, name: 'Jesperi Kotkaniemi', position: 'C', number: 82, overall: 80, player_type: 'Power Forward',
-          attributes: { skating: 79, shooting: 80, hands: 81, checking: 82, defense: 78 } },
-        { id: 9, name: 'Logan Stankoven', position: 'RW', number: 22, overall: 84, player_type: 'Sniper',
-          attributes: { skating: 85, shooting: 87, hands: 85, checking: 79, defense: 80 } },
-        { id: 10, name: 'Tyson Jost', position: 'LW', number: 27, overall: 78, player_type: '2 Way',
-          attributes: { skating: 80, shooting: 77, hands: 78, checking: 79, defense: 80 } },
-        { id: 11, name: 'Mark Jankowski', position: 'C', number: 77, overall: 77, player_type: 'Power Forward',
-          attributes: { skating: 77, shooting: 76, hands: 75, checking: 80, defense: 78 } },
-        { id: 12, name: 'Justin Robidas', position: 'RW', number: 39, overall: 75, player_type: 'Playmaker',
-          attributes: { skating: 78, shooting: 74, hands: 77, checking: 73, defense: 74 } },
-      ],
-      defensemen: [
-        { id: 13, name: 'Jaccob Slavin', position: 'LD', number: 74, overall: 89, player_type: 'Defensive Def.',
-          attributes: { skating: 85, shooting: 83, hands: 84, checking: 90, defense: 92 } },
-        { id: 14, name: 'Brent Burns', position: 'RD', number: 8, overall: 86, player_type: 'Offensive Def.',
-          attributes: { skating: 82, shooting: 89, hands: 88, checking: 86, defense: 85 } },
-        { id: 15, name: 'Sean Walker', position: 'LD', number: 26, overall: 82, player_type: '2 Way Def.',
-          attributes: { skating: 83, shooting: 81, hands: 82, checking: 83, defense: 84 } },
-        { id: 16, name: 'Jalen Chatfield', position: 'RD', number: 5, overall: 80, player_type: 'Defensive Def.',
-          attributes: { skating: 80, shooting: 76, hands: 77, checking: 84, defense: 85 } },
-        { id: 17, name: 'Shayne Gostisbehere', position: 'LD', number: 4, overall: 84, player_type: 'Offensive Def.',
-          attributes: { skating: 86, shooting: 87, hands: 88, checking: 78, defense: 80 } },
-        { id: 18, name: 'Scott Morrow', position: 'RD', number: 56, overall: 79, player_type: '2 Way Def.',
-          attributes: { skating: 81, shooting: 78, hands: 79, checking: 80, defense: 81 } },
-      ],
-      goalies: [
-        { id: 19, name: 'Frederik Andersen', position: 'G', number: 31, overall: 88, isStarter: true, split: 65, player_type: 'Athletic',
-          attributes: { agility: 88, positioning: 89, reflexes: 87, puck_control: 86, mental: 85 } },
-        { id: 20, name: 'Pyotr Kochetkov', position: 'G', number: 52, overall: 83, isStarter: false, split: 35, player_type: 'Blocker',
-          attributes: { agility: 83, positioning: 82, reflexes: 85, puck_control: 80, mental: 82 } },
-      ],
-      powerPlay1: [
-        { id: 2, name: 'Sebastian Aho', position: 'C', number: 20, overall: 91, player_type: 'Sniper' },
-        { id: 1, name: 'Seth Jarvis', position: 'LW', number: 24, overall: 86, player_type: 'Playmaker' },
-        { id: 3, name: 'Jackson Blake', position: 'RW', number: 53, overall: 83, player_type: '2 Way' },
-        { id: 6, name: 'Taylor Hall', position: 'RW', number: 71, overall: 85, player_type: 'Sniper' },
-        { id: 17, name: 'Shayne Gostisbehere', position: 'LD', number: 4, overall: 84, player_type: 'Offensive Def.' },
-      ],
-      powerPlay2: [
-        { id: 9, name: 'Logan Stankoven', position: 'RW', number: 22, overall: 84, player_type: 'Sniper' },
-        { id: 8, name: 'Jesperi Kotkaniemi', position: 'C', number: 82, overall: 80, player_type: 'Power Forward' },
-        { id: 5, name: 'Jack Roslovic', position: 'C', number: 98, overall: 82, player_type: 'Playmaker' },
-        { id: 14, name: 'Brent Burns', position: 'RD', number: 8, overall: 86, player_type: 'Offensive Def.' },
-        { id: 15, name: 'Sean Walker', position: 'LD', number: 26, overall: 82, player_type: '2 Way Def.' },
-      ],
-      penaltyKill1: [
-        { id: 2, name: 'Sebastian Aho', position: 'C', number: 20, overall: 91, player_type: 'Sniper' },
-        { id: 1, name: 'Seth Jarvis', position: 'LW', number: 24, overall: 86, player_type: 'Playmaker' },
-        { id: 13, name: 'Jaccob Slavin', position: 'LD', number: 74, overall: 89, player_type: 'Defensive Def.' },
-        { id: 14, name: 'Brent Burns', position: 'RD', number: 8, overall: 86, player_type: 'Offensive Def.' },
-      ],
-      penaltyKill2: [
-        { id: 4, name: 'Eric Robinson', position: 'LW', number: 50, overall: 79, player_type: 'Power Forward' },
-        { id: 10, name: 'Tyson Jost', position: 'LW', number: 27, overall: 78, player_type: '2 Way' },
-        { id: 15, name: 'Sean Walker', position: 'LD', number: 26, overall: 82, player_type: '2 Way Def.' },
-        { id: 18, name: 'Scott Morrow', position: 'RD', number: 56, overall: 79, player_type: '2 Way Def.' },
-      ],
-      // Add new formations for other lines
-      fourOnFour: [
-        { id: 2, name: 'Sebastian Aho', position: 'C', number: 20, overall: 91, player_type: 'Sniper' },
-        { id: 6, name: 'Taylor Hall', position: 'RW', number: 71, overall: 85, player_type: 'Sniper' },
-        { id: 13, name: 'Jaccob Slavin', position: 'LD', number: 74, overall: 89, player_type: 'Defensive Def.' },
-        { id: 14, name: 'Brent Burns', position: 'RD', number: 8, overall: 86, player_type: 'Offensive Def.' },
-      ],
-      threeOnThree: [
-        { id: 2, name: 'Sebastian Aho', position: 'C', number: 20, overall: 91, player_type: 'Sniper' },
-        { id: 1, name: 'Seth Jarvis', position: 'LW', number: 24, overall: 86, player_type: 'Playmaker' },
-        { id: 17, name: 'Shayne Gostisbehere', position: 'LD', number: 4, overall: 84, player_type: 'Offensive Def.' },
-      ],
-      shootout: [
-        { id: 2, name: 'Sebastian Aho', position: 'C', number: 20, overall: 91, player_type: 'Sniper' },
-        { id: 9, name: 'Logan Stankoven', position: 'RW', number: 22, overall: 84, player_type: 'Sniper' },
-        { id: 1, name: 'Seth Jarvis', position: 'LW', number: 24, overall: 86, player_type: 'Playmaker' },
-        { id: 6, name: 'Taylor Hall', position: 'RW', number: 71, overall: 85, player_type: 'Sniper' },
-        { id: 5, name: 'Jack Roslovic', position: 'C', number: 98, overall: 82, player_type: 'Playmaker' },
-      ],
-      injured: [
-        { id: 21, name: 'Jesper Fast', position: 'RW', number: 71, overall: 81, injuryStatus: 'IR', returnTime: '6-8 Weeks', player_type: '2 Way',
-          attributes: { skating: 80, shooting: 79, hands: 81, checking: 83, defense: 82 } },
-        { id: 24, name: 'William Carrier', position: 'LW', number: 28, overall: 79, injuryStatus: 'OUT', returnTime: '3 Weeks', player_type: 'Power Forward',
-          attributes: { skating: 81, shooting: 77, hands: 76, checking: 85, defense: 78 } },
-        { id: 25, name: 'Jordan Staal', position: 'C', number: 11, overall: 83, injuryStatus: 'DTD', returnTime: '2-3 Days', player_type: '2 Way',
-          attributes: { skating: 79, shooting: 80, hands: 82, checking: 88, defense: 87 } },
-        { id: 26, name: 'Andrei Svechnikov', position: 'RW', number: 37, overall: 88, injuryStatus: 'DTD', returnTime: '1 Week', player_type: 'Sniper',
-          attributes: { skating: 89, shooting: 90, hands: 88, checking: 84, defense: 83 } },
-      ],
-      benched: [
-        { id: 22, name: 'Martin Necas', position: 'C', number: 88, overall: 87, player_type: 'Playmaker',
-          attributes: { skating: 89, shooting: 86, hands: 88, checking: 81, defense: 83 } },
-        { id: 23, name: 'Jack Drury', position: 'C', number: 18, overall: 76, player_type: '2 Way',
-          attributes: { skating: 76, shooting: 75, hands: 77, checking: 78, defense: 79 } },
-      ]
-    };
-  };
-
-  // Move the renderPlayer function inside the component
   const renderPlayer = (player, showBadge = false) => {
     if (!player) {
       return <EmptySlot>Empty Slot</EmptySlot>;
@@ -1036,21 +1465,49 @@ const LineCombinations = () => {
     const forwardWeights = [0.33, 0.33, 0.33, 0.26, 0.26, 0.26, 0.22, 0.22, 0.22, 0.19, 0.19, 0.19];
     const forwardOverall = calculateWeightedOverall(forwards, forwardWeights);
     
+    // Generate random chemistry per line - this would be replaced with real data
+    const lineChemistry = [
+      Math.floor(Math.random() * 11) - 5, // Line 1
+      Math.floor(Math.random() * 11) - 5, // Line 2
+      Math.floor(Math.random() * 11) - 5, // Line 3
+      Math.floor(Math.random() * 11) - 5  // Line 4
+    ];
+    
     return (
       <>
         {renderSectionTitleWithOverall('Forwards', forwardOverall)}
+        <div style={{ position: 'relative' }}>
         <LineGrid>
           {forwards.slice(0, 3).map(renderPlayer)}
         </LineGrid>
+          {forwards.slice(0, 3).length > 0 && (
+            <LineBadge value={lineChemistry[0]}>{lineChemistry[0] > 0 ? '+' : ''}{lineChemistry[0]}</LineBadge>
+          )}
+        </div>
+        <div style={{ position: 'relative' }}>
         <LineGrid>
           {forwards.slice(3, 6).map(renderPlayer)}
         </LineGrid>
+          {forwards.slice(3, 6).length > 0 && (
+            <LineBadge value={lineChemistry[1]}>{lineChemistry[1] > 0 ? '+' : ''}{lineChemistry[1]}</LineBadge>
+          )}
+        </div>
+        <div style={{ position: 'relative' }}>
         <LineGrid>
           {forwards.slice(6, 9).map(renderPlayer)}
         </LineGrid>
+          {forwards.slice(6, 9).length > 0 && (
+            <LineBadge value={lineChemistry[2]}>{lineChemistry[2] > 0 ? '+' : ''}{lineChemistry[2]}</LineBadge>
+          )}
+        </div>
+        <div style={{ position: 'relative' }}>
         <LineGrid>
           {forwards.slice(9, 12).map(renderPlayer)}
         </LineGrid>
+          {forwards.slice(9, 12).length > 0 && (
+            <LineBadge value={lineChemistry[3]}>{lineChemistry[3] > 0 ? '+' : ''}{lineChemistry[3]}</LineBadge>
+          )}
+        </div>
       </>
     );
   };
@@ -1063,21 +1520,40 @@ const LineCombinations = () => {
     const defenseWeights = [0.42, 0.42, 0.34, 0.34, 0.24, 0.24];
     const defenseOverall = calculateWeightedOverall(defensemen, defenseWeights);
     
+    // Generate random chemistry per pair - this would be replaced with real data
+    const pairChemistry = [
+      Math.floor(Math.random() * 11) - 5, // Pair 1
+      Math.floor(Math.random() * 11) - 5, // Pair 2
+      Math.floor(Math.random() * 11) - 5  // Pair 3
+    ];
+    
     return (
       <>
         {renderSectionTitleWithOverall('Defense Pairs', defenseOverall)}
+        <div style={{ position: 'relative' }}>
         <DefensePairGrid>
-          {defensemen.slice(0, 1).map(renderPlayer)}
-          {defensemen.slice(1, 2).map(renderPlayer)}
+            {defensemen.slice(0, 2).map(renderPlayer)}
         </DefensePairGrid>
+          {defensemen.slice(0, 2).length > 0 && (
+            <LineBadge value={pairChemistry[0]}>{pairChemistry[0] > 0 ? '+' : ''}{pairChemistry[0]}</LineBadge>
+          )}
+        </div>
+        <div style={{ position: 'relative' }}>
         <DefensePairGrid>
-          {defensemen.slice(2, 3).map(renderPlayer)}
-          {defensemen.slice(3, 4).map(renderPlayer)}
+            {defensemen.slice(2, 4).map(renderPlayer)}
         </DefensePairGrid>
+          {defensemen.slice(2, 4).length > 0 && (
+            <LineBadge value={pairChemistry[1]}>{pairChemistry[1] > 0 ? '+' : ''}{pairChemistry[1]}</LineBadge>
+          )}
+        </div>
+        <div style={{ position: 'relative' }}>
         <DefensePairGrid>
-          {defensemen.slice(4, 5).map(renderPlayer)}
-          {defensemen.slice(5, 6).map(renderPlayer)}
+            {defensemen.slice(4, 6).map(renderPlayer)}
         </DefensePairGrid>
+          {defensemen.slice(4, 6).length > 0 && (
+            <LineBadge value={pairChemistry[2]}>{pairChemistry[2] > 0 ? '+' : ''}{pairChemistry[2]}</LineBadge>
+          )}
+        </div>
       </>
     );
   };
@@ -1127,23 +1603,37 @@ const LineCombinations = () => {
     const pp2Weights = Array(powerPlay2.length).fill(1/powerPlay2.length);
     const pp2Overall = calculateWeightedOverall(powerPlay2, pp2Weights);
     
+    // Generate random chemistry for the units
+    const pp1Chemistry = Math.floor(Math.random() * 11) - 5;
+    const pp2Chemistry = Math.floor(Math.random() * 11) - 5;
+    
     return (
       <>
         {renderSectionTitleWithOverall('1st Powerplay Unit', pp1Overall)}
+        <div style={{ position: 'relative' }}>
         <SpecialTeamsGrid>
           {powerPlay1.slice(0, 3).map(renderPlayer)}
         </SpecialTeamsGrid>
         <SpecialTeamsGrid className="center-row">
           {powerPlay1.slice(3, 5).map(renderPlayer)}
         </SpecialTeamsGrid>
+          {powerPlay1.length > 0 && (
+            <LineBadge value={pp1Chemistry}>{pp1Chemistry > 0 ? '+' : ''}{pp1Chemistry}</LineBadge>
+          )}
+        </div>
         
         {renderSectionTitleWithOverall('2nd Powerplay Unit', pp2Overall)}
+        <div style={{ position: 'relative' }}>
         <SpecialTeamsGrid>
           {powerPlay2.slice(0, 3).map(renderPlayer)}
         </SpecialTeamsGrid>
         <SpecialTeamsGrid className="center-row">
           {powerPlay2.slice(3, 5).map(renderPlayer)}
         </SpecialTeamsGrid>
+          {powerPlay2.length > 0 && (
+            <LineBadge value={pp2Chemistry}>{pp2Chemistry > 0 ? '+' : ''}{pp2Chemistry}</LineBadge>
+          )}
+        </div>
       </>
     );
   };
@@ -1158,23 +1648,37 @@ const LineCombinations = () => {
     const pk2Weights = Array(penaltyKill2.length).fill(1/penaltyKill2.length);
     const pk2Overall = calculateWeightedOverall(penaltyKill2, pk2Weights);
     
+    // Generate random chemistry for the units
+    const pk1Chemistry = Math.floor(Math.random() * 11) - 5;
+    const pk2Chemistry = Math.floor(Math.random() * 11) - 5;
+    
     return (
       <>
         {renderSectionTitleWithOverall('1st Penalty Kill Unit', pk1Overall)}
+        <div style={{ position: 'relative' }}>
         <SpecialTeamsGrid>
           {penaltyKill1.slice(0, 2).map(renderPlayer)}
         </SpecialTeamsGrid>
         <SpecialTeamsGrid className="center-row">
           {penaltyKill1.slice(2, 4).map(renderPlayer)}
         </SpecialTeamsGrid>
+          {penaltyKill1.length > 0 && (
+            <LineBadge value={pk1Chemistry}>{pk1Chemistry > 0 ? '+' : ''}{pk1Chemistry}</LineBadge>
+          )}
+        </div>
         
         {renderSectionTitleWithOverall('2nd Penalty Kill Unit', pk2Overall)}
+        <div style={{ position: 'relative' }}>
         <SpecialTeamsGrid>
           {penaltyKill2.slice(0, 2).map(renderPlayer)}
         </SpecialTeamsGrid>
         <SpecialTeamsGrid className="center-row">
           {penaltyKill2.slice(2, 4).map(renderPlayer)}
         </SpecialTeamsGrid>
+          {penaltyKill2.length > 0 && (
+            <LineBadge value={pk2Chemistry}>{pk2Chemistry > 0 ? '+' : ''}{pk2Chemistry}</LineBadge>
+          )}
+        </div>
       </>
     );
   };
@@ -1255,12 +1759,28 @@ const LineCombinations = () => {
     const { benched } = roster;
     if (benched.length === 0) return null;
     
+    // Create groups of benched players (3 per row)
+    const createGroups = (players, groupSize = 3) => {
+      const groups = [];
+      for (let i = 0; i < players.length; i += groupSize) {
+        groups.push(players.slice(i, i + groupSize));
+      }
+      return groups;
+    };
+    
+    const benchedGroups = createGroups(benched);
+    
     return (
       <>
         <SectionTitle>Benched</SectionTitle>
-        <LineGrid>
-          {benched.map(renderPlayer)}
+        {benchedGroups.map((group, index) => (
+          <LineGrid key={index}>
+            {group.map(renderPlayer)}
+            {/* Fill any empty slots in the last row */}
+            {index === benchedGroups.length - 1 && 
+              Array(3 - group.length).fill().map((_, i) => <EmptySlot key={`empty-${i}`}>Empty Slot</EmptySlot>)}
         </LineGrid>
+        ))}
       </>
     );
   };
@@ -1289,59 +1809,6 @@ const LineCombinations = () => {
           <LegendText>Game-time Decision</LegendText>
         </LegendItem>
       </BadgesLegend>
-    );
-  };
-
-  const renderTeamNews = () => {
-    return (
-      <NewsContainer>
-        <NewsHeader>Carolina Hurricanes News</NewsHeader>
-        
-        <NewsItem>
-          <NewsPlayerHeader>
-            <NewsPlayerName>
-              Pyotr Kochetkov <span>(Goalie)</span>
-            </NewsPlayerName>
-            <NewsBadge type="starter">Goalie Start</NewsBadge>
-            <PlayerJersey>52</PlayerJersey>
-          </NewsPlayerHeader>
-          <NewsContent>Kochetkov is in the starter's crease at Carolina's morning skate.</NewsContent>
-          <NewsContent>
-            The Hurricanes have won three straight and will likely have Kochetkov tending the twine on Friday against the Detroit Red Wings. Kochetkov struggled in his most recent outing, allowing four goals on 31 shots (.871 SV%), but received ample goal support in a 6-4 win over the New York Islanders. The 25-year-old goalie has an ugly 4.75 GAA and .806 SV% in his last three games (1-2-0). Still, the Hurricanes enter Friday's contest as -186 road favorites against a Red Wings team desperately trying to stay within reach of the final Wild Card spot in the Eastern Conference.
-          </NewsContent>
-          <NewsSource>Source: Walt Ruff Apr 4, 2025 @ 11:49 EDT</NewsSource>
-        </NewsItem>
-        
-        <NewsItem>
-          <NewsPlayerHeader>
-            <NewsPlayerName>
-              Justin Robidas <span>(Center)</span>
-            </NewsPlayerName>
-            <NewsBadge type="callup">Call Up</NewsBadge>
-            <PlayerJersey>39</PlayerJersey>
-          </NewsPlayerHeader>
-          <NewsContent>Robidas has been recalled from Chicago (AHL).</NewsContent>
-          <NewsContent>
-            Robidas was a fifth-round pick, 147th overall, of the Hurricanes in the 2021 NHL Entry Draft. The 22-year-old forward has yet to play an NHL game. He has 48 points (17G / 31A) in 65 games with the Chicago Wolves (AHL) this season.
-          </NewsContent>
-          <NewsSource>Source: Carolina Hurricanes Apr 3, 2025 @ 17:29 EDT</NewsSource>
-        </NewsItem>
-        
-        <NewsItem>
-          <NewsPlayerHeader>
-            <NewsPlayerName>
-              Andrei Svechnikov <span>(Right Wing)</span>
-            </NewsPlayerName>
-            <NewsBadge type="injury">Injury</NewsBadge>
-            <PlayerJersey>37</PlayerJersey>
-          </NewsPlayerHeader>
-          <NewsContent>Svechnikov left Wednesday's game with an undisclosed injury and did not return.</NewsContent>
-          <NewsContent>
-            Svechnikov did not play in the third period of Wednesday's win over the Capitals, but head coach Rod Brind'Amour said he doesn't think it's too serious. The Hurricanes are off on Thursday, so there likely won't be an update on Svechnikov's status until Friday.
-          </NewsContent>
-          <NewsSource>Source: Walt Ruff Apr 2, 2025 @ 22:38 EDT</NewsSource>
-        </NewsItem>
-      </NewsContainer>
     );
   };
 
@@ -2302,6 +2769,35 @@ const LineCombinations = () => {
     );
   };
 
+  // Add a new styled component for section spacing and separation
+  const SectionSeparator = styled.div`
+    height: 40px;
+    width: 100%;
+    margin: 20px 0;
+    border-top: 1px solid #333;
+  `;
+
+  const SpecialTeamsDivider = styled.div`
+    height: 60px;
+    width: 100%;
+    margin: 30px 0 20px;
+    border-top: 1px solid #444;
+    position: relative;
+    
+    &::after {
+      content: 'SPECIAL TEAMS';
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #111;
+      padding: 0 20px;
+      color: #888;
+      font-size: 0.85rem;
+      letter-spacing: 2px;
+    }
+  `;
+
   return (
     <Container>
       <Header>
@@ -2378,9 +2874,15 @@ const LineCombinations = () => {
           {activeWidget === 'lines' && (
             <>
               {renderForwardLines()}
+              <SectionSeparator />
               {renderDefensePairs()}
+              <SectionSeparator />
               {renderGoalies()}
+              
+              <SpecialTeamsDivider />
+              
               {renderPowerPlay()}
+              <SectionSeparator />
               {renderPenaltyKill()}
               <OtherLinesButton onClick={() => setShowOtherLines(!showOtherLines)}>
                 {showOtherLines ? 'Hide Other Lines' : 'Show Other Lines'}
@@ -2397,6 +2899,7 @@ const LineCombinations = () => {
       )}
 
       {renderPlayerModal()}
+      {renderBadgesLegend()}
     </Container>
   );
 };

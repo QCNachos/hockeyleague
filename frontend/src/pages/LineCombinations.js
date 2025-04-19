@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import styled from 'styled-components';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import PlayerCard from '../components/PlayerCard';
+import { Select, Tag, Radio, Menu, Dropdown, Button, Tabs, Slider, Switch, Row, Col, Modal, Spin, Alert, message, Tooltip } from 'antd';
 
 // Styled components
 const Container = styled.div`
@@ -19,6 +19,7 @@ const Header = styled.div`
 const TeamHeader = styled.div`
   display: flex;
   align-items: center;
+  padding: 0 20px;
   gap: 15px;
   margin-bottom: 20px;
   padding: 20px;
@@ -27,32 +28,64 @@ const TeamHeader = styled.div`
   border: 1px solid #333;
 `;
 
-const TeamLogo = styled.div`
-  width: 60px;
-  height: 60px;
-  background-color: #333;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: #fff;
-`;
-
 const TeamInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  margin-left: 15px;
   flex: 1;
 `;
 
-const TeamName = styled.h1`
-  color: #C4CED4;
+const TeamName = styled.h2`
   margin: 0;
-  font-size: 2rem;
+  color: #fff;
+  font-size: 1.4rem;
+  display: flex;
+  align-items: center;
 `;
 
-const LeagueInfo = styled.div`
-  color: #888;
-  font-size: 1.1rem;
+const LeagueInfo = styled.span`
+  color: #ccc;
+  font-size: 0.9rem;
+`;
+
+const TeamLogo = styled.div`
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: #333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 1.5rem;
+`;
+
+// Add these new styled components
+const TeamOverall = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 1.6rem;
+  margin-left: 15px;
+`;
+
+const EditLinesButton = styled.button`
+  margin-left: auto;
+  padding: 8px 16px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  
+  &:hover {
+    background-color: #3e8e41;
+  }
 `;
 
 const NavWidgets = styled.div`
@@ -93,7 +126,6 @@ const TeamSelector = styled.div`
 const ContentArea = styled.div`
   max-width: 900px;
   margin: 0 auto;
-  padding-bottom: 50px; // Add more bottom padding
 `;
 
 const SectionTitle = styled.h2`
@@ -263,7 +295,7 @@ const LegendText = styled.span`
   color: #C4CED4;
 `;
 
-const Select = styled.select`
+const StyledSelect = styled.select`
   background-color: #1e1e1e;
   color: #fff;
   padding: 8px 12px;
@@ -557,7 +589,7 @@ const OtherLinesContainer = styled.div`
   border: 1px solid #333;
   padding: 15px;
   background-color: rgba(26, 48, 66, 0.2);
-  display: ${props => props.visible ? 'block' : 'none'};
+  display: ${props => props.$isVisible ? 'block' : 'none'};
 `;
 
 // Update PlayerCardItem to include chemistry badge
@@ -620,21 +652,21 @@ const PlayerOverall = styled.div`
 `;
 
 // Add this styled component after PlayerOverall
-// const ChemistryBadge = styled.div`
-//   position: absolute;
-//   top: 10px;
-//   right: 10px;
-//   padding: 2px 6px;
-//   border-radius: 4px;
-//   font-weight: bold;
-//   font-size: 0.8rem;
-//   color: white;
-//   background-color: ${props => {
-//     if (props.value > 0) return '#4CAF50'; // Green for positive
-//     if (props.value < 0) return '#B30E16'; // Red for negative
-//     return '#F1C40F'; // Yellow for neutral
-//   }};
-// `;
+const ChemistryBadge = styled.div`
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 0.8rem;
+  color: white;
+  background-color: ${props => {
+    if (props.value > 0) return '#4CAF50'; // Green for positive
+    if (props.value < 0) return '#B30E16'; // Red for negative
+    return '#F1C40F'; // Yellow for neutral
+  }};
+`;
 
 // Add a LineBadge styled component after ChemistryBadge
 const LineBadge = styled.div`
@@ -763,12 +795,58 @@ const LineCombinations = () => {
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [showPlayerModal, setShowPlayerModal] = useState(false);
   const [showOtherLines, setShowOtherLines] = useState(false);
+  const [teamRatings, setTeamRatings] = useState({
+    overall: 0,
+    offense: 0,
+    defense: 0,
+    special_teams: 0,
+    goaltending: 0,
+    component_ratings: {
+      line_1: 0,
+      line_2: 0,
+      line_3: 0,
+      line_4: 0,
+      pair_1: 0,
+      pair_2: 0,
+      pair_3: 0,
+      power_play_1: 0,
+      power_play_2: 0,
+      penalty_kill_1: 0,
+      penalty_kill_2: 0
+    }
+  });
+  const [chemistryData, setChemistryData] = useState(null);
+
+  // Add a ref to track if we've fetched the team ratings
+  const hasLoadedTeamRatings = useRef(false);
 
   // Process line data from the API - now inside component with access to state
   const processLineData = (formationData) => {
-    const { lines, chemistry } = formationData; // Remove unused team_ratings
+    // Only proceed if we have valid data
+    if (!formationData || !formationData.lines) {
+      return;
+    }
     
-    // Map API line data to our roster structure
+    const { lines, chemistry, team_rating } = formationData;
+    
+    console.log('Team rating data:', team_rating);
+    console.log('Team overall rating:', team_rating?.overall);
+
+    // Set team ratings in state
+    if (team_rating) {
+      setTeamRatings(team_rating);
+      console.log('Setting team ratings:', team_rating);
+
+      // Update team overall in the Supabase database if we have a selected team
+      if (selectedTeam && team_rating.overall) {
+        updateTeamOverallInDatabase(selectedTeam, Math.round(team_rating.overall));
+      }
+    }
+    
+    // Set chemistry data for use in the UI
+    setChemistryData(chemistry);
+    
+    // Extract forward lines
     const forwards = [];
     const defensemen = [];
     const goalies = [];
@@ -1003,6 +1081,7 @@ const LineCombinations = () => {
       // Apply forward line chemistry
       if (chemistry.forward_lines) {
         chemistry.forward_lines.forEach(lineData => {
+          const lineIndex = lineData.line - 1;
           const lineChemistry = lineData.chemistry;
           
           // Apply to each player in the line
@@ -1015,6 +1094,7 @@ const LineCombinations = () => {
       // Apply defense pair chemistry
       if (chemistry.defense_pairs) {
         chemistry.defense_pairs.forEach(pairData => {
+          const pairIndex = pairData.pair - 1;
           const pairChemistry = pairData.chemistry;
           
           // Apply to each player in the pair
@@ -1043,6 +1123,24 @@ const LineCombinations = () => {
       injured,
       benched: benchedPlayers
     });
+  };
+
+  // Add this new function to update the team overall rating in the database
+  const updateTeamOverallInDatabase = async (teamId, overall) => {
+    try {
+      const { error } = await supabase
+        .from('Team')
+        .update({ overall: overall })
+        .eq('id', teamId);
+        
+      if (error) {
+        console.error("Error updating team overall in database:", error);
+      } else {
+        console.log(`Successfully updated team ${teamId} overall to ${overall}`);
+      }
+    } catch (error) {
+      console.error("Exception when updating team overall:", error);
+    }
   };
 
   // Effect to fetch teams when league changes
@@ -1105,6 +1203,8 @@ const LineCombinations = () => {
         setTeamInfo(data);
         setSelectedTeam(data.id);
         setSelectedLeague(data.league || league || 'NHL');
+        // Reset the team ratings flag when team info changes
+        hasLoadedTeamRatings.current = false;
         
         console.log('Team info loaded:', data);
       } catch (error) {
@@ -1113,7 +1213,7 @@ const LineCombinations = () => {
     };
 
     fetchTeamInfo();
-  }, [teamId, league, setSelectedTeam, setSelectedLeague]); // Remove teamInfo from dependencies
+  }, [teamId, league, setSelectedTeam, setSelectedLeague, setTeamInfo]);
 
   // Effect to fetch roster data
   useEffect(() => {
@@ -1129,43 +1229,169 @@ const LineCombinations = () => {
         const teamAbbr = teamInfo.abbreviation;
         console.log('Fetching roster for team:', teamAbbr);
         
-        // First approach - try to fetch from our optimized lines API
-        try {
-          // Fetch formation data from API
-          const formationResponse = await fetch(`/api/lines/formation/${teamAbbr}`);
-          if (formationResponse.ok) {
-            const formationData = await formationResponse.json();
-            console.log('Formation data:', formationData);
-            
-            if (formationData && formationData.lines) {
-              // Process the optimized lines from the backend
-              processLineData(formationData);
-              setLoading(false);
-              return;
+        // Initialize players variable before any API calls
+        let players = [];
+        
+        // Only fetch team ratings if we haven't done so already for this team
+        if (!hasLoadedTeamRatings.current) {
+          try {
+            // Try the team overall endpoint specifically with absolute URL
+            const overallResponse = await fetch(`http://localhost:5001/api/team_rating/update-team-overall/${teamAbbr}`);
+            if (overallResponse.ok) {
+              const overallData = await overallResponse.json();
+              console.log('Team overall update response:', overallData);
+              
+              // Update the team ratings with the response data
+              if (overallData && overallData.overall_rating) {
+                setTeamRatings({
+                  overall: overallData.overall_rating,
+                  offense: overallData.offense || 0,
+                  defense: overallData.defense || 0,
+                  special_teams: overallData.special_teams || 0,
+                  goaltending: overallData.goaltending || 0,
+                  component_ratings: {
+                    line_1: overallData.component_ratings?.line_1 || 0,
+                    line_2: overallData.component_ratings?.line_2 || 0,
+                    line_3: overallData.component_ratings?.line_3 || 0,
+                    line_4: overallData.component_ratings?.line_4 || 0,
+                    pair_1: overallData.component_ratings?.pair_1 || 0,
+                    pair_2: overallData.component_ratings?.pair_2 || 0,
+                    pair_3: overallData.component_ratings?.pair_3 || 0,
+                    power_play_1: overallData.component_ratings?.power_play_1 || 0,
+                    power_play_2: overallData.component_ratings?.power_play_2 || 0,
+                    penalty_kill_1: overallData.component_ratings?.penalty_kill_1 || 0,
+                    penalty_kill_2: overallData.component_ratings?.penalty_kill_2 || 0
+                  }
+                });
+                // Mark that we've loaded team ratings
+                hasLoadedTeamRatings.current = true;
+              }
+            } else {
+              console.warn('Team overall endpoint failed with status:', overallResponse.status);
             }
+          } catch (overallError) {
+            console.warn('Error calling team overall endpoint:', overallError);
           }
-        } catch (apiError) {
-          console.error('API fetch error, falling back to direct DB query:', apiError);
         }
         
-        // Fallback - fetch directly from Supabase if API fails
-        const { data: players, error } = await supabase
-          .from('Player')
-          .select('*')
-          .eq('team', teamAbbr);
+        // Fetch players directly from Supabase
+        try {
+          const supabaseResponse = await supabase
+            .from('Player')
+            .select('*')
+            .eq('team', teamAbbr);
+            
+          if (supabaseResponse.error) {
+            console.error('Supabase query error:', supabaseResponse.error);
+            setLoading(false);
+            return;
+          }
           
-        if (error) {
-          console.error('Supabase query error:', error);
-          throw error;
-        }
-        
-        if (!players || players.length === 0) {
-          console.log('No players found for team:', teamAbbr);
-          // Initialize empty roster
-          setRoster({
-            forwards: [],
-            defensemen: [],
-            goalies: [],
+          players = supabaseResponse.data || [];
+          
+          if (players.length === 0) {
+            console.log('No players found for team:', teamAbbr);
+            // Initialize empty roster
+            setRoster({
+              forwards: [],
+              defensemen: [],
+              goalies: [],
+              powerPlay1: [],
+              powerPlay2: [],
+              penaltyKill1: [],
+              penaltyKill2: [],
+              fourOnFour: [],
+              threeOnThree: [],
+              shootout: [],
+              injured: [],
+              benched: []
+            });
+            setLoading(false);
+            return;
+          }
+          
+          console.log('Players fetched:', players.length);
+          
+          // Rest of the function remains the same
+          // Organize players by position - handle both "G" and "Goalie" for goalies
+          const forwards = players.filter(p => ['LW', 'C', 'RW'].includes(p.position_primary));
+          const defensemen = players.filter(p => ['LD', 'RD'].includes(p.position_primary));
+          const goalies = players.filter(p => ['G', 'Goalie'].includes(p.position_primary));
+          const injured = players.filter(p => p.injury_status);
+          
+          console.log(`Found ${forwards.length} forwards, ${defensemen.length} defensemen, ${goalies.length} goalies`);
+          
+          // Sort by overall rating
+          const sortByRating = (a, b) => (b.overall_rating || 0) - (a.overall_rating || 0);
+          forwards.sort(sortByRating);
+          defensemen.sort(sortByRating);
+          goalies.sort(sortByRating);
+          
+          // Sort forwards respecting positions
+          const sortedForwards = sortForwardsByPosition(forwards);
+          
+          // Assign line numbers based on sorted position
+          sortedForwards.forEach((player, index) => {
+            const lineNumber = Math.floor(index / 3) + 1;
+            player.lineNumber = lineNumber <= 4 ? lineNumber : 4;
+          });
+          
+          defensemen.forEach((player, index) => {
+            const pairNumber = Math.floor(index / 2) + 1;
+            player.pairNumber = pairNumber <= 3 ? pairNumber : 3;
+          });
+          
+          // Create basic line combinations
+          const roster = {
+            forwards: sortedForwards.slice(0, 12).map(p => ({
+              ...p,
+              name: p.name || `${p.first_name} ${p.last_name}`,
+              position: p.position_primary,
+              number: p.jersey,
+              overall: p.overall_rating,
+              player_type: p.player_type,
+              chemistry: Math.floor(Math.random() * 11) - 5, // Mock chemistry from -5 to +5
+              attributes: {
+                skating: p.skating,
+                shooting: p.shooting,
+                hands: p.puck_skills,
+                checking: p.physical,
+                defense: p.defense
+              }
+            })),
+            defensemen: defensemen.slice(0, 6).map(p => ({
+              ...p,
+              name: p.name || `${p.first_name} ${p.last_name}`,
+              position: p.position_primary,
+              number: p.jersey,
+              overall: p.overall_rating,
+              player_type: p.player_type,
+              chemistry: Math.floor(Math.random() * 11) - 5, // Mock chemistry from -5 to +5
+              attributes: {
+                skating: p.skating,
+                shooting: p.shooting,
+                hands: p.puck_skills,
+                checking: p.physical,
+                defense: p.defense
+              }
+            })),
+            goalies: goalies.slice(0, 2).map((p, idx) => ({
+              ...p,
+              name: p.name || `${p.first_name} ${p.last_name}`,
+              position: 'G',
+              number: p.jersey,
+              overall: p.overall_rating,
+              isStarter: idx === 0,
+              split: idx === 0 ? 65 : 35,
+              player_type: p.player_type,
+              attributes: {
+                agility: p.agility,
+                positioning: p.positioning,
+                reflexes: p.reflexes,
+                puck_control: p.puck_control,
+                mental: p.mental
+              }
+            })),
             powerPlay1: [],
             powerPlay2: [],
             penaltyKill1: [],
@@ -1173,219 +1399,128 @@ const LineCombinations = () => {
             fourOnFour: [],
             threeOnThree: [],
             shootout: [],
-            injured: [],
+            injured: injured.map(p => ({
+              ...p,
+              name: p.name || `${p.first_name} ${p.last_name}`,
+              position: p.position_primary,
+              number: p.jersey,
+              overall: p.overall_rating,
+              player_type: p.player_type,
+              injuryStatus: p.injury_status,
+              returnTime: p.return_timeline || 'Unknown'
+            })),
             benched: []
-          });
+          };
+          
+          // Populate special teams based on player attributes
+          if (sortedForwards.length > 0) {
+            // Power play units with chemistry
+            roster.powerPlay1 = [...sortedForwards.slice(0, 3), ...defensemen.slice(0, 2)].filter(Boolean).map(p => ({
+              ...p,
+              name: p.name || `${p.first_name} ${p.last_name}`,
+              position: p.position_primary,
+              number: p.jersey,
+              overall: p.overall_rating,
+              player_type: p.player_type,
+              chemistry: Math.floor(Math.random() * 11) - 5 // Mock chemistry from -5 to +5
+            }));
+            
+            roster.powerPlay2 = [...sortedForwards.slice(3, 6), ...defensemen.slice(2, 4)].filter(Boolean).map(p => ({
+              ...p,
+              name: p.name || `${p.first_name} ${p.last_name}`,
+              position: p.position_primary,
+              number: p.jersey,
+              overall: p.overall_rating,
+              player_type: p.player_type,
+              chemistry: Math.floor(Math.random() * 11) - 5 // Mock chemistry from -5 to +5
+            }));
+            
+            // Penalty kill units with chemistry
+            roster.penaltyKill1 = [...sortedForwards.slice(0, 2), ...defensemen.slice(0, 2)].filter(Boolean).map(p => ({
+              ...p,
+              name: p.name || `${p.first_name} ${p.last_name}`,
+              position: p.position_primary,
+              number: p.jersey,
+              overall: p.overall_rating,
+              player_type: p.player_type,
+              chemistry: Math.floor(Math.random() * 11) - 5 // Mock chemistry from -5 to +5
+            }));
+            
+            roster.penaltyKill2 = [...sortedForwards.slice(2, 4), ...defensemen.slice(0, 2)].filter(Boolean).map(p => ({
+              ...p,
+              name: p.name || `${p.first_name} ${p.last_name}`,
+              position: p.position_primary,
+              number: p.jersey,
+              overall: p.overall_rating,
+              player_type: p.player_type,
+              chemistry: Math.floor(Math.random() * 11) - 5 // Mock chemistry from -5 to +5
+            }));
+            
+            // Other formations
+            roster.fourOnFour = [...sortedForwards.slice(0, 2), ...defensemen.slice(0, 2)].filter(Boolean).map(p => ({
+              ...p,
+              name: p.name || `${p.first_name} ${p.last_name}`,
+              position: p.position_primary,
+              number: p.jersey,
+              overall: p.overall_rating,
+              player_type: p.player_type
+            }));
+            
+            roster.threeOnThree = [...sortedForwards.slice(0, 2), ...defensemen.slice(0, 1)].filter(Boolean).map(p => ({
+              ...p,
+              name: p.name || `${p.first_name} ${p.last_name}`,
+              position: p.position_primary,
+              number: p.jersey,
+              overall: p.overall_rating,
+              player_type: p.player_type
+            }));
+            
+            roster.shootout = sortedForwards.slice(0, 5).filter(Boolean).map(p => ({
+              ...p,
+              name: p.name || `${p.first_name} ${p.last_name}`,
+              position: p.position_primary,
+              number: p.jersey,
+              overall: p.overall_rating,
+              player_type: p.player_type
+            }));
+          }
+          
+          // Find benched players (players not in the active lineup)
+          const activePlayerIds = new Set([
+            ...roster.forwards.map(p => p.id),
+            ...roster.defensemen.map(p => p.id),
+            ...roster.goalies.map(p => p.id),
+            ...injured.map(p => p.id)
+          ]);
+          
+          // Add extra forwards and defensemen to benched
+          const benchedSkaters = players.filter(p => 
+            !activePlayerIds.has(p.id) && 
+            !p.injury_status &&
+            !['G', 'Goalie'].includes(p.position_primary)
+          );
+          
+          // Add extra goalies (3rd string and beyond) to benched
+          const benchedGoalies = goalies.slice(2).filter(p => !p.injury_status);
+          
+          // Combine all benched players
+          roster.benched = [...benchedSkaters, ...benchedGoalies].map(p => ({
+            ...p,
+            name: p.name || `${p.first_name} ${p.last_name}`,
+            position: p.position_primary,
+            number: p.jersey,
+            overall: p.overall_rating,
+            player_type: p.player_type
+          }));
+          
+          // Update roster state
+          console.log('Setting roster from database with data:', roster);
+          setRoster(roster);
           setLoading(false);
-          return;
+        } catch (error) {
+          console.error('Error fetching roster:', error);
+          setLoading(false);
         }
-        
-        console.log('Players fetched:', players.length);
-        
-        // Organize players by position - handle both "G" and "Goalie" for goalies
-        const forwards = players.filter(p => ['LW', 'C', 'RW'].includes(p.position_primary));
-        const defensemen = players.filter(p => ['LD', 'RD'].includes(p.position_primary));
-        const goalies = players.filter(p => ['G', 'Goalie'].includes(p.position_primary));
-        const injured = players.filter(p => p.injury_status);
-        
-        console.log(`Found ${forwards.length} forwards, ${defensemen.length} defensemen, ${goalies.length} goalies`);
-        
-        // Sort by overall rating
-        const sortByRating = (a, b) => (b.overall_rating || 0) - (a.overall_rating || 0);
-        forwards.sort(sortByRating);
-        defensemen.sort(sortByRating);
-        goalies.sort(sortByRating);
-        
-        // Sort forwards respecting positions
-        const sortedForwards = sortForwardsByPosition(forwards);
-        
-        // Assign line numbers based on sorted position
-        sortedForwards.forEach((player, index) => {
-          const lineNumber = Math.floor(index / 3) + 1;
-          player.lineNumber = lineNumber <= 4 ? lineNumber : 4;
-        });
-        
-        defensemen.forEach((player, index) => {
-          const pairNumber = Math.floor(index / 2) + 1;
-          player.pairNumber = pairNumber <= 3 ? pairNumber : 3;
-        });
-        
-        // Create basic line combinations
-        const roster = {
-          forwards: sortedForwards.slice(0, 12).map(p => ({
-            ...p,
-            name: p.name || `${p.first_name} ${p.last_name}`,
-            position: p.position_primary,
-            number: p.jersey,
-            overall: p.overall_rating,
-            player_type: p.player_type,
-            chemistry: Math.floor(Math.random() * 11) - 5, // Mock chemistry from -5 to +5
-            attributes: {
-              skating: p.skating,
-              shooting: p.shooting,
-              hands: p.puck_skills,
-              checking: p.physical,
-              defense: p.defense
-            }
-          })),
-          defensemen: defensemen.slice(0, 6).map(p => ({
-            ...p,
-            name: p.name || `${p.first_name} ${p.last_name}`,
-            position: p.position_primary,
-            number: p.jersey,
-            overall: p.overall_rating,
-            player_type: p.player_type,
-            chemistry: Math.floor(Math.random() * 11) - 5, // Mock chemistry from -5 to +5
-            attributes: {
-              skating: p.skating,
-              shooting: p.shooting,
-              hands: p.puck_skills,
-              checking: p.physical,
-              defense: p.defense
-            }
-          })),
-          goalies: goalies.slice(0, 2).map((p, idx) => ({
-            ...p,
-            name: p.name || `${p.first_name} ${p.last_name}`,
-            position: 'G',
-            number: p.jersey,
-            overall: p.overall_rating,
-            isStarter: idx === 0,
-            split: idx === 0 ? 65 : 35,
-            player_type: p.player_type,
-            attributes: {
-              agility: p.agility,
-              positioning: p.positioning,
-              reflexes: p.reflexes,
-              puck_control: p.puck_control,
-              mental: p.mental
-            }
-          })),
-          powerPlay1: [],
-          powerPlay2: [],
-          penaltyKill1: [],
-          penaltyKill2: [],
-          fourOnFour: [],
-          threeOnThree: [],
-          shootout: [],
-          injured: injured.map(p => ({
-            ...p,
-            name: p.name || `${p.first_name} ${p.last_name}`,
-            position: p.position_primary,
-            number: p.jersey,
-            overall: p.overall_rating,
-            player_type: p.player_type,
-            injuryStatus: p.injury_status,
-            returnTime: p.return_timeline || 'Unknown'
-          })),
-          benched: []
-        };
-        
-        // Populate special teams based on player attributes
-        if (sortedForwards.length > 0) {
-          // Power play units with chemistry
-          roster.powerPlay1 = [...sortedForwards.slice(0, 3), ...defensemen.slice(0, 2)].filter(Boolean).map(p => ({
-            ...p,
-            name: p.name || `${p.first_name} ${p.last_name}`,
-            position: p.position_primary,
-            number: p.jersey,
-            overall: p.overall_rating,
-            player_type: p.player_type,
-            chemistry: Math.floor(Math.random() * 11) - 5 // Mock chemistry from -5 to +5
-          }));
-          
-          roster.powerPlay2 = [...sortedForwards.slice(3, 6), ...defensemen.slice(2, 4)].filter(Boolean).map(p => ({
-            ...p,
-            name: p.name || `${p.first_name} ${p.last_name}`,
-            position: p.position_primary,
-            number: p.jersey,
-            overall: p.overall_rating,
-            player_type: p.player_type,
-            chemistry: Math.floor(Math.random() * 11) - 5 // Mock chemistry from -5 to +5
-          }));
-          
-          // Penalty kill units with chemistry
-          roster.penaltyKill1 = [...sortedForwards.slice(0, 2), ...defensemen.slice(0, 2)].filter(Boolean).map(p => ({
-            ...p,
-            name: p.name || `${p.first_name} ${p.last_name}`,
-            position: p.position_primary,
-            number: p.jersey,
-            overall: p.overall_rating,
-            player_type: p.player_type,
-            chemistry: Math.floor(Math.random() * 11) - 5 // Mock chemistry from -5 to +5
-          }));
-          
-          roster.penaltyKill2 = [...sortedForwards.slice(2, 4), ...defensemen.slice(0, 2)].filter(Boolean).map(p => ({
-            ...p,
-            name: p.name || `${p.first_name} ${p.last_name}`,
-            position: p.position_primary,
-            number: p.jersey,
-            overall: p.overall_rating,
-            player_type: p.player_type,
-            chemistry: Math.floor(Math.random() * 11) - 5 // Mock chemistry from -5 to +5
-          }));
-          
-          // Other formations
-          roster.fourOnFour = [...sortedForwards.slice(0, 2), ...defensemen.slice(0, 2)].filter(Boolean).map(p => ({
-            ...p,
-            name: p.name || `${p.first_name} ${p.last_name}`,
-            position: p.position_primary,
-            number: p.jersey,
-            overall: p.overall_rating,
-            player_type: p.player_type
-          }));
-          
-          roster.threeOnThree = [...sortedForwards.slice(0, 2), ...defensemen.slice(0, 1)].filter(Boolean).map(p => ({
-            ...p,
-            name: p.name || `${p.first_name} ${p.last_name}`,
-            position: p.position_primary,
-            number: p.jersey,
-            overall: p.overall_rating,
-            player_type: p.player_type
-          }));
-          
-          roster.shootout = sortedForwards.slice(0, 5).filter(Boolean).map(p => ({
-            ...p,
-            name: p.name || `${p.first_name} ${p.last_name}`,
-            position: p.position_primary,
-            number: p.jersey,
-            overall: p.overall_rating,
-            player_type: p.player_type
-          }));
-        }
-        
-        // Find benched players (players not in the active lineup)
-        const activePlayerIds = new Set([
-          ...roster.forwards.map(p => p.id),
-          ...roster.defensemen.map(p => p.id),
-          ...roster.goalies.map(p => p.id),
-          ...injured.map(p => p.id)
-        ]);
-        
-        // Add extra forwards and defensemen to benched
-        const benchedSkaters = players.filter(p => 
-          !activePlayerIds.has(p.id) && 
-          !p.injury_status &&
-          !['G', 'Goalie'].includes(p.position_primary)
-        );
-        
-        // Add extra goalies (3rd string and beyond) to benched
-        const benchedGoalies = goalies.slice(2).filter(p => !p.injury_status);
-        
-        // Combine all benched players
-        roster.benched = [...benchedSkaters, ...benchedGoalies].map(p => ({
-          ...p,
-          name: p.name || `${p.first_name} ${p.last_name}`,
-          position: p.position_primary,
-          number: p.jersey,
-          overall: p.overall_rating,
-          player_type: p.player_type
-        }));
-        
-        // Update roster state
-        console.log('Setting roster from database with data:', roster);
-        setRoster(roster);
-        setLoading(false);
       } catch (error) {
         console.error('Error fetching roster:', error);
         setLoading(false);
@@ -1406,6 +1541,8 @@ const LineCombinations = () => {
     const team = teams.find(t => t.id === teamId);
     setSelectedTeam(teamId);
     setTeamInfo(team);
+    // Reset the team ratings flag when changing teams
+    hasLoadedTeamRatings.current = false;
     window.history.pushState({}, '', `/line-combinations/${team.league}/${teamId}`);
   };
 
@@ -1460,17 +1597,23 @@ const LineCombinations = () => {
   const renderForwardLines = () => {
     const { forwards } = roster;
     
-    // Calculate weighted average overall for forwards
-    // Line 1: 33%, Line 2: 26%, Line 3: 22%, Line 4: 19%
-    const forwardWeights = [0.33, 0.33, 0.33, 0.26, 0.26, 0.26, 0.22, 0.22, 0.22, 0.19, 0.19, 0.19];
-    const forwardOverall = calculateWeightedOverall(forwards, forwardWeights);
+    // Use the overall from teamRatings for forwards
+    const forwardOverall = Math.round(teamRatings.offense || 0);
     
-    // Generate random chemistry per line - this would be replaced with real data
+    // Use line ratings from API if available
+    const lineRatings = {
+      line1: Math.round(teamRatings.component_ratings?.line_1 || 0),
+      line2: Math.round(teamRatings.component_ratings?.line_2 || 0),
+      line3: Math.round(teamRatings.component_ratings?.line_3 || 0),
+      line4: Math.round(teamRatings.component_ratings?.line_4 || 0)
+    };
+    
+    // Use chemistry data from API or default to 0
     const lineChemistry = [
-      Math.floor(Math.random() * 11) - 5, // Line 1
-      Math.floor(Math.random() * 11) - 5, // Line 2
-      Math.floor(Math.random() * 11) - 5, // Line 3
-      Math.floor(Math.random() * 11) - 5  // Line 4
+      chemistryData?.forward_line_1 || 0,
+      chemistryData?.forward_line_2 || 0,
+      chemistryData?.forward_line_3 || 0,
+      chemistryData?.forward_line_4 || 0
     ];
     
     return (
@@ -1515,16 +1658,21 @@ const LineCombinations = () => {
   const renderDefensePairs = () => {
     const { defensemen } = roster;
     
-    // Calculate weighted average overall for defense pairs
-    // Pair 1: 42%, Pair 2: 34%, Pair 3: 24%
-    const defenseWeights = [0.42, 0.42, 0.34, 0.34, 0.24, 0.24];
-    const defenseOverall = calculateWeightedOverall(defensemen, defenseWeights);
+    // Use the overall from teamRatings for defense
+    const defenseOverall = Math.round(teamRatings.defense || 0);
     
-    // Generate random chemistry per pair - this would be replaced with real data
+    // Use pair ratings from API if available
+    const pairRatings = {
+      pair1: Math.round(teamRatings.component_ratings?.pair_1 || 0),
+      pair2: Math.round(teamRatings.component_ratings?.pair_2 || 0),
+      pair3: Math.round(teamRatings.component_ratings?.pair_3 || 0)
+    };
+    
+    // Use chemistry data from API or default to 0
     const pairChemistry = [
-      Math.floor(Math.random() * 11) - 5, // Pair 1
-      Math.floor(Math.random() * 11) - 5, // Pair 2
-      Math.floor(Math.random() * 11) - 5  // Pair 3
+      chemistryData?.defense_pair_1 || 0,
+      chemistryData?.defense_pair_2 || 0,
+      chemistryData?.defense_pair_3 || 0
     ];
     
     return (
@@ -1561,10 +1709,8 @@ const LineCombinations = () => {
   const renderGoalies = () => {
     const { goalies } = roster;
     
-    // Calculate weighted average overall for goalies
-    // Starter: 60%, Backup: 40%
-    const goalieWeights = [0.6, 0.4];
-    const goalieOverall = calculateWeightedOverall(goalies, goalieWeights);
+    // Use the goaltending rating from the API
+    const goalieOverall = Math.round(teamRatings.goaltending || 0);
     
     // Calculate split percentages for display
     const getSplitText = () => {
@@ -1596,16 +1742,16 @@ const LineCombinations = () => {
   const renderPowerPlay = () => {
     const { powerPlay1, powerPlay2 } = roster;
     
-    // Calculate average overall for power play units (equal weighting)
-    const pp1Weights = Array(powerPlay1.length).fill(1/powerPlay1.length);
-    const pp1Overall = calculateWeightedOverall(powerPlay1, pp1Weights);
+    // Use the special teams overall from teamRatings
+    const specialTeamsOverall = Math.round(teamRatings.special_teams || 0);
     
-    const pp2Weights = Array(powerPlay2.length).fill(1/powerPlay2.length);
-    const pp2Overall = calculateWeightedOverall(powerPlay2, pp2Weights);
+    // Calculate average overall for power play units from API data if available
+    const pp1Overall = Math.round(teamRatings.component_ratings?.power_play_1 || 0);
+    const pp2Overall = Math.round(teamRatings.component_ratings?.power_play_2 || 0);
     
-    // Generate random chemistry for the units
-    const pp1Chemistry = Math.floor(Math.random() * 11) - 5;
-    const pp2Chemistry = Math.floor(Math.random() * 11) - 5;
+    // Use chemistry data from API or default to 0
+    const pp1Chemistry = chemistryData?.power_play_1 || 0;
+    const pp2Chemistry = chemistryData?.power_play_2 || 0;
     
     return (
       <>
@@ -1641,16 +1787,13 @@ const LineCombinations = () => {
   const renderPenaltyKill = () => {
     const { penaltyKill1, penaltyKill2 } = roster;
     
-    // Calculate average overall for penalty kill units (equal weighting)
-    const pk1Weights = Array(penaltyKill1.length).fill(1/penaltyKill1.length);
-    const pk1Overall = calculateWeightedOverall(penaltyKill1, pk1Weights);
+    // Use penalty kill ratings from API if available
+    const pk1Overall = Math.round(teamRatings.component_ratings?.penalty_kill_1 || 0);
+    const pk2Overall = Math.round(teamRatings.component_ratings?.penalty_kill_2 || 0);
     
-    const pk2Weights = Array(penaltyKill2.length).fill(1/penaltyKill2.length);
-    const pk2Overall = calculateWeightedOverall(penaltyKill2, pk2Weights);
-    
-    // Generate random chemistry for the units
-    const pk1Chemistry = Math.floor(Math.random() * 11) - 5;
-    const pk2Chemistry = Math.floor(Math.random() * 11) - 5;
+    // Use chemistry data from API or default to 0
+    const pk1Chemistry = chemistryData?.penalty_kill_1 || 0;
+    const pk2Chemistry = chemistryData?.penalty_kill_2 || 0;
     
     return (
       <>
@@ -1686,35 +1829,50 @@ const LineCombinations = () => {
   const renderOtherLines = () => {
     const { fourOnFour, threeOnThree, shootout } = roster;
     
-    // Calculate average overall for other formations (equal weighting)
-    const fourOnFourWeights = Array(fourOnFour.length).fill(1/fourOnFour.length);
-    const fourOnFourOverall = calculateWeightedOverall(fourOnFour, fourOnFourWeights);
+    // Use ratings from API if available
+    const fourOnFourOverall = Math.round(teamRatings.component_ratings?.other_special_teams || 0);
+    const threeOnThreeOverall = Math.round(teamRatings.component_ratings?.other_special_teams || 0);
+    const shootoutOverall = Math.round(teamRatings.component_ratings?.other_special_teams || 0);
     
-    const threeOnThreeWeights = Array(threeOnThree.length).fill(1/threeOnThree.length);
-    const threeOnThreeOverall = calculateWeightedOverall(threeOnThree, threeOnThreeWeights);
-    
-    const shootoutWeights = Array(shootout.length).fill(1/shootout.length);
-    const shootoutOverall = calculateWeightedOverall(shootout, shootoutWeights);
+    // Use chemistry data from API or default to 0
+    const fourOnFourChemistry = chemistryData?.four_on_four || 0;
+    const threeOnThreeChemistry = chemistryData?.three_on_three || 0;
+    const shootoutChemistry = chemistryData?.shootout || 0;
     
     return (
-      <OtherLinesContainer visible={showOtherLines}>
+      <OtherLinesContainer $isVisible={showOtherLines}>
         {renderSectionTitleWithOverall('4-on-4 Formation', fourOnFourOverall)}
-        <SpecialTeamsGrid>
-          {fourOnFour.slice(0, 2).map(renderPlayer)}
-        </SpecialTeamsGrid>
-        <SpecialTeamsGrid className="center-row">
-          {fourOnFour.slice(2, 4).map(renderPlayer)}
-        </SpecialTeamsGrid>
+        <div style={{ position: 'relative' }}>
+          <SpecialTeamsGrid>
+            {fourOnFour.slice(0, 2).map(renderPlayer)}
+          </SpecialTeamsGrid>
+          <SpecialTeamsGrid className="center-row">
+            {fourOnFour.slice(2, 4).map(renderPlayer)}
+          </SpecialTeamsGrid>
+          {fourOnFour.length > 0 && (
+            <LineBadge value={fourOnFourChemistry}>{fourOnFourChemistry > 0 ? '+' : ''}{fourOnFourChemistry}</LineBadge>
+          )}
+        </div>
         
         {renderSectionTitleWithOverall('3-on-3 Overtime', threeOnThreeOverall)}
-        <SpecialTeamsGrid className="center-row">
-          {threeOnThree.map(renderPlayer)}
-        </SpecialTeamsGrid>
+        <div style={{ position: 'relative' }}>
+          <SpecialTeamsGrid className="center-row">
+            {threeOnThree.map(renderPlayer)}
+          </SpecialTeamsGrid>
+          {threeOnThree.length > 0 && (
+            <LineBadge value={threeOnThreeChemistry}>{threeOnThreeChemistry > 0 ? '+' : ''}{threeOnThreeChemistry}</LineBadge>
+          )}
+        </div>
         
         {renderSectionTitleWithOverall('Shootout Order', shootoutOverall)}
-        <SpecialTeamsGrid>
-          {shootout.map(renderPlayer)}
-        </SpecialTeamsGrid>
+        <div style={{ position: 'relative' }}>
+          <SpecialTeamsGrid>
+            {shootout.map(renderPlayer)}
+          </SpecialTeamsGrid>
+          {shootout.length > 0 && (
+            <LineBadge value={shootoutChemistry}>{shootoutChemistry > 0 ? '+' : ''}{shootoutChemistry}</LineBadge>
+          )}
+        </div>
       </OtherLinesContainer>
     );
   };
@@ -2769,45 +2927,16 @@ const LineCombinations = () => {
     );
   };
 
-  // Add a new styled component for section spacing and separation
-  const SectionSeparator = styled.div`
-    height: 40px;
-    width: 100%;
-    margin: 20px 0;
-    border-top: 1px solid #333;
-  `;
-
-  const SpecialTeamsDivider = styled.div`
-    height: 60px;
-    width: 100%;
-    margin: 30px 0 20px;
-    border-top: 1px solid #444;
-    position: relative;
-    
-    &::after {
-      content: 'SPECIAL TEAMS';
-      position: absolute;
-      top: -12px;
-      left: 50%;
-      transform: translateX(-50%);
-      background-color: #111;
-      padding: 0 20px;
-      color: #888;
-      font-size: 0.85rem;
-      letter-spacing: 2px;
-    }
-  `;
-
   return (
     <Container>
       <Header>
         <TeamSelector>
-          <Select value={selectedLeague} onChange={handleLeagueChange}>
+          <StyledSelect value={selectedLeague} onChange={handleLeagueChange}>
             <option value="NHL">NHL</option>
             <option value="AHL">AHL</option>
             <option value="CHL">CHL</option>
-          </Select>
-          <Select 
+          </StyledSelect>
+          <StyledSelect 
             value={selectedTeam || ''} 
             onChange={handleTeamChange}
           >
@@ -2817,7 +2946,7 @@ const LineCombinations = () => {
                 {team.team}
               </option>
             ))}
-          </Select>
+          </StyledSelect>
         </TeamSelector>
 
         {teamInfo ? (
@@ -2826,9 +2955,20 @@ const LineCombinations = () => {
               {teamInfo.abbreviation || '???'}
             </TeamLogo>
             <TeamInfo>
-              <TeamName>{teamInfo.team || 'Select Team'}</TeamName>
+              <TeamName>
+                {teamInfo.team || 'Select Team'}
+                <TeamOverall>
+                  {Math.round(teamRatings.overall) || '??'}
+                  <Tooltip title={`Offense: ${Math.round(teamRatings.offense || 0)}, Defense: ${Math.round(teamRatings.defense || 0)}, Special Teams: ${Math.round(teamRatings.special_teams || 0)}, Goaltending: ${Math.round(teamRatings.goaltending || 0)}`}>
+                    <span style={{ marginLeft: '5px', fontSize: '0.8rem', cursor: 'help' }}>ⓘ</span>
+                  </Tooltip>
+                </TeamOverall>
+              </TeamName>
               <LeagueInfo>{teamInfo.league || selectedLeague}</LeagueInfo>
             </TeamInfo>
+            <EditLinesButton onClick={() => alert('Edit lines feature coming soon!')}>
+              Edit Lines
+            </EditLinesButton>
           </TeamHeader>
         ) : (
           <TeamHeader>
@@ -2874,15 +3014,9 @@ const LineCombinations = () => {
           {activeWidget === 'lines' && (
             <>
               {renderForwardLines()}
-              <SectionSeparator />
               {renderDefensePairs()}
-              <SectionSeparator />
               {renderGoalies()}
-              
-              <SpecialTeamsDivider />
-              
               {renderPowerPlay()}
-              <SectionSeparator />
               {renderPenaltyKill()}
               <OtherLinesButton onClick={() => setShowOtherLines(!showOtherLines)}>
                 {showOtherLines ? 'Hide Other Lines' : 'Show Other Lines'}
@@ -2899,7 +3033,6 @@ const LineCombinations = () => {
       )}
 
       {renderPlayerModal()}
-      {renderBadgesLegend()}
     </Container>
   );
 };

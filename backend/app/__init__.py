@@ -16,11 +16,15 @@ def create_app(config_name='development'):
     cors.init_app(app)
     
     # Register blueprints
-    from .api import register_api_blueprints
-    register_api_blueprints(app)
+    from .services import register_service_blueprints
+    register_service_blueprints(app)
     
     from .auth import auth_bp
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    
+    @app.route('/')
+    def index():
+        return {'message': 'Welcome to the Hockey League API'}, 200
     
     @app.route('/health')
     def health_check():

@@ -1225,8 +1225,8 @@ const LineCombinations = () => {
               debugAPI('Set team info from abbreviation:', teamByAbbrResponse.data);
             } else {
               debugAPI('Error getting team by abbreviation:', teamByAbbrResponse.error);
-              setLoading(false);
-              return;
+          setLoading(false);
+          return;
             }
           } else {
             debugAPI('No team abbreviation or team info available');
@@ -1347,18 +1347,18 @@ const LineCombinations = () => {
               // Log the response status first before trying to parse JSON
               debugAPI(`Lines API response status: ${responseStatus}`, {});
               
-              if (overallResponse.ok) {
-                const overallData = await overallResponse.json();
+            if (overallResponse.ok) {
+              const overallData = await overallResponse.json();
                 debugAPI('Team overall update response from lines API:', overallData);
-                
-                // Update the team ratings with the response data
-                if (overallData && overallData.overall_rating) {
-                  setTeamRatings({
-                    overall: overallData.overall_rating,
-                    offense: overallData.offense || 0,
-                    defense: overallData.defense || 0,
-                    special_teams: overallData.special_teams || 0,
-                    goaltending: overallData.goaltending || 0,
+              
+              // Update the team ratings with the response data
+              if (overallData && overallData.overall_rating) {
+                setTeamRatings({
+                  overall: overallData.overall_rating,
+                  offense: overallData.offense || 0,
+                  defense: overallData.defense || 0,
+                  special_teams: overallData.special_teams || 0,
+                  goaltending: overallData.goaltending || 0,
                     component_ratings: overallData.component_ratings || {}
                   });
                   // Mark that we've loaded team ratings
@@ -1422,11 +1422,11 @@ const LineCombinations = () => {
                     special_teams: ratingData.special_teams || 0,
                     goaltending: ratingData.goaltending || 0,
                     component_ratings: ratingData.component_ratings || {}
-                  });
-                  // Mark that we've loaded team ratings
-                  hasLoadedTeamRatings.current = true;
-                }
-              } else {
+                });
+                // Mark that we've loaded team ratings
+                hasLoadedTeamRatings.current = true;
+              }
+            } else {
                 // Log more details about the error
                 const errorText = await ratingResponse.text().catch(e => "Could not get error text");
                 debugAPI(`Team rating API endpoint failed with status: ${responseStatus}`, { errorText });
@@ -1436,24 +1436,12 @@ const LineCombinations = () => {
                 
                 // Set default ratings as a last resort
                 setTeamRatings({
-                  overall: 75,
-                  offense: 75,
-                  defense: 75,
-                  special_teams: 75,
-                  goaltending: 75,
-                  component_ratings: {
-                    line_1: 80,
-                    line_2: 77,
-                    line_3: 74,
-                    line_4: 70,
-                    pair_1: 80,
-                    pair_2: 76,
-                    pair_3: 73,
-                    power_play_1: 79,
-                    power_play_2: 76,
-                    penalty_kill_1: 78,
-                    penalty_kill_2: 75
-                  }
+                  overall: null,
+                  offense: null,
+                  defense: null,
+                  special_teams: null,
+                  goaltending: null,
+                  component_ratings: {}
                 });
                 
                 hasLoadedTeamRatings.current = true;
@@ -1467,24 +1455,12 @@ const LineCombinations = () => {
               }
               // Set default ratings as a last resort
               setTeamRatings({
-                overall: 75,
-                offense: 75,
-                defense: 75,
-                special_teams: 75,
-                goaltending: 75,
-                component_ratings: {
-                  line_1: 80,
-                  line_2: 77,
-                  line_3: 74,
-                  line_4: 70,
-                  pair_1: 80,
-                  pair_2: 76,
-                  pair_3: 73,
-                  power_play_1: 79,
-                  power_play_2: 76,
-                  penalty_kill_1: 78,
-                  penalty_kill_2: 75
-                }
+                overall: null,
+                offense: null,
+                defense: null,
+                special_teams: null,
+                goaltending: null,
+                component_ratings: {}
               });
               
               hasLoadedTeamRatings.current = true;
@@ -1493,24 +1469,12 @@ const LineCombinations = () => {
             debugAPI('Error calling team_rating API endpoint:', ratingError);
             // Set default ratings as a last resort
             setTeamRatings({
-              overall: 75,
-              offense: 75,
-              defense: 75,
-              special_teams: 75,
-              goaltending: 75,
-              component_ratings: {
-                line_1: 80,
-                line_2: 77,
-                line_3: 74,
-                line_4: 70,
-                pair_1: 80,
-                pair_2: 76,
-                pair_3: 73,
-                power_play_1: 79,
-                power_play_2: 76,
-                penalty_kill_1: 78,
-                penalty_kill_2: 75
-              }
+              overall: null,
+              offense: null,
+              defense: null,
+              special_teams: null,
+              goaltending: null,
+              component_ratings: {}
             });
             
             hasLoadedTeamRatings.current = true;

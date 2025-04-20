@@ -25,6 +25,10 @@ class TeamFormation:
     to create the most effective team formations.
     """
     
+    # Configuration flags to control rating adjustments
+    APPLY_CHEMISTRY_EFFECTS = True  # Set to False to disable all chemistry effects on ratings
+    APPLY_COACH_EFFECTS = True      # Set to False to disable all coach effects on ratings
+    
     def __init__(self, team_abbreviation: str, supabase_client=None, debug=False):
         """
         Initialize the team formation service.
@@ -63,345 +67,240 @@ class TeamFormation:
     
     def initialize(self) -> bool:
         """
-        Initialize the team formation service.
+        Initialize the team formation by fetching players and coach data.
         
         Returns:
-            Boolean indicating success
+            Boolean indicating whether initialization was successful
         """
         try:
-            print(f"\n=== INITIALIZING TEAM FORMATION FOR {self.team_abbreviation} ===")
-            print(f"Debug mode: {self.debug}")
+            print(f"TeamFormation: Starting initialization for {self.team_abbreviation}")
             
-            # Create Supabase client if not provided
-            if not self.supabase_client:
+            # Initialize Supabase client
+            url = os.environ.get("SUPABASE_URL")
+            key = os.environ.get("SUPABASE_KEY")
+            
+            if not url or not key:
+                print(f"TeamFormation: Missing Supabase credentials - URL: {bool(url)}, Key: {bool(key)}")
+                # Continue without Supabase, using fallback methods
+            else:                
+                print(f"TeamFormation: Creating Supabase client")
                 try:
-                    print("Creating Supabase client")
-                    self.supabase_client = create_supabase_client()
-                    print(f"Supabase client created: {bool(self.supabase_client)}")
-                except Exception as e:
-                    print(f"Error creating Supabase client: {e}")
-                    traceback.print_exc()
+                    self.supabase_client = create_client(url, key)
+                    print("TeamFormation: Supabase client created successfully")
+                except Exception as supabase_error:
+                    print(f"TeamFormation: Error creating Supabase client: {supabase_error}")
+                    # Continue without Supabase client
             
-            # Get team data
-            self.team_data = self._get_team_by_abbreviation(self.team_abbreviation)
-            if not self.team_data:
-                print(f"Could not find team with abbreviation: {self.team_abbreviation}")
+            # Fetch team data using SQLAlchemy
+            print(f"TeamFormation: Fetching team data for {self.team_abbreviation}")
+            self.team = self._get_team_by_abbreviation(self.team_abbreviation)
+            
+            if not self.team:
+                print(f"TeamFormation: Team not found for abbreviation {self.team_abbreviation}")
                 return False
                 
-            # Get team ID
-            self.team_id = self.team_data.get('id')
-            print(f"Team ID: {self.team_id}")
-            
-            if not self.team_id:
-                print(f"Team data doesn't have an ID field: {self.team_data}")
-                # Generate a dummy ID for testing if needed
-                self.team_id = 999
+            print(f"TeamFormation: Team found - ID: {self.team.get('id')}")
                 
-            # Get coach data
-            coach_id = self.team_data.get('coach_id')
-            self.coach_data = self._get_coach(coach_id)
+            # Fetch player data
+            print(f"TeamFormation: Fetching players for team ID {self.team.get('id')}")
+            self.players = self._get_team_players(self.team.get('id'))
             
-            # Initialize coach strategy
-            if self.coach_data:
-                print(f"Coach data: {self.coach_data}")
-                self.coach_strategy = CoachStrategy(self.coach_data)
+            if not self.players:
+                print(f"TeamFormation: No players found for team ID {self.team.get('id')}")
+                # Try to fetch players directly from Supabase as a last resort
+                try:
+                    print(f"TeamFormation: Attempting direct fetch from Supabase for {self.team_abbreviation}")
+                    client = create_supabase_client()
+                    response = client.table('Player').select('*').eq('team', self.team_abbreviation).execute()
+                    if response.data and len(response.data) > 0:
+                        print(f"TeamFormation: Found {len(response.data)} players via direct Supabase query")
+                        self.players = response.data
+                    else:
+                        print(f"TeamFormation: No players found via direct Supabase query")
+                        # Continue with an empty player list
+                except Exception as direct_fetch_error:
+                    print(f"TeamFormation: Error in direct fetch: {direct_fetch_error}")
+                    # Continue with an empty player list
             else:
-                print("No coach data found, using default strategy")
-                self.coach_strategy = None
-            
-            # Get team players and sort by position
-            print(f"Getting team players for team_id: {self.team_id}")
-            self.roster = self._get_team_players(self.team_id)
-            
-            if self.debug:
-                print(f"Roster has {len(self.roster)} players")
-                if len(self.roster) > 0:
-                    sample_player = self.roster[0]
-                    print(f"Sample player: {sample_player}")
-                    if isinstance(sample_player, dict):
-                        print(f"Sample player fields: {list(sample_player.keys())}")
-            
-            if not self.roster:
-                print("Failed to get team players")
-                return False
+                print(f"TeamFormation: Found {len(self.players)} players")
                 
-            # Sort the roster into positions
-            self.forwards = []
-            self.defensemen = []
-            self.goalies = []
+            # Initialize line optimizer with players
+            print("TeamFormation: Initializing line optimizer with players")
+            self.line_optimizer.players = self.players
             
-            for player in self.roster:
-                if isinstance(player, dict):
-                    position = player.get('position_primary', player.get('position', ''))
+            try:
+                # Try to categorize players by position
+                forwards = [p for p in self.players if p.get('position_primary') in ['LW', 'C', 'RW']]
+                forwards_count = len(forwards)
+                self.line_optimizer.forwards = forwards
+                
+                defensemen = [p for p in self.players if p.get('position_primary') in ['LD', 'RD']]
+                defensemen_count = len(defensemen)
+                self.line_optimizer.defensemen = defensemen
+                
+                goalies = [p for p in self.players if p.get('position_primary') in ['G', 'Goalie']]
+                goalies_count = len(goalies)
+                self.line_optimizer.goalies = goalies
+                
+                print(f"TeamFormation: Categorized players - {forwards_count} forwards, {defensemen_count} defensemen, {goalies_count} goalies")
+                
+                # Sort by overall rating
+                print("TeamFormation: Sorting players by overall rating")
+                self.line_optimizer.forwards.sort(key=lambda p: p.get('overall_rating', 0), reverse=True)
+                self.line_optimizer.defensemen.sort(key=lambda p: p.get('overall_rating', 0), reverse=True)
+                self.line_optimizer.goalies.sort(key=lambda p: p.get('overall_rating', 0), reverse=True)
+            except Exception as position_error:
+                print(f"TeamFormation: Error categorizing players by position: {position_error}")
+                traceback.print_exc()
+                # Create empty lists if categorization fails
+                self.line_optimizer.forwards = []
+                self.line_optimizer.defensemen = []
+                self.line_optimizer.goalies = []
+            
+            # Fetch coach data
+            print(f"TeamFormation: Fetching coach data for coach ID: {self.team.get('coach_id')}")
+            try:
+                self.coach = self._get_coach(self.team.get('coach_id'))
+                
+                # Initialize coach strategy with fetched data
+                if self.coach:
+                    print(f"TeamFormation: Initializing coach strategy with coach: {self.coach.get('name')}")
+                    self.coach_strategy = CoachStrategy(self.coach)
                 else:
-                    position = getattr(player, 'position_primary', getattr(player, 'position', ''))
-                    
-                if position in ['LW', 'C', 'RW']:
-                    self.forwards.append(player)
-                elif position in ['LD', 'RD']:
-                    self.defensemen.append(player)
-                elif position in ['G', 'Goalie']:
-                    self.goalies.append(player)
-            
-            # Sort by rating
-            self.forwards.sort(key=lambda p: self.get_player_rating(p), reverse=True)
-            self.defensemen.sort(key=lambda p: self.get_player_rating(p), reverse=True)
-            self.goalies.sort(key=lambda p: self.get_player_rating(p), reverse=True)
-            
-            if self.debug:
-                print(f"Sorted {len(self.forwards)} forwards, {len(self.defensemen)} defensemen, {len(self.goalies)} goalies")
+                    print("TeamFormation: No coach found, using default coach strategy")
+                    # Use default coach if none found
+                    self.coach_strategy = CoachStrategy()
+            except Exception as coach_error:
+                print(f"TeamFormation: Error setting up coach strategy: {coach_error}")
+                traceback.print_exc()
+                # Use default coach if there's an error
+                print("TeamFormation: Using default coach strategy due to error")
+                self.coach_strategy = CoachStrategy()
                 
-                # Print top players from each position with their ratings
-                for i, p in enumerate(self.forwards[:3]):
-                    name = self._get_player_name(p)
-                    position = self._get_player_position(p)
-                    rating = self.get_player_rating(p)
-                    print(f"Forward #{i+1}: {name} ({position}) - Rating: {rating}")
-                
-                for i, p in enumerate(self.defensemen[:2]):
-                    name = self._get_player_name(p)
-                    position = self._get_player_position(p)
-                    rating = self.get_player_rating(p)
-                    print(f"Defenseman #{i+1}: {name} ({position}) - Rating: {rating}")
-                
-                for i, p in enumerate(self.goalies[:1]):
-                    name = self._get_player_name(p)
-                    rating = self.get_player_rating(p)
-                    print(f"Goalie #{i+1}: {name} - Rating: {rating}")
-            
-            # Initialize chemistry calculator
-            self.chemistry_calculator = ChemistryCalculator(self.forwards, self.defensemen, self.coach_data)
-            
-            # Initialize line optimizer
-            self.line_optimizer = LineOptimizer(self.team_abbreviation)
-            self.line_optimizer.forwards = self.forwards
-            self.line_optimizer.defensemen = self.defensemen
-            self.line_optimizer.goalies = self.goalies
-            
-            # Initialize chemistry and team_rating
-            self.chemistry = {}
-            self.chemistry_cache = {}
-            self.team_rating = {}
-            
-            print(f"Team formation initialization successful for {self.team_abbreviation}\n")
+            print(f"TeamFormation: Initialization completed successfully for {self.team_abbreviation}")
             return True
             
         except Exception as e:
-            print(f"Error in TeamFormation.initialize: {e}")
+            print(f"Error initializing team formation: {e}")
             traceback.print_exc()
             return False
 
     def _get_team_by_abbreviation(self, abbreviation: str) -> Optional[Dict[str, Any]]:
-        """Get team data by abbreviation."""
+        """Get team info by abbreviation."""
         try:
-            # Using SQLAlchemy to query the database
-            team = Team.query.filter_by(abbreviation=abbreviation).first()
+            # Try SQLAlchemy first
+            try:
+                team = Team.query.filter_by(abbreviation=abbreviation).first()
+                
+                if team:
+                    return team.to_dict()
+            except Exception as sqlalchemy_error:
+                print(f"SQLAlchemy error in _get_team_by_abbreviation: {sqlalchemy_error}")
+                # Continue to try Supabase
             
-            if team:
-                return team.to_dict()
-            else:
-                print(f"No team found with abbreviation: {abbreviation}")
+            # If SQLAlchemy fails or returns no result, try Supabase
+            if self.supabase_client:
+                try:
+                    print(f"Trying to get team {abbreviation} from Supabase")
+                    response = self.supabase_client.table('Team').select('*').eq('abbreviation', abbreviation).execute()
+                    
+                    if response.data and len(response.data) > 0:
+                        print(f"Found team {abbreviation} in Supabase")
+                        return response.data[0]
+                    else:
+                        print(f"No team found for abbreviation {abbreviation} in Supabase")
+                except Exception as supabase_error:
+                    print(f"Supabase error in _get_team_by_abbreviation: {supabase_error}")
+            
+            # If all attempts fail, return None
+            print(f"No team found for {abbreviation}")
+            return None
                 
-                # If no team is found via SQLAlchemy, try Supabase directly
-                if self.supabase_client:
-                    try:
-                        print(f"Attempting to fetch team from Supabase for abbreviation: {abbreviation}")
-                        response = self.supabase_client.table('Team').select('*').eq('abbreviation', abbreviation).execute()
-                        
-                        if not response.error and response.data and len(response.data) > 0:
-                            print(f"Found team in Supabase: {response.data[0].get('name')}")
-                            return response.data[0]
-                        else:
-                            print(f"Team not found in Supabase either: {abbreviation}")
-                    except Exception as supabase_error:
-                        print(f"Error fetching team from Supabase: {supabase_error}")
-                
-                # Return dummy data for testing purposes
-                print(f"Creating dummy team for: {abbreviation}")
-                return {
-                    "id": 1,
-                    "name": f"{abbreviation} Team",
-                    "abbreviation": abbreviation,
-                    "city": "City",
-                    "logo_url": "https://example.com/logo.png",
-                    "primary_color": "#FF0000",
-                    "secondary_color": "#0000FF",
-                    "coach_id": None,
-                    "overall_rating": 75
-                }
         except Exception as e:
             print(f"Error in _get_team_by_abbreviation: {e}")
             traceback.print_exc()
             
-            # Return dummy data in case of error
-            return {
-                "id": 1,
-                "name": f"{abbreviation} Team",
-                "abbreviation": abbreviation,
-                "city": "City",
-                "logo_url": "https://example.com/logo.png",
-                "primary_color": "#FF0000",
-                "secondary_color": "#0000FF",
-                "coach_id": None,
-                "overall_rating": 75
-            }
+            # Return None in case of error
+            return None
     
     def _get_team_players(self, team_id: int) -> List[Dict[str, Any]]:
         """Get all players for a team."""
         try:
             # Using SQLAlchemy to query the database
-            players = Player.query.filter_by(team_id=team_id).all()
-            player_list = [player.to_dict() for player in players]
-            
-            # If we found players using SQLAlchemy, return them
-            if player_list:
-                print(f"Found {len(player_list)} players using SQLAlchemy for team_id: {team_id}")
-                return player_list
+            print(f"DEBUG: Attempting to fetch players using SQLAlchemy for team_id: {team_id}")
+            try:
+                players = Player.query.filter_by(team_id=team_id).all()
+                player_list = [player.to_dict() for player in players]
+                
+                # If we found players using SQLAlchemy, return them
+                if player_list:
+                    print(f"DEBUG: Found {len(player_list)} players using SQLAlchemy for team_id: {team_id}")
+                    return player_list
+            except Exception as sqlalchemy_error:
+                print(f"DEBUG: SQLAlchemy error: {sqlalchemy_error}")
                 
             # If no players found via SQLAlchemy, try Supabase directly
             if self.supabase_client:
                 try:
-                    print(f"Attempting to fetch players from Supabase for team_id: {team_id}")
+                    print(f"DEBUG: Attempting to fetch players from Supabase for team_id: {team_id}")
                     
                     # Try first by team abbreviation as that seems to be how frontend data is structured
-                    print(f"Trying to fetch players with team abbreviation: {self.team_abbreviation}")
+                    print(f"DEBUG: Trying to fetch players with team abbreviation: {self.team_abbreviation}")
                     response = self.supabase_client.table('Player').select('*').eq('team', self.team_abbreviation).execute()
                     
-                    if not response.error and response.data and len(response.data) > 0:
-                        print(f"Found {len(response.data)} players in Supabase using team abbreviation")
+                    print(f"DEBUG: Supabase response for team abbreviation: {response}")
+                    print(f"DEBUG: Response data: {response.data[:2] if hasattr(response, 'data') and response.data else 'No data'}")
+                    print(f"DEBUG: Response error: {response.error if hasattr(response, 'error') else 'No error attribute'}")
+                    
+                    if not response.error and hasattr(response, 'data') and response.data and len(response.data) > 0:
+                        print(f"DEBUG: Found {len(response.data)} players in Supabase using team abbreviation")
                         if self.debug:
-                            print(f"First player: {response.data[0]}")
-                            print(f"Available fields: {list(response.data[0].keys())}")
-                            print(f"Overall rating field value: {response.data[0].get('overall_rating')}")
+                            print(f"DEBUG: First player: {response.data[0]}")
+                            print(f"DEBUG: Available fields: {list(response.data[0].keys())}")
+                            print(f"DEBUG: Overall rating field value: {response.data[0].get('overall_rating')}")
+                        
                         return response.data
                     else:
-                        print(f"No players found with team abbreviation '{self.team_abbreviation}'. Trying with team_id")
+                        print(f"DEBUG: No players found with team abbreviation '{self.team_abbreviation}'. Trying with team_id")
                         response = self.supabase_client.table('Player').select('*').eq('team_id', team_id).execute()
                         
-                        if not response.error and response.data and len(response.data) > 0:
-                            print(f"Found {len(response.data)} players in Supabase using team_id")
+                        print(f"DEBUG: Supabase response for team_id: {response}")
+                        print(f"DEBUG: Response data for team_id: {response.data[:2] if hasattr(response, 'data') and response.data else 'No data'}")
+                        
+                        if not response.error and hasattr(response, 'data') and response.data and len(response.data) > 0:
+                            print(f"DEBUG: Found {len(response.data)} players in Supabase using team_id")
+                            
                             return response.data
                         else:
-                            print(f"No players found with team_id {team_id} either")
+                            print(f"DEBUG: No players found with team_id {team_id} either")
                             # Try a broad search to see what's available
                             try:
+                                print(f"DEBUG: Performing sample query to see what players exist")
                                 sample_response = self.supabase_client.table('Player').select('*').limit(5).execute()
-                                if not sample_response.error and sample_response.data:
-                                    print(f"Sample of available players in database: {len(sample_response.data)}")
+                                if not sample_response.error and hasattr(sample_response, 'data') and sample_response.data:
+                                    print(f"DEBUG: Sample of available players in database: {len(sample_response.data)}")
                                     if sample_response.data:
-                                        print(f"Sample player: {sample_response.data[0]}")
-                                        print(f"Sample player team field: {sample_response.data[0].get('team')}")
+                                        print(f"DEBUG: Sample player: {sample_response.data[0]}")
+                                        print(f"DEBUG: Sample player team field: {sample_response.data[0].get('team')}")
+                                        print(f"DEBUG: Available teams: {set([p.get('team') for p in sample_response.data if p.get('team')])}")
                             except Exception as sample_error:
-                                print(f"Error in sample player query: {sample_error}")
+                                print(f"DEBUG: Error in sample player query: {sample_error}")
                             
                 except Exception as supabase_error:
-                    print(f"Error fetching players from Supabase: {supabase_error}")
+                    print(f"DEBUG: Error fetching players from Supabase: {supabase_error}")
                     traceback.print_exc()
             
-            # Generate dummy players for testing purposes
-            print(f"Generating dummy players for team_id: {team_id}")
-            return self._generate_dummy_players(team_id)
+            # No valid player data found, return empty list
+            print(f"DEBUG: No valid player data found, returning empty list")
+            return []
             
         except Exception as e:
-            print(f"Error in _get_team_players: {e}")
+            print(f"DEBUG: Error in _get_team_players: {e}")
             traceback.print_exc()
             
-            # Return dummy players in case of error
-            return self._generate_dummy_players(team_id)
-    
-    def _generate_dummy_players(self, team_id: int) -> List[Dict[str, Any]]:
-        """Generate dummy players for testing purposes."""
-        import random
-        
-        dummy_players = []
-        
-        # Generate forwards (12)
-        positions = ['LW', 'C', 'RW'] * 4  # 4 of each position for 4 lines
-        for i, position in enumerate(positions):
-            player_name = f"{position} Player {i+1}"
-            player = {
-                'id': 1000 + i,
-                'first_name': player_name.split()[0],
-                'last_name': f"#{i+1}",
-                'full_name': player_name,
-                'position': position,
-                'position_primary': position,
-                'position_secondary': random.choice(['LW', 'C', 'RW']),
-                'overall_rating': random.randint(70, 85),
-                'potential': random.randint(1, 5),
-                'age': random.randint(20, 35),
-                'team_id': team_id,
-                'team': self.team_abbreviation,
-                'shoots': random.choice(['L', 'R']),
-                'height': random.randint(68, 78),
-                'weight': random.randint(170, 220),
-                'player_type': random.choice(['Sniper', 'Playmaker', 'Power Forward', '2 Way Forward']),
-                'skating': random.randint(70, 85),
-                'shooting': random.randint(70, 85),
-                'passing': random.randint(70, 85),
-                'defense': random.randint(70, 85),
-                'physical': random.randint(70, 85)
-            }
-            dummy_players.append(player)
-        
-        # Generate defensemen (6)
-        positions = ['LD', 'RD'] * 3  # 3 pairs
-        for i, position in enumerate(positions):
-            player_name = f"{position} Player {i+1}"
-            player = {
-                'id': 2000 + i,
-                'first_name': player_name.split()[0],
-                'last_name': f"#{i+1}",
-                'full_name': player_name,
-                'position': position,
-                'position_primary': position,
-                'position_secondary': 'RD' if position == 'LD' else 'LD',
-                'overall_rating': random.randint(70, 85),
-                'potential': random.randint(1, 5),
-                'age': random.randint(20, 35),
-                'team_id': team_id,
-                'team': self.team_abbreviation,
-                'shoots': 'L' if position == 'LD' else 'R',
-                'height': random.randint(70, 80),
-                'weight': random.randint(185, 230),
-                'player_type': random.choice(['Offensive Def.', 'Defensive Def.', '2 Way Def.']),
-                'skating': random.randint(70, 85),
-                'shooting': random.randint(70, 85),
-                'passing': random.randint(70, 85),
-                'defense': random.randint(70, 85),
-                'physical': random.randint(70, 85)
-            }
-            dummy_players.append(player)
-        
-        # Generate goalies (2)
-        for i in range(2):
-            player_name = f"Goalie {i+1}"
-            player = {
-                'id': 3000 + i,
-                'first_name': player_name.split()[0],
-                'last_name': f"#{i+1}",
-                'full_name': player_name,
-                'position': 'G',
-                'position_primary': 'G',
-                'position_secondary': 'G',
-                'overall_rating': random.randint(75, 88),
-                'potential': random.randint(1, 5),
-                'age': random.randint(20, 35),
-                'team_id': team_id,
-                'team': self.team_abbreviation,
-                'shoots': random.choice(['L', 'R']),
-                'height': random.randint(72, 80),
-                'weight': random.randint(180, 220),
-                'player_type': 'Goalie',
-                'high_shots': random.randint(70, 85),
-                'low_shots': random.randint(70, 85),
-                'quickness': random.randint(70, 85),
-                'positioning': random.randint(70, 85),
-                'puck_handling': random.randint(70, 85)
-            }
-            dummy_players.append(player)
-        
-        return dummy_players
+            # Return empty list in case of error
+            print(f"DEBUG: Returning empty list due to error")
+            return []
     
     def _get_coach(self, coach_id: Optional[int]) -> Optional[Dict[str, Any]]:
         """Get coach data."""
@@ -424,15 +323,9 @@ class TeamFormation:
         except Exception as e:
             print(f"Error fetching coach: {e}")
             
-        # Return dummy data if all else fails
-        return {
-            "id": coach_id,
-            "name": "Coach Smith",
-            "strategy_type": "Balanced",
-            "offensive_style": 70,
-            "defensive_style": 60,
-            "preferred_formations": ["1-3-1", "2-1-2"]
-        }
+        # No valid coach data found
+        print(f"No coach found for coach_id: {coach_id}")
+        return None
 
     def generate_optimal_lines(self) -> Dict[str, Any]:
         """
@@ -505,26 +398,15 @@ class TeamFormation:
             except Exception as rating_error:
                 print(f"TeamFormation: Error calculating team rating: {rating_error}")
                 traceback.print_exc()
-                # Create default rating values
+                # Return error state with zeros
                 self.team_rating = {
-                    'overall': 75,
-                    'offense': 75,
-                    'defense': 75,
-                    'special_teams': 75,
-                    'goaltending': 75,
-                    'component_ratings': {
-                        'line_1': 80,
-                        'line_2': 77,
-                        'line_3': 74,
-                        'line_4': 70,
-                        'pair_1': 80,
-                        'pair_2': 76,
-                        'pair_3': 73,
-                        'power_play_1': 79,
-                        'power_play_2': 76,
-                        'penalty_kill_1': 78,
-                        'penalty_kill_2': 75
-                    }
+                    'overall': 0,
+                    'offense': 0,
+                    'defense': 0,
+                    'special_teams': 0,
+                    'goaltending': 0,
+                    'component_ratings': {},
+                    'error': f"Failed to calculate team rating: {str(rating_error)}"
                 }
             
             # Store the resulting optimized lines
@@ -560,23 +442,23 @@ class TeamFormation:
                     'overall': 0.0
                 },
                 'team_rating': {
-                    'overall': 75,
-                    'offense': 75,
-                    'defense': 75,
-                    'special_teams': 75,
-                    'goaltending': 75,
+                    'overall': 0,
+                    'offense': 0,
+                    'defense': 0,
+                    'special_teams': 0,
+                    'goaltending': 0,
                     'component_ratings': {
-                        'line_1': 80,
-                        'line_2': 77,
-                        'line_3': 74,
-                        'line_4': 70,
-                        'pair_1': 80,
-                        'pair_2': 76,
-                        'pair_3': 73,
-                        'power_play_1': 79,
-                        'power_play_2': 76,
-                        'penalty_kill_1': 78,
-                        'penalty_kill_2': 75
+                        'line_1': 0,
+                        'line_2': 0,
+                        'line_3': 0,
+                        'line_4': 0,
+                        'pair_1': 0,
+                        'pair_2': 0,
+                        'pair_3': 0,
+                        'power_play_1': 0,
+                        'power_play_2': 0,
+                        'penalty_kill_1': 0,
+                        'penalty_kill_2': 0
                     }
                 }
             }
@@ -1174,19 +1056,17 @@ class TeamFormation:
     
     def _calculate_team_rating(self, lines: Dict[str, Any]) -> Dict[str, float]:
         """
-        Calculate team rating based on player attributes, line combinations, and chemistry.
+        Calculate overall team rating based on player ratings and chemistry.
         
         Args:
-            lines: Dictionary of line combinations
+            lines: The line combinations to use for calculation
             
         Returns:
-            Dictionary with team rating information
+            Dictionary containing the team rating components
         """
-        print("\n=== CALCULATING TEAM RATING ===")
-        print(f"Team: {self.team_abbreviation}")
-        print(f"Debug mode: {self.debug}")
+        print("\n=== CALCULATING TEAM RATINGS ===")
         
-        # Define component weights (must sum to 1.0)
+        # Define weights for each component
         weights = {
             'line_1': 0.17,
             'line_2': 0.11,
@@ -1204,690 +1084,573 @@ class TeamFormation:
             'goaltending': 0.10
         }
         
-        print(f"Weight distribution: {weights}")
-        print(f"Total weight sum: {sum(weights.values())}")
-        
-        # Initialize component ratings dictionary
+        # Initialize component ratings
         component_ratings = {}
         
-        # Calculate forward line ratings
-        print("\n--- FORWARD LINES ---")
-        if 'forward_lines' in lines:
-            print(f"Number of forward lines: {len(lines['forward_lines'])}")
-            for i, line in enumerate(lines['forward_lines']):
-                if i < 4:  # Only consider the first 4 lines
-                    print(f"\nLine {i+1} configuration:")
-                    # Get players in this line
-                    lw_player = line.get('LW')
-                    c_player = line.get('C')
-                    rw_player = line.get('RW')
+        # If we have no valid line data but have valid player data, calculate from players directly
+        if (not lines or not lines.get('forward_lines') or not lines.get('defense_pairs')) and self.players:
+            print("No valid line data but have player data - calculating from players directly")
+            
+            # Extract players by position
+            forwards = [p for p in self.players if p.get('position_primary') in ['LW', 'C', 'RW']]
+            defensemen = [p for p in self.players if p.get('position_primary') in ['LD', 'RD']]
+            goalies = [p for p in self.players if p.get('position_primary') in ['G', 'Goalie']]
+            
+            # Sort by overall rating
+            try:
+                forwards.sort(key=lambda p: self.get_player_rating(p), reverse=True)
+                defensemen.sort(key=lambda p: self.get_player_rating(p), reverse=True)
+                goalies.sort(key=lambda p: self.get_player_rating(p), reverse=True)
+                
+                # Calculate line ratings from sorted players
+                forward_line_ratings = []
+                for i in range(0, min(12, len(forwards)), 3):
+                    line = forwards[i:i+3]
+                    if line:
+                        line_rating = sum(self.get_player_rating(p) for p in line) / len(line)
+                        forward_line_ratings.append(line_rating)
+                
+                defense_pair_ratings = []
+                for i in range(0, min(6, len(defensemen)), 2):
+                    pair = defensemen[i:i+2]
+                    if pair:
+                        pair_rating = sum(self.get_player_rating(p) for p in pair) / len(pair)
+                        defense_pair_ratings.append(pair_rating)
+                
+                # Assign ratings to components
+                for i, rating in enumerate(forward_line_ratings):
+                    component_ratings[f'line_{i+1}'] = rating
                     
-                    # Print player details
-                    print(f"  LW: {self._get_player_name(lw_player) if lw_player and lw_player != 'Empty' else 'Empty'}")
-                    print(f"  C: {self._get_player_name(c_player) if c_player and c_player != 'Empty' else 'Empty'}")
-                    print(f"  RW: {self._get_player_name(rw_player) if rw_player and rw_player != 'Empty' else 'Empty'}")
+                for i, rating in enumerate(defense_pair_ratings):
+                    component_ratings[f'pair_{i+1}'] = rating
+                
+                # Calculate goalie rating
+                if goalies:
+                    goalie_rating = self.get_player_rating(goalies[0])
+                    component_ratings['goaltending'] = goalie_rating
                     
-                    players = [p for p in [lw_player, c_player, rw_player] if p and p != 'Empty']
-                    print(f"  Valid players in line: {len(players)}")
-                    
-                    # Calculate line rating as average of player ratings
-                    if players and len(players) > 0:
-                        player_details = []
-                        for p in players:
-                            rating = self.get_player_rating(p)
-                            player_name = self._get_player_name(p)
-                            position = self._get_player_position(p)
-                            player_details.append(f"{player_name} ({position}): {rating}")
+                # For special teams, use top players
+                if len(forwards) >= 3 and len(defensemen) >= 2:
+                    pp1_rating = (sum(self.get_player_rating(p) for p in forwards[:3]) + 
+                                sum(self.get_player_rating(p) for p in defensemen[:2])) / 5
+                    component_ratings['power_play_1'] = pp1_rating
+                
+                if len(forwards) >= 6 and len(defensemen) >= 4:
+                    pp2_rating = (sum(self.get_player_rating(p) for p in forwards[3:6]) + 
+                                sum(self.get_player_rating(p) for p in defensemen[2:4])) / 5
+                    component_ratings['power_play_2'] = pp2_rating
+                
+                if len(forwards) >= 4 and len(defensemen) >= 2:
+                    pk1_rating = (sum(self.get_player_rating(p) for p in forwards[:4:2]) + 
+                                sum(self.get_player_rating(p) for p in defensemen[:2])) / 4
+                    component_ratings['penalty_kill_1'] = pk1_rating
+                
+                if len(forwards) >= 8 and len(defensemen) >= 4:
+                    pk2_rating = (sum(self.get_player_rating(p) for p in forwards[4:8:2]) + 
+                                sum(self.get_player_rating(p) for p in defensemen[2:4])) / 4
+                    component_ratings['penalty_kill_2'] = pk2_rating
+            except Exception as direct_calc_error:
+                print(f"Error in direct player calculation: {direct_calc_error}")
+                traceback.print_exc()
+        
+        # Otherwise, calculate ratings from provided lines if available
+        # (Keep the existing calculation from lines logic...)
+        elif lines:
+            print("\n--- FORWARD LINES ---")
+            if 'forward_lines' in lines:
+                print(f"Number of forward lines: {len(lines['forward_lines'])}")
+                for i, line in enumerate(lines['forward_lines']):
+                    if i < 4:  # Only consider the first 4 lines
+                        print(f"\nLine {i+1} configuration: {line}")
+                        # Get players in this line
+                        lw_player = line.get('LW')
+                        c_player = line.get('C')
+                        rw_player = line.get('RW')
                         
-                        ratings = [self.get_player_rating(p) for p in players]
-                        valid_ratings = [r for r in ratings if r > 0]
+                        # Print raw player objects
+                        print(f"  LW player type: {type(lw_player)}")
+                        print(f"  C player type: {type(c_player)}")
+                        print(f"  RW player type: {type(rw_player)}")
                         
-                        print(f"  Player ratings: {', '.join(player_details)}")
+                        players = [p for p in [lw_player, c_player, rw_player] if p and p != 'Empty']
+                        print(f"  Valid players in line: {len(players)}")
                         
-                        if valid_ratings and len(valid_ratings) > 0:
-                            line_rating = sum(valid_ratings) / len(valid_ratings)
-                            component_ratings[f'line_{i+1}'] = round(line_rating, 1)
-                            print(f"  Line {i+1} Rating (before chemistry): {line_rating:.1f} (average of {valid_ratings})")
+                        # Calculate line rating as average of player ratings
+                        if players and len(players) > 0:
+                            ratings = []
+                            for p in players:
+                                rating = self.get_player_rating(p)
+                                ratings.append(rating)
+                            
+                            valid_ratings = [r for r in ratings if r > 0]
+                            
+                            if valid_ratings and len(valid_ratings) > 0:
+                                line_rating = sum(valid_ratings) / len(valid_ratings)
+                                component_ratings[f'line_{i+1}'] = round(line_rating, 1)
+                                print(f"  Line {i+1} Rating (before chemistry): {line_rating:.1f} (average of {valid_ratings})")
+                            else:
+                                component_ratings[f'line_{i+1}'] = 0
+                                print(f"  Line {i+1} Rating: 0 (no valid ratings)")
                         else:
                             component_ratings[f'line_{i+1}'] = 0
-                            print(f"  Line {i+1} Rating: 0 (no valid ratings)")
-                    else:
-                        component_ratings[f'line_{i+1}'] = 0
-                        print(f"  Line {i+1} Rating: 0 (no valid players)")
-        
-        # Calculate defense pair ratings
-        print("\n--- DEFENSE PAIRS ---")
-        if 'defense_pairs' in lines:
-            print(f"Number of defense pairs: {len(lines['defense_pairs'])}")
-            for i, pair in enumerate(lines['defense_pairs']):
-                if i < 3:  # Only consider the first 3 pairs
-                    print(f"\nPair {i+1} configuration:")
-                    # Get players in this pair
-                    ld_player = pair.get('LD')
-                    rd_player = pair.get('RD')
-                    
-                    # Print player details
-                    print(f"  LD: {self._get_player_name(ld_player) if ld_player and ld_player != 'Empty' else 'Empty'}")
-                    print(f"  RD: {self._get_player_name(rd_player) if rd_player and rd_player != 'Empty' else 'Empty'}")
-                    
-                    players = [p for p in [ld_player, rd_player] if p and p != 'Empty']
-                    print(f"  Valid players in pair: {len(players)}")
-                    
-                    # Calculate pair rating as average of player ratings
-                    if players and len(players) > 0:
-                        player_details = []
-                        for p in players:
-                            rating = self.get_player_rating(p)
-                            player_name = self._get_player_name(p)
-                            position = self._get_player_position(p)
-                            player_details.append(f"{player_name} ({position}): {rating}")
+                            print(f"  Line {i+1} Rating: 0 (no valid players)")
+            
+            # Calculate defense pair ratings
+            print("\n--- DEFENSE PAIRS ---")
+            if 'defense_pairs' in lines:
+                print(f"Number of defense pairs: {len(lines['defense_pairs'])}")
+                for i, pair in enumerate(lines['defense_pairs']):
+                    if i < 3:  # Only consider the first 3 pairs
+                        print(f"\nPair {i+1} configuration: {pair}")
+                        # Get players in this pair
+                        ld_player = pair.get('LD')
+                        rd_player = pair.get('RD')
                         
-                        ratings = [self.get_player_rating(p) for p in players]
-                        valid_ratings = [r for r in ratings if r > 0]
+                        # Print raw player objects
+                        print(f"  LD player type: {type(ld_player)}")
+                        print(f"  RD player type: {type(rd_player)}")
                         
-                        print(f"  Player ratings: {', '.join(player_details)}")
+                        players = [p for p in [ld_player, rd_player] if p and p != 'Empty']
+                        print(f"  Valid players in pair: {len(players)}")
                         
-                        if valid_ratings and len(valid_ratings) > 0:
-                            pair_rating = sum(valid_ratings) / len(valid_ratings)
-                            component_ratings[f'pair_{i+1}'] = round(pair_rating, 1)
-                            print(f"  Pair {i+1} Rating (before chemistry): {pair_rating:.1f} (average of {valid_ratings})")
+                        # Calculate pair rating as average of player ratings
+                        if players and len(players) > 0:
+                            ratings = []
+                            for p in players:
+                                rating = self.get_player_rating(p)
+                                ratings.append(rating)
+                            
+                            valid_ratings = [r for r in ratings if r > 0]
+                            
+                            if valid_ratings and len(valid_ratings) > 0:
+                                pair_rating = sum(valid_ratings) / len(valid_ratings)
+                                component_ratings[f'pair_{i+1}'] = round(pair_rating, 1)
+                                print(f"  Pair {i+1} Rating (before chemistry): {pair_rating:.1f} (average of {valid_ratings})")
+                            else:
+                                component_ratings[f'pair_{i+1}'] = 0
+                                print(f"  Pair {i+1} Rating: 0 (no valid ratings)")
                         else:
                             component_ratings[f'pair_{i+1}'] = 0
-                            print(f"  Pair {i+1} Rating: 0 (no valid ratings)")
-                    else:
-                        component_ratings[f'pair_{i+1}'] = 0
-                        print(f"  Pair {i+1} Rating: 0 (no valid players)")
-        
-        # Calculate power play ratings
-        print("\n--- POWER PLAY UNITS ---")
-        pp_units = ['power_play_1', 'power_play_2']
-        for i, unit_name in enumerate(pp_units):
-            if unit_name in lines:
-                print(f"\nPower Play Unit {i+1}:")
-                unit = lines[unit_name]
-                forwards = unit.get('forwards', [])
-                defense = unit.get('defense', [])
-                players = forwards + defense
-                
-                print(f"  Forwards: {len(forwards)}, Defense: {len(defense)}")
-                
-                # Calculate unit rating as average of player ratings
-                valid_players = [p for p in players if p and p != 'Empty']
-                if valid_players and len(valid_players) > 0:
-                    player_details = []
-                    for p in valid_players:
-                        rating = self.get_player_rating(p)
-                        player_name = self._get_player_name(p)
-                        position = self._get_player_position(p)
-                        player_details.append(f"{player_name} ({position}): {rating}")
+                            print(f"  Pair {i+1} Rating: 0 (no valid players)")
+            
+            # Calculate power play ratings
+            print("\n--- POWER PLAY UNITS ---")
+            pp_units = ['power_play_1', 'power_play_2']
+            for i, unit_name in enumerate(pp_units):
+                if unit_name in lines:
+                    print(f"\nPower Play Unit {i+1}:")
+                    unit = lines[unit_name]
+                    forwards = unit.get('forwards', [])
+                    defense = unit.get('defense', [])
+                    players = forwards + defense
                     
-                    ratings = [self.get_player_rating(p) for p in valid_players]
-                    valid_ratings = [r for r in ratings if r > 0]
-                    
-                    print(f"  Player ratings: {', '.join(player_details)}")
-                    
-                    if valid_ratings and len(valid_ratings) > 0:
-                        unit_rating = sum(valid_ratings) / len(valid_ratings)
-                        component_ratings[unit_name] = round(unit_rating, 1)
-                        print(f"  PP{i+1} Rating (before chemistry): {unit_rating:.1f} (average of {valid_ratings})")
+                    # Calculate unit rating as average of player ratings
+                    valid_players = [p for p in players if p and p != 'Empty']
+                    if valid_players and len(valid_players) > 0:
+                        ratings = []
+                        for p in valid_players:
+                            rating = self.get_player_rating(p)
+                            ratings.append(rating)
+                        
+                        valid_ratings = [r for r in ratings if r > 0]
+                        
+                        if valid_ratings and len(valid_ratings) > 0:
+                            unit_rating = sum(valid_ratings) / len(valid_ratings)
+                            component_ratings[unit_name] = round(unit_rating, 1)
+                            print(f"  PP{i+1} Rating (before chemistry): {unit_rating:.1f} (average of {valid_ratings})")
+                        else:
+                            component_ratings[unit_name] = 0
+                            print(f"  PP{i+1} Rating: 0 (no valid ratings)")
                     else:
                         component_ratings[unit_name] = 0
-                        print(f"  PP{i+1} Rating: 0 (no valid ratings)")
-                else:
-                    component_ratings[unit_name] = 0
-                    print(f"  PP{i+1} Rating: 0 (no valid players)")
-        
-        # Calculate penalty kill ratings
-        print("\n--- PENALTY KILL UNITS ---")
-        pk_units = ['penalty_kill_1', 'penalty_kill_2']
-        for i, unit_name in enumerate(pk_units):
-            if unit_name in lines:
-                print(f"\nPenalty Kill Unit {i+1}:")
-                unit = lines[unit_name]
-                forwards = unit.get('forwards', [])
-                defense = unit.get('defense', [])
-                players = forwards + defense
-                
-                print(f"  Forwards: {len(forwards)}, Defense: {len(defense)}")
-                
-                # Calculate unit rating as average of player ratings
-                valid_players = [p for p in players if p and p != 'Empty']
-                if valid_players and len(valid_players) > 0:
-                    player_details = []
-                    for p in valid_players:
-                        rating = self.get_player_rating(p)
-                        player_name = self._get_player_name(p)
-                        position = self._get_player_position(p)
-                        player_details.append(f"{player_name} ({position}): {rating}")
+                        print(f"  PP{i+1} Rating: 0 (no valid players)")
+            
+            # Calculate penalty kill ratings
+            print("\n--- PENALTY KILL UNITS ---")
+            pk_units = ['penalty_kill_1', 'penalty_kill_2']
+            for i, unit_name in enumerate(pk_units):
+                if unit_name in lines:
+                    print(f"\nPenalty Kill Unit {i+1}:")
+                    unit = lines[unit_name]
+                    forwards = unit.get('forwards', [])
+                    defense = unit.get('defense', [])
+                    players = forwards + defense
                     
-                    ratings = [self.get_player_rating(p) for p in valid_players]
-                    valid_ratings = [r for r in ratings if r > 0]
-                    
-                    print(f"  Player ratings: {', '.join(player_details)}")
-                    
-                    if valid_ratings and len(valid_ratings) > 0:
-                        unit_rating = sum(valid_ratings) / len(valid_ratings)
-                        component_ratings[unit_name] = round(unit_rating, 1)
-                        print(f"  PK{i+1} Rating (before chemistry): {unit_rating:.1f} (average of {valid_ratings})")
+                    # Calculate unit rating as average of player ratings
+                    valid_players = [p for p in players if p and p != 'Empty']
+                    if valid_players and len(valid_players) > 0:
+                        ratings = []
+                        for p in valid_players:
+                            rating = self.get_player_rating(p)
+                            ratings.append(rating)
+                        
+                        valid_ratings = [r for r in ratings if r > 0]
+                        
+                        if valid_ratings and len(valid_ratings) > 0:
+                            unit_rating = sum(valid_ratings) / len(valid_ratings)
+                            component_ratings[unit_name] = round(unit_rating, 1)
+                            print(f"  PK{i+1} Rating (before chemistry): {unit_rating:.1f} (average of {valid_ratings})")
+                        else:
+                            component_ratings[unit_name] = 0
+                            print(f"  PK{i+1} Rating: 0 (no valid ratings)")
                     else:
                         component_ratings[unit_name] = 0
-                        print(f"  PK{i+1} Rating: 0 (no valid ratings)")
-                else:
-                    component_ratings[unit_name] = 0
-                    print(f"  PK{i+1} Rating: 0 (no valid players)")
-        
-        # Calculate other special teams ratings
-        print("\n--- OTHER SPECIAL TEAMS ---")
-        if 'other_situations' in lines:
-            other_situations = lines['other_situations']
-            print(f"Other situations: {list(other_situations.keys())}")
-            
-            # Combined special teams rating (shootout, overtime, etc.)
-            all_special_players = []
-            
-            # Overtime
-            if 'overtime' in other_situations:
-                overtime = other_situations['overtime']
-                ot_forwards = overtime.get('forwards', [])
-                ot_defense = overtime.get('defensemen', [])
-                ot_players = [p for p in ot_forwards + ot_defense if p and p != 'Empty']
-                all_special_players.extend(ot_players)
-                
-                print(f"  Overtime players: {len(ot_players)}")
-                if ot_players:
-                    ot_player_details = []
-                    for p in ot_players:
-                        rating = self.get_player_rating(p)
-                        player_name = self._get_player_name(p)
-                        position = self._get_player_position(p)
-                        ot_player_details.append(f"{player_name} ({position}): {rating}")
-                    print(f"  OT player ratings: {', '.join(ot_player_details)}")
+                        print(f"  PK{i+1} Rating: 0 (no valid players)")
             
             # Calculate other special teams rating
-            if all_special_players:
-                ratings = [self.get_player_rating(p) for p in all_special_players]
-                valid_ratings = [r for r in ratings if r > 0]
+            print("\n--- OTHER SPECIAL TEAMS ---")
+            if 'other_situations' in lines:
+                other_situations = lines['other_situations']
+                players = []
                 
-                if valid_ratings:
-                    special_rating = sum(valid_ratings) / len(valid_ratings)
-                    component_ratings['other_special_teams'] = round(special_rating, 1)
-                    print(f"  Other Special Teams Rating: {special_rating:.1f} (average of {valid_ratings})")
+                # Collect players from overtime
+                if 'overtime' in other_situations:
+                    overtime = other_situations['overtime']
+                    players.extend(overtime.get('forwards', []))
+                    players.extend(overtime.get('defensemen', []))
+                
+                # Add shootout players
+                if 'shootout' in other_situations:
+                    shootout = other_situations['shootout']
+                    shootout_players = shootout.get('players', [])
+                    players.extend(shootout_players)
+                
+                # Calculate special teams rating
+                valid_players = [p for p in players if p and p != 'Empty']
+                if valid_players and len(valid_players) > 0:
+                    ratings = []
+                    for p in valid_players:
+                        rating = self.get_player_rating(p)
+                        ratings.append(rating)
+                    
+                    valid_ratings = [r for r in ratings if r > 0]
+                    
+                    if valid_ratings and len(valid_ratings) > 0:
+                        st_rating = sum(valid_ratings) / len(valid_ratings)
+                        component_ratings['other_special_teams'] = round(st_rating, 1)
+                        print(f"  Other Special Teams Rating: {st_rating:.1f} (average of {valid_ratings})")
+                    else:
+                        component_ratings['other_special_teams'] = 0
+                        print(f"  Other Special Teams Rating: 0 (no valid ratings)")
                 else:
                     component_ratings['other_special_teams'] = 0
-                    print(f"  Other Special Teams Rating: 0 (no valid ratings)")
-            else:
-                component_ratings['other_special_teams'] = 0
-                print(f"  Other Special Teams Rating: 0 (no players)")
-        else:
-            component_ratings['other_special_teams'] = 0
-            print(f"  Other Special Teams Rating: 0 (no other situations defined)")
-        
-        # Calculate shootout rating
-        print("\n--- SHOOTOUT ---")
-        if 'other_situations' in lines and 'shootout' in lines['other_situations']:
-            shootout = lines['other_situations']['shootout']
-            shootout_players = shootout.get('players', [])
-            valid_shootout_players = [p for p in shootout_players if p and p != 'Empty']
+                    print(f"  Other Special Teams Rating: 0 (no valid players)")
             
-            print(f"  Shootout players: {len(valid_shootout_players)}")
-            
-            if valid_shootout_players:
-                player_details = []
-                for p in valid_shootout_players:
-                    rating = self.get_player_rating(p)
-                    player_name = self._get_player_name(p)
-                    position = self._get_player_position(p)
-                    player_details.append(f"{player_name} ({position}): {rating}")
+            # Calculate shootout rating separately if we have dedicated players
+            print("\n--- SHOOTOUT ---")
+            if 'other_situations' in lines and 'shootout' in lines['other_situations']:
+                shootout = lines['other_situations']['shootout']
+                shootout_players = shootout.get('players', [])
                 
-                print(f"  Player ratings: {', '.join(player_details)}")
-                
-                ratings = [self.get_player_rating(p) for p in valid_shootout_players]
-                valid_ratings = [r for r in ratings if r > 0]
-                
-                if valid_ratings:
-                    shootout_rating = sum(valid_ratings) / len(valid_ratings)
-                    component_ratings['shootout'] = round(shootout_rating, 1)
-                    print(f"  Shootout Rating: {shootout_rating:.1f} (average of {valid_ratings})")
+                valid_players = [p for p in shootout_players if p and p != 'Empty']
+                if valid_players and len(valid_players) > 0:
+                    ratings = []
+                    for p in valid_players:
+                        rating = self.get_player_rating(p)
+                        ratings.append(rating)
+                    
+                    valid_ratings = [r for r in ratings if r > 0]
+                    
+                    if valid_ratings and len(valid_ratings) > 0:
+                        so_rating = sum(valid_ratings) / len(valid_ratings)
+                        component_ratings['shootout'] = round(so_rating, 1)
+                        print(f"  Shootout Rating: {so_rating:.1f} (average of {valid_ratings})")
+                    else:
+                        component_ratings['shootout'] = 0
+                        print(f"  Shootout Rating: 0 (no valid ratings)")
                 else:
                     component_ratings['shootout'] = 0
-                    print(f"  Shootout Rating: 0 (no valid ratings)")
-            else:
-                component_ratings['shootout'] = 0
-                print(f"  Shootout Rating: 0 (no valid players)")
-        else:
-            component_ratings['shootout'] = 0
-            print(f"  Shootout Rating: 0 (no shootout defined)")
-        
-        # Calculate goaltending rating
-        print("\n--- GOALTENDING ---")
-        if 'goalies' in lines:
-            goalies = lines['goalies']
-            valid_goalies = [g for g in goalies if g and g != 'Empty']
+                    print(f"  Shootout Rating: 0 (no valid players)")
             
-            print(f"  Goalies: {len(valid_goalies)}")
-            
-            if valid_goalies:
-                player_details = []
-                for g in valid_goalies:
-                    rating = self.get_player_rating(g)
-                    player_name = self._get_player_name(g)
-                    is_starter = g.get('is_starter', False) if isinstance(g, dict) else getattr(g, 'is_starter', False)
-                    player_details.append(f"{player_name}: {rating} {'(Starter)' if is_starter else ''}")
+            # Calculate goaltending rating
+            print("\n--- GOALTENDING ---")
+            goalie_rating = 0
+            if 'goalies' in lines:
+                goalies = lines['goalies']
                 
-                print(f"  Goalie ratings: {', '.join(player_details)}")
-                
-                # Weight starter higher if defined
-                starter_goalies = [g for g in valid_goalies if (isinstance(g, dict) and g.get('is_starter', False)) or 
-                                  (not isinstance(g, dict) and getattr(g, 'is_starter', False))]
-                
-                if starter_goalies:
-                    # Prioritize starter for goaltending rating
-                    starter_ratings = [self.get_player_rating(g) for g in starter_goalies]
-                    valid_starter_ratings = [r for r in starter_ratings if r > 0]
+                valid_goalies = [g for g in goalies if g and g != 'Empty']
+                if valid_goalies and len(valid_goalies) > 0:
+                    # For goaltending, prioritize the starter (weighted)
+                    starter_weight = 0.7
+                    backup_weight = 0.3
                     
-                    if valid_starter_ratings:
-                        goaltending_rating = sum(valid_starter_ratings) / len(valid_starter_ratings)
-                        component_ratings['goaltending'] = round(goaltending_rating, 1)
-                        print(f"  Goaltending Rating (starter-weighted): {goaltending_rating:.1f}")
-                    else:
-                        # Fallback to all goalies
-                        all_ratings = [self.get_player_rating(g) for g in valid_goalies]
-                        valid_all_ratings = [r for r in all_ratings if r > 0]
+                    # Identify starter and backup(s)
+                    starter = None
+                    backups = []
+                    
+                    for g in valid_goalies:
+                        g_type = g.get('G') if isinstance(g, dict) and 'G' in g else g
+                        if not g_type or g_type == 'Empty':
+                            continue
                         
-                        if valid_all_ratings:
-                            goaltending_rating = sum(valid_all_ratings) / len(valid_all_ratings)
-                            component_ratings['goaltending'] = round(goaltending_rating, 1)
-                            print(f"  Goaltending Rating (all goalies): {goaltending_rating:.1f}")
+                        if g.get('is_starter', False):
+                            starter = g_type
                         else:
-                            component_ratings['goaltending'] = 0
-                            print(f"  Goaltending Rating: 0 (no valid ratings)")
-                else:
-                    # If no starter defined, use all goalies
-                    all_ratings = [self.get_player_rating(g) for g in valid_goalies]
-                    valid_all_ratings = [r for r in all_ratings if r > 0]
+                            backups.append(g_type)
                     
-                    if valid_all_ratings:
-                        goaltending_rating = sum(valid_all_ratings) / len(valid_all_ratings)
-                        component_ratings['goaltending'] = round(goaltending_rating, 1)
-                        print(f"  Goaltending Rating (all goalies): {goaltending_rating:.1f}")
+                    # If no explicit starter, use the first goalie
+                    if not starter and valid_goalies:
+                        starter = valid_goalies[0].get('G') if isinstance(valid_goalies[0], dict) and 'G' in valid_goalies[0] else valid_goalies[0]
+                        backups = [g.get('G') if isinstance(g, dict) and 'G' in g else g for g in valid_goalies[1:]]
+                    
+                    # Calculate weighted average
+                    weighted_sum = 0
+                    total_weight = 0
+                    
+                    if starter or backups:
+                        starter_rating = self.get_player_rating(starter)
+                        weighted_sum += starter_rating * starter_weight
+                        total_weight += starter_weight
+                        print(f"  Starter goalie rating: {starter_rating}")
+                    
+                    if backups:
+                        backup_ratings = []
+                        for backup in backups:
+                            backup_rating = self.get_player_rating(backup)
+                            backup_ratings.append(backup_rating)
+                        
+                        if backup_ratings:
+                            avg_backup = sum(backup_ratings) / len(backup_ratings)
+                            weighted_sum += avg_backup * backup_weight
+                            total_weight += backup_weight
+                            print(f"  Backup goalie rating: {avg_backup} (average of {backup_ratings})")
+                    
+                    if total_weight > 0:
+                        goalie_rating = weighted_sum / total_weight
+                        component_ratings['goaltending'] = round(goalie_rating, 1)
+                        print(f"  Weighted goaltending rating: {goalie_rating:.1f}")
                     else:
                         component_ratings['goaltending'] = 0
-                        print(f"  Goaltending Rating: 0 (no valid ratings)")
-            else:
-                component_ratings['goaltending'] = 0
-                print(f"  Goaltending Rating: 0 (no valid goalies)")
-        else:
-            component_ratings['goaltending'] = 0
-            print(f"  Goaltending Rating: 0 (no goalies defined)")
+                        print(f"  Goaltending Rating: 0 (could not calculate weighted rating)")
+                else:
+                    # This branch handles when there are no valid goalies at all (neither starter nor backups)
+                    component_ratings['goaltending'] = 0
+                    print(f"  Goaltending Rating: 0 (no valid goalies)")
         
-        # Print raw component ratings before chemistry/coach effects
-        print("\n--- RAW COMPONENT RATINGS BEFORE ADJUSTMENTS ---")
-        for component, rating in sorted(component_ratings.items()):
-            print(f"  {component}: {rating}")
-        
-        # Apply chemistry effects to the component ratings
+        # Apply chemistry effects to component ratings
         print("\n--- APPLYING CHEMISTRY EFFECTS ---")
-        pre_chemistry_components = component_ratings.copy()
         component_ratings = self._apply_chemistry_to_components(component_ratings)
         
-        # Print component rating changes due to chemistry
-        for component in sorted(component_ratings.keys()):
-            old_rating = pre_chemistry_components.get(component, 0)
-            new_rating = component_ratings.get(component, 0)
-            change = new_rating - old_rating
-            print(f"  {component}: {old_rating} → {new_rating} (change: {change:+.1f})")
+        # Calculate main category ratings (offense, defense, special teams)
+        offense_components = {'line_1', 'line_2', 'line_3', 'line_4'}
+        defense_components = {'pair_1', 'pair_2', 'pair_3'}
+        special_teams_components = {'power_play_1', 'power_play_2', 'penalty_kill_1', 'penalty_kill_2', 'other_special_teams'}
         
-        # Calculate overall rating using weighted components (before coach effects)
-        weighted_sum = 0
-        total_weight_applied = 0
+        offense_rating = self._calculate_category_rating(component_ratings, weights, offense_components)
+        defense_rating = self._calculate_category_rating(component_ratings, weights, defense_components)
+        special_teams_rating = self._calculate_category_rating(component_ratings, weights, special_teams_components)
         
-        for component, weight in weights.items():
-            if component in component_ratings and component_ratings[component] > 0:
-                weighted_sum += component_ratings[component] * weight
-                total_weight_applied += weight
+        # Calculate overall rating as weighted average of all components
+        overall_rating = 0
+        total_weight = 0
+        for component, rating in component_ratings.items():
+            if component in weights and rating > 0:
+                weighted_rating = rating * weights[component]
+                overall_rating += weighted_rating
+                total_weight += weights[component]
+                
+                print(f"  {component}: {rating} × {weights[component]} = {weighted_rating:.1f}")
         
-        pre_coach_overall = 0
-        if total_weight_applied > 0:
-            pre_coach_overall = weighted_sum / total_weight_applied
+        # Calculate final overall rating
+        if total_weight > 0:
+            overall_rating = overall_rating / total_weight
+        else:
+            # If no valid components, default to zero
+            overall_rating = 0
+            
+        # Apply coach bonus to overall
+        overall_rating = self._apply_coach_overall_bonus(overall_rating)
         
-        print(f"\nPre-coach overall rating calculation:")
-        print(f"  Weighted sum: {weighted_sum:.1f}")
-        print(f"  Total weight applied: {total_weight_applied:.2f}")
-        print(f"  Pre-coach overall rating: {pre_coach_overall:.1f}")
+        # Ensure ratings are within bounds
+        overall_rating = min(99, max(0, round(overall_rating, 1)))
+        offense_rating = min(99, max(0, round(offense_rating, 1)))
+        defense_rating = min(99, max(0, round(defense_rating, 1)))
+        special_teams_rating = min(99, max(0, round(special_teams_rating, 1)))
+        goaltending_rating = min(99, max(0, round(goalie_rating, 1)))
         
-        # Apply coach effects to the overall rating
-        print("\n--- APPLYING COACH EFFECTS ---")
-        pre_coach_overall_rounded = round(pre_coach_overall)
-        overall_rating = self._apply_coach_overall_bonus(pre_coach_overall)
+        print("\n=== FINAL TEAM RATINGS ===")
+        print(f"Overall: {overall_rating}")
+        print(f"Offense: {offense_rating}")
+        print(f"Defense: {defense_rating}")
+        print(f"Special Teams: {special_teams_rating}")
+        print(f"Goaltending: {goaltending_rating}")
         
-        coach_effect = overall_rating - pre_coach_overall_rounded
-        print(f"  Coach effect: {pre_coach_overall_rounded} → {overall_rating} (change: {coach_effect:+.1f})")
-        
-        # Ensure overall is within 0-99 range and round for display
-        overall_rating = min(99, max(0, round(overall_rating)))
-        
-        # Calculate main category ratings using the adjusted component ratings
-        offense_rating = 0
-        offense_components = ['line_1', 'line_2', 'line_3', 'line_4', 'power_play_1', 'power_play_2']
-        offense_weights = {c: weights[c] for c in offense_components}
-        offense_weighted_sum = 0
-        offense_total_weight = 0
-        
-        for c, w in offense_weights.items():
-            if c in component_ratings and component_ratings[c] > 0:
-                offense_weighted_sum += component_ratings[c] * w
-                offense_total_weight += w
-        
-        if offense_total_weight > 0:
-            offense_rating = offense_weighted_sum / offense_total_weight
-            offense_rating = min(99, max(0, round(offense_rating)))
-        
-        print(f"\nOffense rating calculation:")
-        print(f"  Weighted sum: {offense_weighted_sum:.1f}")
-        print(f"  Total weight: {offense_total_weight:.2f}")
-        print(f"  Offense rating: {offense_rating}")
-        
-        defense_rating = 0
-        defense_components = ['pair_1', 'pair_2', 'pair_3', 'penalty_kill_1', 'penalty_kill_2']
-        defense_weights = {c: weights[c] for c in defense_components}
-        defense_weighted_sum = 0
-        defense_total_weight = 0
-        
-        for c, w in defense_weights.items():
-            if c in component_ratings and component_ratings[c] > 0:
-                defense_weighted_sum += component_ratings[c] * w
-                defense_total_weight += w
-        
-        if defense_total_weight > 0:
-            defense_rating = defense_weighted_sum / defense_total_weight
-            defense_rating = min(99, max(0, round(defense_rating)))
-        
-        print(f"\nDefense rating calculation:")
-        print(f"  Weighted sum: {defense_weighted_sum:.1f}")
-        print(f"  Total weight: {defense_total_weight:.2f}")
-        print(f"  Defense rating: {defense_rating}")
-        
-        # Special teams combines PP and PK
-        special_teams_rating = 0
-        special_teams_components = ['power_play_1', 'power_play_2', 'penalty_kill_1', 'penalty_kill_2', 'other_special_teams']
-        special_teams_weights = {c: weights[c] for c in special_teams_components}
-        special_teams_weighted_sum = 0
-        special_teams_total_weight = 0
-        
-        for c, w in special_teams_weights.items():
-            if c in component_ratings and component_ratings[c] > 0:
-                special_teams_weighted_sum += component_ratings[c] * w
-                special_teams_total_weight += w
-        
-        if special_teams_total_weight > 0:
-            special_teams_rating = special_teams_weighted_sum / special_teams_total_weight
-            special_teams_rating = min(99, max(0, round(special_teams_rating)))
-        
-        print(f"\nSpecial teams rating calculation:")
-        print(f"  Weighted sum: {special_teams_weighted_sum:.1f}")
-        print(f"  Total weight: {special_teams_total_weight:.2f}")
-        print(f"  Special teams rating: {special_teams_rating}")
-        
-        # Goaltending is directly from the component rating
-        goaltending_rating = component_ratings.get('goaltending', 0)
-        print(f"\nGoaltending rating: {goaltending_rating}")
-        
-        # Final result with all ratings
-        team_rating = {
+        return {
             'overall': overall_rating,
-            'offense': offense_rating,
+            'offense': offense_rating, 
             'defense': defense_rating,
             'special_teams': special_teams_rating,
             'goaltending': goaltending_rating,
             'component_ratings': component_ratings
         }
-        
-        print("\n--- FINAL TEAM RATINGS ---")
-        print(f"  Overall: {team_rating['overall']}")
-        print(f"  Offense: {team_rating['offense']}")
-        print(f"  Defense: {team_rating['defense']}")
-        print(f"  Special Teams: {team_rating['special_teams']}")
-        print(f"  Goaltending: {team_rating['goaltending']}")
-        
-        return team_rating
-
-    def _get_player_name(self, player):
-        """Helper to get player name regardless of data structure"""
-        if not player or player == 'Empty':
-            return 'Empty'
-            
-        if isinstance(player, dict):
-            return player.get('full_name', 
-                   player.get('name', 
-                   f"{player.get('first_name', '')} {player.get('last_name', '')}"))
-        else:
-            return getattr(player, 'full_name', 
-                   getattr(player, 'name', 
-                   f"{getattr(player, 'first_name', '')} {getattr(player, 'last_name', '')}"))
-    
-    def _get_player_position(self, player):
-        """Helper to get player position regardless of data structure"""
-        if not player or player == 'Empty':
-            return 'N/A'
-            
-        if isinstance(player, dict):
-            return player.get('position_primary', player.get('position', 'Unknown'))
-        else:
-            return getattr(player, 'position_primary', 
-                   getattr(player, 'position', 'Unknown'))
     
     def _apply_chemistry_to_components(self, component_ratings: Dict[str, float]) -> Dict[str, float]:
         """
-        Apply chemistry effects to component ratings.
+        Apply chemistry bonuses/penalties to individual component ratings.
         
         Args:
             component_ratings: Dictionary of component ratings
             
         Returns:
-            Adjusted component ratings with chemistry effects
+            Updated component ratings with chemistry applied
         """
-        # If we don't have any chemistry data, return the original ratings
-        if not hasattr(self, 'chemistry') or not self.chemistry:
-            print("No chemistry data available, skipping chemistry adjustments")
-            return component_ratings
-            
-        print("Applying chemistry effects to component ratings")
-        
-        # Create a copy of the ratings to modify
         adjusted_ratings = component_ratings.copy()
         
-        # Extract chemistry values from the main chemistry data
-        chemistry_data = self.chemistry
+        print("  Applying chemistry modifiers to components:")
         
-        # Apply forward line chemistry
-        if 'forward_lines' in chemistry_data:
-            forward_lines = chemistry_data.get('forward_lines', [])
-            print(f"Forward line chemistry data: {len(forward_lines)} lines")
-            
-            for i, line_chem in enumerate(forward_lines):
-                line_num = i + 1
-                component_key = f'line_{line_num}'
+        # Apply line chemistry
+        for line_chem in self.chemistry_cache.get('forward_lines', []):
+            if isinstance(line_chem, dict):
+                line_num = line_chem.get('line')
+                chemistry = line_chem.get('chemistry', 0)
                 
-                if component_key in adjusted_ratings:
-                    # Get chemistry value (scale from -5 to +5)
-                    if isinstance(line_chem, dict):
-                        chem_value = line_chem.get('chemistry', 0)
-                    else:
-                        chem_value = line_chem if isinstance(line_chem, (int, float)) else 0
-                        
-                    # Convert chemistry to a rating adjustment (-2.5 to +2.5)
-                    adjustment = chem_value * 0.5
-                    print(f"  {component_key} chemistry: {chem_value} → adjustment: {adjustment:+.1f}")
+                if line_num and f'line_{line_num}' in adjusted_ratings:
+                    original_rating = adjusted_ratings[f'line_{line_num}']
+                    # Chemistry is -5 to +5, apply as percentage modifier (from -5% to +5%)
+                    chemistry_modifier = 1.0 + (chemistry / 100)
+                    adjusted_ratings[f'line_{line_num}'] = original_rating * chemistry_modifier
                     
-                    # Apply the adjustment
-                    base_rating = adjusted_ratings[component_key]
-                    adjusted_ratings[component_key] = max(0, min(99, base_rating + adjustment))
+                    print(f"    Line {line_num}: {original_rating:.1f} → {adjusted_ratings[f'line_{line_num}']:.1f} (chemistry: {chemistry}, modifier: {chemistry_modifier:.3f})")
         
-        # Apply defense pair chemistry            
-        if 'defense_pairs' in chemistry_data:
-            defense_pairs = chemistry_data.get('defense_pairs', [])
-            print(f"Defense pair chemistry data: {len(defense_pairs)} pairs")
-            
-            for i, pair_chem in enumerate(defense_pairs):
-                pair_num = i + 1
-                component_key = f'pair_{pair_num}'
+        # Apply defense pair chemistry
+        for pair_chem in self.chemistry_cache.get('defense_pairs', []):
+            if isinstance(pair_chem, dict):
+                pair_num = pair_chem.get('pair')
+                chemistry = pair_chem.get('chemistry', 0)
                 
-                if component_key in adjusted_ratings:
-                    # Get chemistry value (scale from -5 to +5)
-                    if isinstance(pair_chem, dict):
-                        chem_value = pair_chem.get('chemistry', 0)
-                    else:
-                        chem_value = pair_chem if isinstance(pair_chem, (int, float)) else 0
+                if pair_num and f'pair_{pair_num}' in adjusted_ratings:
+                    original_rating = adjusted_ratings[f'pair_{pair_num}']
+                    # Chemistry is -5 to +5, apply as percentage modifier (from -5% to +5%)
+                    chemistry_modifier = 1.0 + (chemistry / 100)
+                    adjusted_ratings[f'pair_{pair_num}'] = original_rating * chemistry_modifier
                     
-                    # Convert chemistry to a rating adjustment (-2.5 to +2.5)
-                    adjustment = chem_value * 0.5
-                    print(f"  {component_key} chemistry: {chem_value} → adjustment: {adjustment:+.1f}")
-                    
-                    # Apply the adjustment
-                    base_rating = adjusted_ratings[component_key]
-                    adjusted_ratings[component_key] = max(0, min(99, base_rating + adjustment))
+                    print(f"    Pair {pair_num}: {original_rating:.1f} → {adjusted_ratings[f'pair_{pair_num}']:.1f} (chemistry: {chemistry}, modifier: {chemistry_modifier:.3f})")
         
         # Apply power play chemistry
-        if 'power_play' in chemistry_data:
-            pp_units = chemistry_data.get('power_play', [])
-            print(f"Power play chemistry data: {len(pp_units)} units")
-            
-            for i, pp_chem in enumerate(pp_units):
-                unit_num = i + 1
-                component_key = f'power_play_{unit_num}'
+        for pp_chem in self.chemistry_cache.get('power_play', []):
+            if isinstance(pp_chem, dict):
+                unit_num = pp_chem.get('unit')
+                chemistry = pp_chem.get('chemistry', 0)
                 
-                if component_key in adjusted_ratings:
-                    # Get chemistry value (scale from -5 to +5)
-                    if isinstance(pp_chem, dict):
-                        chem_value = pp_chem.get('chemistry', 0)
-                    else:
-                        chem_value = pp_chem if isinstance(pp_chem, (int, float)) else 0
+                if unit_num and f'power_play_{unit_num}' in adjusted_ratings:
+                    original_rating = adjusted_ratings[f'power_play_{unit_num}']
+                    # Chemistry is -5 to +5, apply as percentage modifier (from -5% to +5%)
+                    chemistry_modifier = 1.0 + (chemistry / 100)
+                    adjusted_ratings[f'power_play_{unit_num}'] = original_rating * chemistry_modifier
                     
-                    # Convert chemistry to a rating adjustment (-2.5 to +2.5)
-                    adjustment = chem_value * 0.5
-                    print(f"  {component_key} chemistry: {chem_value} → adjustment: {adjustment:+.1f}")
-                    
-                    # Apply the adjustment
-                    base_rating = adjusted_ratings[component_key]
-                    adjusted_ratings[component_key] = max(0, min(99, base_rating + adjustment))
+                    print(f"    PP Unit {unit_num}: {original_rating:.1f} → {adjusted_ratings[f'power_play_{unit_num}']:.1f} (chemistry: {chemistry}, modifier: {chemistry_modifier:.3f})")
         
         # Apply penalty kill chemistry
-        if 'penalty_kill' in chemistry_data:
-            pk_units = chemistry_data.get('penalty_kill', [])
-            print(f"Penalty kill chemistry data: {len(pk_units)} units")
-            
-            for i, pk_chem in enumerate(pk_units):
-                unit_num = i + 1
-                component_key = f'penalty_kill_{unit_num}'
+        for pk_chem in self.chemistry_cache.get('penalty_kill', []):
+            if isinstance(pk_chem, dict):
+                unit_num = pk_chem.get('unit')
+                chemistry = pk_chem.get('chemistry', 0)
                 
-                if component_key in adjusted_ratings:
-                    # Get chemistry value (scale from -5 to +5)
-                    if isinstance(pk_chem, dict):
-                        chem_value = pk_chem.get('chemistry', 0)
-                    else:
-                        chem_value = pk_chem if isinstance(pk_chem, (int, float)) else 0
+                if unit_num and f'penalty_kill_{unit_num}' in adjusted_ratings:
+                    original_rating = adjusted_ratings[f'penalty_kill_{unit_num}']
+                    # Chemistry is -5 to +5, apply as percentage modifier (from -5% to +5%)
+                    chemistry_modifier = 1.0 + (chemistry / 100)
+                    adjusted_ratings[f'penalty_kill_{unit_num}'] = original_rating * chemistry_modifier
                     
-                    # Convert chemistry to a rating adjustment (-2.5 to +2.5)
-                    adjustment = chem_value * 0.5
-                    print(f"  {component_key} chemistry: {chem_value} → adjustment: {adjustment:+.1f}")
-                    
-                    # Apply the adjustment
-                    base_rating = adjusted_ratings[component_key]
-                    adjusted_ratings[component_key] = max(0, min(99, base_rating + adjustment))
+                    print(f"    PK Unit {unit_num}: {original_rating:.1f} → {adjusted_ratings[f'penalty_kill_{unit_num}']:.1f} (chemistry: {chemistry}, modifier: {chemistry_modifier:.3f})")
         
-        # Apply overall chemistry effect to all components
-        overall_chemistry = chemistry_data.get('overall', 0)
-        if overall_chemistry != 0:
-            # Convert to a smaller adjustment factor (-1 to +1)
-            overall_adjustment = overall_chemistry * 0.2
-            print(f"Overall chemistry: {overall_chemistry} → global adjustment factor: {overall_adjustment:+.1f}")
-            
-            # Apply a small adjustment to all components
-            for component in adjusted_ratings:
-                base = adjusted_ratings[component]
-                adjusted_ratings[component] = max(0, min(99, base + overall_adjustment))
+        print("\n  Component ratings after chemistry:")
+        for comp, rating in sorted(adjusted_ratings.items()):
+            if comp in component_ratings:
+                change = rating - component_ratings[comp]
+                print(f"    {comp}: {component_ratings[comp]:.1f} → {rating:.1f} (change: {change:+.1f})")
+        
+        # Round all values
+        for key in adjusted_ratings:
+            adjusted_ratings[key] = round(adjusted_ratings[key], 1)
         
         return adjusted_ratings
-
+    
     def _apply_coach_overall_bonus(self, overall_rating: float) -> float:
         """
-        Apply coach effect to the overall team rating.
+        Apply coach bonus to overall team rating.
         
         Args:
-            overall_rating: Base overall rating before coach effect
+            overall_rating: The base overall rating
             
         Returns:
-            Adjusted overall rating with coach effect
+            Coach-adjusted overall rating
         """
-        if not self.coach_data:
-            print("No coach data available, skipping coach adjustments")
-            return overall_rating
+        print("\n--- APPLYING COACH BONUS ---")
+        
+        # Default - no coach bonus
+        coach_bonus = 1.0
+        
+        # If we have a coach with a strategy, adjust the bonus
+        if self.coach_strategy:
+            coach_name = getattr(self.coach_strategy, 'coach_name', 'Unknown')
+            coach_quality = getattr(self.coach_strategy, 'coach_quality', 0)
+            strategy_type = getattr(self.coach_strategy, 'strategy_type', 'Unknown')
+            strategy_focus = getattr(self.coach_strategy, 'strategy_focus', 0)
             
-        # Get coach rating and style
-        coach_overall = self.coach_data.get('overall', 70)
-        coach_style = self.coach_data.get('strategy_type', 'Balanced')
-        
-        # Calculate coach effect (up to +/- 3 points)
-        coach_effect = 0
-        
-        # Base effect based on coach overall rating
-        if coach_overall >= 90:
-            coach_effect = 3
-        elif coach_overall >= 85:
-            coach_effect = 2
-        elif coach_overall >= 80:
-            coach_effect = 1
-        elif coach_overall <= 60:
-            coach_effect = -1
-        elif coach_overall <= 50:
-            coach_effect = -2
+            print(f"  Coach: {coach_name}")
+            print(f"  Coach Quality: {coach_quality}")
+            print(f"  Strategy Type: {strategy_type}")
+            print(f"  Strategy Focus: {strategy_focus}")
             
-        print(f"Coach data: {self.coach_data}")
-        print(f"Coach overall rating: {coach_overall} → base effect: {coach_effect:+.1f}")
-        
-        # Style factors - some coach styles may have special effects
-        style_effect = 0
-        if coach_style == 'Offensive':
-            style_effect = 1  # Offensive coaches boost overall slightly
-        elif coach_style == 'Defensive':
-            style_effect = 0  # Defensive coaches focus on defense, neutral effect on overall
-        elif coach_style == 'Players Coach':
-            style_effect = 2  # Players coaches boost chemistry and overall
+            # Base bonus is 1-3% based on coach quality (0-100 scale)
+            if coach_quality > 90:  # Elite coaches
+                coach_bonus = 1.03
+                print(f"  Elite coach bonus: +3%")
+            elif coach_quality > 80:  # Great coaches
+                coach_bonus = 1.025
+                print(f"  Great coach bonus: +2.5%")
+            elif coach_quality > 70:  # Good coaches
+                coach_bonus = 1.02
+                print(f"  Good coach bonus: +2%")
+            elif coach_quality > 50:  # Average coaches
+                coach_bonus = 1.01
+                print(f"  Average coach bonus: +1%")
+            else:  # Below average coaches
+                coach_bonus = 1.005
+                print(f"  Below average coach bonus: +0.5%")
+                
+            # Add a small bonus if the coach has a strong strategy focus
+            strategy_bonus = 0
+            if strategy_focus > 80:  # Strong strategy coaches get an extra 0.5%
+                strategy_bonus = 0.005
+                print(f"  Strong strategy focus bonus: +0.5%")
+                coach_bonus += strategy_bonus
             
-        print(f"Coach style: {coach_style} → style effect: {style_effect:+.1f}")
+            print(f"  Total coach bonus: {(coach_bonus-1)*100:.1f}%")
+        else:
+            print("  No coach found, no bonus applied")
         
-        # Final adjustment
-        total_effect = coach_effect + style_effect
-        print(f"Total coach effect: {total_effect:+.1f}")
-        
-        # Apply the effect (capped at +/-5)
-        total_effect = max(-5, min(5, total_effect))
-        
-        # Add to the overall rating
-        adjusted_rating = overall_rating + total_effect
-        
-        # Ensure it's within bounds
-        adjusted_rating = max(0, min(99, adjusted_rating))
-        
-        print(f"Final coach adjustment: {overall_rating} + {total_effect:+.1f} = {adjusted_rating}")
+        # Apply the coach bonus
+        print(f"  Overall before coach: {overall_rating:.2f}")
+        adjusted_rating = overall_rating * coach_bonus
+        print(f"  Overall after coach: {adjusted_rating:.2f} (effect: {adjusted_rating - overall_rating:+.2f})")
         
         return adjusted_rating
     
     def get_optimal_lines(self) -> Dict[str, Any]:
-        """
-        Get the current optimal lines.
-        If none exist, they will be generated.
-        
-        Returns:
-            Dictionary with optimal line combinations
-        """
-        if not self.optimal_lines:
-            return self.generate_optimal_lines()
-        return {
-            'lines': self.optimal_lines,
-            'chemistry': self.chemistry_cache,
-            'team_rating': self.team_rating
-        }
+        """Get the current optimal lines with all adjustments and calculations."""
+        if not self.lines:
+            # Return an empty structure if no lines are available
+            return {
+                'forward_lines': [],
+                'defense_pairs': [],
+                'goalies': [],
+                'power_play_units': [],
+                'penalty_kill_units': [],
+                'other_situations': {},
+                'coach': None,
+                'chemistry': {},
+                'team_rating': {
+                    'overall': 0,
+                    'offense': 0,
+                    'defense': 0,
+                    'special_teams': 0,
+                    'goaltending': 0,
+                    'component_ratings': {}
+                }
+            }
+        return self.lines
     
     def update_current_lines(self, lines: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -2129,200 +1892,112 @@ class TeamFormation:
             return self.team_rating
 
     def get_player_rating(self, player) -> float:
-        """
-        Extract player rating regardless of data structure.
-        This function tries various ways to get a player's overall rating.
-        
-        Args:
-            player: Player object or dictionary
+        """Extract the overall rating from a player object or dictionary."""
+        try:
+            if not player or player == 'Empty':
+                return 0
             
-        Returns:
-            Numerical rating value
-        """
-        if not player or player == 'Empty':
-            return 0
-        
-        # For debugging purposes
-        if self.debug:
-            print(f"\n---RATING EXTRACTION DEBUG---")
+            # If it's a dictionary, try to get the rating directly
             if isinstance(player, dict):
-                print(f"Player dict keys: {list(player.keys())}")
-                print(f"Player type: Dictionary")
-                if 'first_name' in player and 'last_name' in player:
-                    print(f"Player: {player.get('first_name', '')} {player.get('last_name', '')}")
-                elif 'name' in player:
-                    print(f"Player: {player.get('name', '')}")
-            else:
-                print(f"Player type: {type(player)}")
-                print(f"Player attributes: {dir(player)}")
-            
-        # Dictionary player handling
-        if isinstance(player, dict):
-            # Get name for logging
-            player_name = player.get('full_name', 
-                          player.get('last_name', 
-                          player.get('name', 
-                          f"{player.get('first_name', '')} {player.get('last_name', '')}")))
-            position = player.get('position_primary', player.get('position', 'Unknown'))
-            
-            # Check for the most common rating fields
-            for field in ['overall_rating', 'overall', 'card_overall', 'rating', 'ovr']:
-                if field in player:
-                    # Check if field has a valid value
-                    if player[field] is not None:
+                # Check known field names
+                for field in ['overall_rating', 'overall', 'rating', 'card_overall', 'ovr']:
+                    if field in player and player[field] is not None:
                         try:
                             # Convert to float if it's a string
-                            rating_value = float(player[field]) if isinstance(player[field], str) else player[field]
+                            value = player[field]
+                            if isinstance(value, (int, float)):
+                                return float(value)
+                            elif isinstance(value, str) and value.strip():
+                                try:
+                                    return float(value)
+                                except (ValueError, TypeError):
+                                    if self.debug:
+                                        print(f"Warning: Could not convert string '{value}' to float")
+                        except Exception as conversion_error:
                             if self.debug:
-                                print(f"Found rating in '{field}': {rating_value}")
-                            
-                            # Validate the rating value is reasonable
-                            if isinstance(rating_value, (int, float)) and 0 <= rating_value <= 100:
-                                return rating_value
-                            else:
-                                if self.debug:
-                                    print(f"Rating value {rating_value} from field '{field}' is out of range (0-100)")
-                        except (ValueError, TypeError):
-                            if self.debug:
-                                print(f"Could not convert '{field}' value: {player[field]} to number")
-                    elif self.debug:
-                        print(f"Field '{field}' exists but is None")
-            
-            # If no rating found in primary fields, check all numeric fields as a fallback
-            for key, value in player.items():
-                if key.lower().find('rating') >= 0 or key.lower().find('overall') >= 0:
-                    if value is not None:
-                        try:
-                            rating_value = float(value) if isinstance(value, str) else value
-                            if self.debug:
-                                print(f"Found rating in secondary field '{key}': {rating_value}")
-                            if isinstance(rating_value, (int, float)) and 0 <= rating_value <= 100:
-                                return rating_value
-                        except (ValueError, TypeError):
-                            pass
-            
-            # As a last resort, look for any numeric field that might be a rating
-            numeric_fields = {}
-            for key, value in player.items():
-                try:
-                    if value is not None and isinstance(value, (int, float)) and 0 <= value <= 100:
-                        numeric_fields[key] = value
-                except (ValueError, TypeError):
-                    pass
-            
-            if numeric_fields and self.debug:
-                print(f"All numeric fields that could be ratings: {numeric_fields}")
+                                print(f"Warning: Error converting field {field}: {conversion_error}")
                 
-            # If we have any skill attributes, average them as a last resort
-            skill_fields = ['skating', 'shooting', 'passing', 'puck_skills', 'defense', 'physical', 'hands', 'checking']
-            skill_values = []
-            
-            for field in skill_fields:
-                if field in player and player[field] is not None:
-                    try:
-                        value = float(player[field]) if isinstance(player[field], str) else player[field]
-                        if isinstance(value, (int, float)) and 0 <= value <= 100:
-                            skill_values.append(value)
-                    except (ValueError, TypeError):
-                        pass
-            
-            if skill_values:
-                avg_rating = sum(skill_values) / len(skill_values)
+                # Log the player data for debugging
                 if self.debug:
-                    print(f"No rating field found, calculated from skill attributes: {avg_rating:.1f}")
-                return avg_rating
-                
-        # Object player handling (SQLAlchemy model)
-        else:
-            # Try to get player name for better logging
-            if hasattr(player, 'full_name'):
-                player_name = player.full_name
-            elif hasattr(player, 'last_name'):
-                player_name = player.last_name
-                if hasattr(player, 'first_name'):
-                    player_name = f"{player.first_name} {player_name}"
-            else:
-                player_name = str(player)
-                
-            if hasattr(player, 'position_primary'):
-                position = player.position_primary
-            elif hasattr(player, 'position'):
-                position = player.position
-            else:
-                position = 'Unknown'
-                
-            # Check common rating attributes
-            for attr in ['overall_rating', 'overall', 'card_overall', 'rating', 'ovr']:
-                if hasattr(player, attr):
-                    val = getattr(player, attr)
-                    if val is not None:
-                        try:
-                            rating_value = float(val) if isinstance(val, str) else val
-                            if self.debug:
-                                print(f"Found rating in attribute '{attr}': {rating_value}")
-                            if isinstance(rating_value, (int, float)) and 0 <= rating_value <= 100:
-                                return rating_value
-                        except (ValueError, TypeError):
-                            if self.debug:
-                                print(f"Could not convert '{attr}' value to number")
+                    player_name = player.get('full_name', player.get('first_name', '') + ' ' + player.get('last_name', ''))
+                    player_position = player.get('position_primary', player.get('position', ''))
+                    print(f"Warning: Could not find rating for player {player_name} ({player_position})")
+                    print(f"Available fields: {player.keys()}")
             
-            # Check if the object has a to_dict method
+            # If it's an ORM object, try to access attributes
+            try:
+                # Try the primary field name first
+                for attr in ['overall_rating', 'overall', 'rating', 'card_overall', 'ovr']:
+                    if hasattr(player, attr):
+                        value = getattr(player, attr)
+                        if value is not None:
+                            try:
+                                return float(value)
+                            except (ValueError, TypeError):
+                                if self.debug:
+                                    print(f"Warning: Could not convert attribute '{attr}' value to float")
+            except (AttributeError, TypeError):
+                pass
+            
+            # As a last resort, check for "to_dict" method that might contain rating
             if hasattr(player, 'to_dict') and callable(getattr(player, 'to_dict')):
                 try:
                     player_dict = player.to_dict()
-                    # Now search through the dictionary
-                    for field in ['overall_rating', 'overall', 'card_overall', 'rating', 'ovr']:
+                    for field in ['overall_rating', 'overall', 'rating', 'card_overall', 'ovr']:
                         if field in player_dict and player_dict[field] is not None:
                             try:
-                                rating_value = float(player_dict[field]) if isinstance(player_dict[field], str) else player_dict[field]
-                                if self.debug:
-                                    print(f"Found rating in to_dict() field '{field}': {rating_value}")
-                                if isinstance(rating_value, (int, float)) and 0 <= rating_value <= 100:
-                                    return rating_value
+                                return float(player_dict[field])
                             except (ValueError, TypeError):
-                                pass
-                except Exception as e:
+                                if self.debug:
+                                    print(f"Warning: Could not convert to_dict field '{field}' value to float")
+                except Exception as to_dict_error:
                     if self.debug:
-                        print(f"Error calling to_dict(): {e}")
+                        print(f"Warning: Error calling to_dict(): {to_dict_error}")
             
-            # Try to find any attribute with 'rating' or 'overall' in the name
-            for attr_name in dir(player):
-                if 'rating' in attr_name.lower() or 'overall' in attr_name.lower():
-                    try:
-                        val = getattr(player, attr_name)
-                        if val is not None:
-                            rating_value = float(val) if isinstance(val, str) else val
-                            if self.debug:
-                                print(f"Found rating in attribute '{attr_name}': {rating_value}")
-                            if isinstance(rating_value, (int, float)) and 0 <= rating_value <= 100:
-                                return rating_value
-                    except (ValueError, TypeError, AttributeError):
-                        pass
+            # If we made it here, we couldn't find a rating
+            if self.debug:
+                print(f"Warning: Could not extract rating from player: {player}")
+            
+            # Default to 0 if nothing found
+            return 0
+        except Exception as e:
+            if self.debug:
+                print(f"Error getting player rating: {e}")
+            return 0
+
+    def _calculate_category_rating(self, component_ratings: Dict[str, float], weights: Dict[str, float], category_components: List[str]) -> float:
+        """
+        Calculate a category rating (offense, defense, special teams) using the component ratings.
         
-        # If we reach here, we couldn't find a valid rating
-        if self.debug:
-            if isinstance(player, dict):
-                print(f"Could not find rating for player {player_name} ({position})")
-                print(f"Player details: {player}")
-            else:
-                print(f"Could not find rating for player {player_name} ({position})")
-                
-        # Default rating if nothing found - use 75 as a reasonable mid-range value
-        return 75.0
+        Args:
+            component_ratings: Dictionary of component ratings
+            weights: Dictionary of component weights
+            category_components: List of component names that make up this category
+            
+        Returns:
+            The calculated rating for the category
+        """
+        category_weighted_sum = 0
+        category_weights = []
+        
+        for component in category_components:
+            if component in component_ratings and component_ratings[component] > 0 and component in weights:
+                category_weighted_sum += component_ratings[component] * weights[component]
+                category_weights.append(weights[component])
+        
+        # Calculate category rating if we have any valid components
+        if category_weights:
+            category_rating = category_weighted_sum / sum(category_weights)
+            return min(99, max(0, round(category_rating)))
+        
+        # Return default rating if no valid components
+        return 0
 
 # API endpoints that utilize the team formation service
 
 @team_rating_bp.route("/calculate/<team_abbreviation>", methods=['GET'])
 def calculate_team_rating(team_abbreviation):
-    """
-    Calculate team ratings based on player attributes and team chemistry.
-    
-    Args:
-        team_abbreviation: The team abbreviation (e.g., MTL, TOR)
-        
-    Returns:
-        Dictionary with calculated team ratings
-    """
+    """Calculate and return team rating."""
     try:
         # Initialize the team formation service
         formation = TeamFormation(team_abbreviation)
@@ -2336,23 +2011,23 @@ def calculate_team_rating(team_abbreviation):
             print(f"Failed to initialize team data for {team_abbreviation}, returning default ratings")
             # Return default ratings instead of 404 error
             default_rating = {
-                'overall': 75,
-                'offense': 75,
-                'defense': 75,
-                'special_teams': 75,
-                'goaltending': 75,
+                'overall': 0,
+                'offense': 0,
+                'defense': 0,
+                'special_teams': 0,
+                'goaltending': 0,
                 'component_ratings': {
-                    'line_1': 80,
-                    'line_2': 77,
-                    'line_3': 74,
-                    'line_4': 70,
-                    'pair_1': 80,
-                    'pair_2': 76,
-                    'pair_3': 73,
-                    'power_play_1': 79,
-                    'power_play_2': 76,
-                    'penalty_kill_1': 78,
-                    'penalty_kill_2': 75
+                    'line_1': 0,
+                    'line_2': 0,
+                    'line_3': 0,
+                    'line_4': 0,
+                    'pair_1': 0,
+                    'pair_2': 0,
+                    'pair_3': 0,
+                    'power_play_1': 0,
+                    'power_play_2': 0,
+                    'penalty_kill_1': 0,
+                    'penalty_kill_2': 0
                 }
             }
             return jsonify(default_rating), 200
@@ -2370,37 +2045,15 @@ def calculate_team_rating(team_abbreviation):
         print(f"Error calculating team rating: {e}")
         traceback.print_exc()
         
-        # Return default ratings in case of any error
-        default_rating = {
-            'overall': 75,
-            'offense': 75,
-            'defense': 75,
-            'special_teams': 75,
-            'goaltending': 75,
-            'component_ratings': {
-                'line_1': 80,
-                'line_2': 77,
-                'line_3': 74,
-                'line_4': 70,
-                'pair_1': 80,
-                'pair_2': 76,
-                'pair_3': 73,
-                'power_play_1': 79,
-                'power_play_2': 76,
-                'penalty_kill_1': 78,
-                'penalty_kill_2': 75
-            }
-        }
-        return jsonify(default_rating), 200
+        # Return error message instead of default ratings
+        return jsonify({
+            'error': f"Error calculating team rating: {str(e)}",
+            'success': False
+        }), 500
 
 @team_rating_bp.route("/all", methods=['GET'])
 def get_all_team_ratings():
-    """
-    Get all team ratings.
-    
-    Returns:
-        List of team ratings
-    """
+    """Get all team ratings."""
     try:
         # Get all team abbreviations
         # This is a placeholder - in reality, you would fetch these from the database
@@ -2441,8 +2094,14 @@ def get_all_team_ratings():
         
         return jsonify(team_ratings), 200
     except Exception as e:
+        print(f"Error fetching all team ratings: {e}")
         traceback.print_exc()
-        return jsonify({"error": f"Error fetching team ratings: {str(e)}"}), 500
+        
+        # Return error instead of default ratings
+        return jsonify({
+            'error': f"Error fetching all team ratings: {str(e)}",
+            'success': False
+        }), 500
 
 @team_rating_bp.route("/rankings", methods=['GET'])
 def get_team_rankings():
@@ -2468,95 +2127,59 @@ def get_team_rankings():
 
 @team_rating_bp.route("/update-team-overall/<team_abbreviation>", methods=['GET'])
 def update_team_overall_rating(team_abbreviation):
-    """Update team overall rating in the database."""
-    try:
-        # Initialize the team formation service with debug mode enabled
-        print(f"\n=== ENDPOINT: update_team_overall_rating for {team_abbreviation} ===")
-        formation = TeamFormation(team_abbreviation, debug=True)
-        print(f"Created TeamFormation with debug mode enabled")
+    """
+    Update team overall rating.
+    NOTE: This no longer updates the database, it just returns the calculated ratings.
+    
+    Args:
+        team_abbreviation: The team abbreviation (e.g., MTL, TOR)
         
-        # Initialize and fetch player and coach data
+    Returns:
+        JSON response with team rating information
+    """
+    try:
+        # Initialize the team formation service
+        formation = TeamFormation(team_abbreviation)
+        
+        # Initialize data (roster, coach, etc.)
         init_success = formation.initialize()
-        print(f"TeamFormation initialization success: {init_success}")
         
         if not init_success:
-            print(f"Failed to initialize team data for {team_abbreviation}, returning default ratings")
-            # Return default ratings instead of an error
-            # This allows the frontend to still display something
-            default_rating = {
-                'overall_rating': 75,
-                'offense': 75,
-                'defense': 75,
-                'special_teams': 75,
-                'goaltending': 75,
-                'component_ratings': {
-                    'line_1': 80,
-                    'line_2': 77,
-                    'line_3': 74,
-                    'line_4': 70,
-                    'pair_1': 80,
-                    'pair_2': 76,
-                    'pair_3': 73,
-                    'power_play_1': 79,
-                    'power_play_2': 76,
-                    'penalty_kill_1': 78,
-                    'penalty_kill_2': 75
-                }
-            }
-            return jsonify(default_rating), 200
+            return jsonify({"error": f"Failed to initialize team data for {team_abbreviation}"}), 404
             
         # Generate optimal lines to get team rating
-        print(f"Generating optimal lines to get team rating")
         lines_data = formation.generate_optimal_lines()
         
-        # Debug information
-        print(f"Team data: {formation.team_data}")
-        print(f"Roster size: {len(formation.roster)}")
-        print(f"Forward count: {len(formation.forwards)}")
-        print(f"Defense count: {len(formation.defensemen)}")
-        print(f"Goalie count: {len(formation.goalies)}")
-        
-        # Get team ratings without saving to database
+        # Get the calculated overall rating without saving to database
         ratings = formation.save_team_overall_to_database()
-        print(f"Team ratings calculated: {ratings}")
         
-        # Format for frontend
+        # Return a formatted response that matches what the frontend expects
+        team_rating = lines_data.get('team_rating', {})
         response = {
-            'overall_rating': ratings.get('overall', 75),
-            'offense': ratings.get('offense', 75),
-            'defense': ratings.get('defense', 75),
-            'special_teams': ratings.get('special_teams', 75),
-            'goaltending': ratings.get('goaltending', 75),
-            'component_ratings': ratings.get('component_ratings', {})
+            'overall_rating': team_rating.get('overall', 0),
+            'offense': team_rating.get('offense', 0),
+            'defense': team_rating.get('defense', 0),
+            'special_teams': team_rating.get('special_teams', 0),
+            'goaltending': team_rating.get('goaltending', 0),
+            'component_ratings': {
+                'line_1': team_rating.get('component_ratings', {}).get('line_1', 0),
+                'line_2': team_rating.get('component_ratings', {}).get('line_2', 0),
+                'line_3': team_rating.get('component_ratings', {}).get('line_3', 0),
+                'line_4': team_rating.get('component_ratings', {}).get('line_4', 0),
+                'pair_1': team_rating.get('component_ratings', {}).get('pair_1', 0),
+                'pair_2': team_rating.get('component_ratings', {}).get('pair_2', 0),
+                'pair_3': team_rating.get('component_ratings', {}).get('pair_3', 0),
+                'power_play_1': team_rating.get('component_ratings', {}).get('power_play_1', 0),
+                'power_play_2': team_rating.get('component_ratings', {}).get('power_play_2', 0),
+                'penalty_kill_1': team_rating.get('component_ratings', {}).get('penalty_kill_1', 0),
+                'penalty_kill_2': team_rating.get('component_ratings', {}).get('penalty_kill_2', 0)
+            }
         }
         
         return jsonify(response), 200
     except Exception as e:
-        print(f"Error updating team overall: {e}")
         traceback.print_exc()
-        
-        # Return default ratings in case of any error
-        default_rating = {
-            'overall_rating': 75,
-            'offense': 75,
-            'defense': 75,
-            'special_teams': 75,
-            'goaltending': 75,
-            'component_ratings': {
-                'line_1': 80,
-                'line_2': 77,
-                'line_3': 74,
-                'line_4': 70,
-                'pair_1': 80,
-                'pair_2': 76,
-                'pair_3': 73,
-                'power_play_1': 79,
-                'power_play_2': 76,
-                'penalty_kill_1': 78,
-                'penalty_kill_2': 75
-            }
-        }
-        return jsonify(default_rating), 200
+        return jsonify({"error": f"Error calculating team rating: {str(e)}"}), 500
 
 @game_bp.route('/team_rating_debug/<string:team_abbreviation>', methods=['GET'])
 def debug_team_rating(team_abbreviation):
@@ -2827,6 +2450,113 @@ def debug_player_ratings(team_abbreviation):
             "success": False
         }), 500
 
+@team_rating_bp.route('/test_supabase', methods=['GET'])
+def test_supabase_connection():
+    """
+    Test endpoint to verify the Supabase connection and environment variables.
+    """
+    try:
+        import os
+        
+        # Check environment variables
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
+        
+        # Test creating a client
+        test_client = create_supabase_client()
+        
+        # Test a simple query
+        response = None
+        sample_data = None
+        query_error = None
+        try:
+            response = test_client.table('Player').select('*').limit(3).execute()
+            if hasattr(response, 'data'):
+                sample_data = response.data
+        except Exception as e:
+            query_error = str(e)
+            
+        return jsonify({
+            "env_variables": {
+                "supabase_url_exists": bool(supabase_url),
+                "supabase_key_exists": bool(supabase_key),
+                "supabase_url": supabase_url[:10] + "..." if supabase_url else None,
+                "supabase_key_preview": supabase_key[:10] + "..." if supabase_key else None
+            },
+            "client_created": test_client is not None,
+            "query_successful": query_error is None,
+            "query_error": query_error,
+            "sample_data_count": len(sample_data) if sample_data else 0,
+            "sample_row": sample_data[0] if sample_data and len(sample_data) > 0 else None
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "success": False
+        }), 500
+
+@team_rating_bp.route('/debug_team_data/<string:team_abbreviation>', methods=['GET'])
+def debug_team_data(team_abbreviation):
+    """
+    Debug endpoint to test team data retrieval functionality.
+    """
+    try:
+        # Create the team formation service with debug mode enabled
+        formation = TeamFormation(team_abbreviation, debug=True)
+        
+        # Get team by abbreviation
+        team_data = formation._get_team_by_abbreviation(team_abbreviation)
+        
+        # Try SQLAlchemy directly
+        team_sqlalchemy = None
+        try:
+            from ..models.team import Team
+            db_team = Team.query.filter_by(abbreviation=team_abbreviation).first()
+            if db_team:
+                team_sqlalchemy = {
+                    "success": True,
+                    "data": db_team.to_dict() if hasattr(db_team, "to_dict") else str(db_team)
+                }
+            else:
+                team_sqlalchemy = {
+                    "success": False,
+                    "error": f"No team found with abbreviation {team_abbreviation}"
+                }
+        except Exception as e:
+            team_sqlalchemy = {
+                "success": False,
+                "error": str(e)
+            }
+            
+        # Try Supabase directly
+        team_supabase = None
+        try:
+            client = create_supabase_client()
+            response = client.table('Team').select('*').eq('abbreviation', team_abbreviation).execute()
+            team_supabase = {
+                "success": True if response.data else False,
+                "data": response.data[0] if response.data else None,
+                "count": len(response.data) if response.data else 0
+            }
+        except Exception as e:
+            team_supabase = {
+                "success": False,
+                "error": str(e)
+            }
+            
+        # Return all results
+        return jsonify({
+            "team_abbreviation": team_abbreviation,
+            "team_data_from_formation": team_data,
+            "sqlalchemy_query": team_sqlalchemy,
+            "supabase_query": team_supabase
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "success": False
+        }), 500
+
 # Main block for direct execution and testing
 if __name__ == "__main__":
     import sys
@@ -2968,14 +2698,10 @@ if __name__ == "__main__":
             
             # If we get here, we couldn't find a valid rating
             if self.debug:
-                print(f"  Player: {player_name} ({player_position}) - Could not find rating, using default 75")
-                if isinstance(player, dict):
-                    print(f"  PLAYER DICT CONTENTS: {player}")
-                else:
-                    print(f"  PLAYER OBJECT DIR: {dir(player)}")
-            
-            # Default to 75 if no rating found (better than 0)
-            return 75
+                print(f"  Player: {player_name} ({player_position}) - Could not find rating, using default 0")
+  
+            # Default to 0 if no rating found
+            return 0
         
         # Test with different player formats
         print("\nNamed Tuple Players:")
@@ -3048,23 +2774,42 @@ if __name__ == "__main__":
             'goaltending': 0.10
         }
         
-        # Define sample component ratings
-        component_ratings = {
-            'line_1': line1_with_chemistry,
-            'line_2': 83.5,
-            'line_3': 82.7,
-            'line_4': 81.0,
-            'pair_1': pair1_with_chemistry,
-            'pair_2': 83.5,
-            'pair_3': 80.0,
-            'power_play_1': 85.0,
-            'power_play_2': 82.0,
-            'penalty_kill_1': 83.0,
-            'penalty_kill_2': 81.0,
-            'other_special_teams': 75.0,
-            'shootout': 85.0,
-            'goaltending': goalie_avg if 'goalie_avg' in locals() else 85.0
-        }
+        # Define sample component ratings - use actual data instead of hardcoded values
+        if line1_with_chemistry is not None and pair1_with_chemistry is not None:
+            component_ratings = {
+                'line_1': line1_with_chemistry,
+                'line_2': line2_with_chemistry if 'line2_with_chemistry' in locals() else 0,
+                'line_3': line3_with_chemistry if 'line3_with_chemistry' in locals() else 0,
+                'line_4': line4_with_chemistry if 'line4_with_chemistry' in locals() else 0,
+                'pair_1': pair1_with_chemistry,
+                'pair_2': pair2_with_chemistry if 'pair2_with_chemistry' in locals() else 0,
+                'pair_3': pair3_with_chemistry if 'pair3_with_chemistry' in locals() else 0,
+                'power_play_1': pp1_rating if 'pp1_rating' in locals() else 0,
+                'power_play_2': pp2_rating if 'pp2_rating' in locals() else 0,
+                'penalty_kill_1': pk1_rating if 'pk1_rating' in locals() else 0,
+                'penalty_kill_2': pk2_rating if 'pk2_rating' in locals() else 0,
+                'other_special_teams': 0,
+                'shootout': 0,
+                'goaltending': goalie_avg if 'goalie_avg' in locals() else 0
+            }
+        else:
+            # If no actual data, use zeros instead of hardcoded values
+            component_ratings = {
+                'line_1': 0,
+                'line_2': 0,
+                'line_3': 0,
+                'line_4': 0,
+                'pair_1': 0,
+                'pair_2': 0,
+                'pair_3': 0,
+                'power_play_1': 0,
+                'power_play_2': 0,
+                'penalty_kill_1': 0,
+                'penalty_kill_2': 0,
+                'other_special_teams': 0,
+                'shootout': 0,
+                'goaltending': 0
+            }
         
         # Calculate weighted average
         weighted_sum = 0

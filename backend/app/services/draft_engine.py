@@ -5,15 +5,47 @@ from ..models.team import Team
 from ..models.draft import Draft
 from ..extensions import db
 import uuid
-from faker import Faker
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 
 # Create a blueprint for draft endpoints
 draft_bp = Blueprint('draft', __name__)
 
-# Initialize Faker for generating names
-faker = Faker()
+# Define lists of sample names instead of using Faker
+FIRST_NAMES = [
+    "John", "James", "William", "Michael", "Robert", "David", "Thomas", "Charles", "Joseph", "Richard",
+    "Daniel", "Matthew", "Anthony", "Mark", "Steven", "Paul", "Andrew", "Kenneth", "George", "Edward",
+    "Joshua", "Kevin", "Brian", "Ronald", "Timothy", "Jason", "Jeffrey", "Gary", "Ryan", "Nicholas",
+    "Eric", "Stephen", "Jacob", "Larry", "Frank", "Scott", "Brandon", "Samuel", "Benjamin", "Gregory",
+    "Alexander", "Patrick", "Jack", "Dennis", "Jerry", "Tyler", "Aaron", "Henry", "Douglas", "Peter",
+    "Adam", "Nathan", "Zachary", "Walter", "Ethan", "Jeremy", "Harold", "Keith", "Christian", "Roger",
+    "Noah", "Gerald", "Carl", "Terry", "Sean", "Austin", "Arthur", "Lawrence", "Jesse", "Dylan",
+    "Bryan", "Ralph", "Gabriel", "Kyle", "Jordan", "Tony", "Curtis", "Howard", "Shawn", "Corey"
+]
+
+LAST_NAMES = [
+    "Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor",
+    "Anderson", "Thomas", "Jackson", "White", "Harris", "Martin", "Thompson", "Garcia", "Martinez", "Robinson",
+    "Clark", "Rodriguez", "Lewis", "Lee", "Walker", "Hall", "Allen", "Young", "Hernandez", "King",
+    "Wright", "Lopez", "Hill", "Scott", "Green", "Adams", "Baker", "Gonzalez", "Nelson", "Carter",
+    "Mitchell", "Perez", "Roberts", "Turner", "Phillips", "Campbell", "Parker", "Evans", "Edwards", "Collins",
+    "Stewart", "Sanchez", "Morris", "Rogers", "Reed", "Cook", "Morgan", "Bell", "Murphy", "Bailey",
+    "Rivera", "Cooper", "Richardson", "Cox", "Howard", "Ward", "Torres", "Peterson", "Gray", "Ramirez",
+    "James", "Watson", "Brooks", "Kelly", "Sanders", "Price", "Bennett", "Wood", "Barnes", "Ross"
+]
+
+COUNTRIES = [
+    "Canada", "USA", "Sweden", "Finland", "Russia", "Czech Republic", "Slovakia", "Germany", "Switzerland", 
+    "Latvia", "Belarus", "Norway", "Denmark", "France", "Austria", "Italy", "Kazakhstan", "Ukraine", "Slovenia"
+]
+
+def generate_random_name():
+    """Generate a random first and last name from predefined lists."""
+    return random.choice(FIRST_NAMES), random.choice(LAST_NAMES)
+
+def generate_random_country():
+    """Generate a random country from predefined list."""
+    return random.choice(COUNTRIES)
 
 class DraftEngine:
     """
@@ -89,16 +121,20 @@ class DraftEngine:
             potential_index = min(9, int(random.betavariate(1.5, 3) * 10) + int(random.random() > potential_weight))
             potential = potential_ratings[potential_index]
             
+            # Generate random name and nationality
+            first_name, last_name = generate_random_name()
+            nationality = generate_random_country()
+            
             # Create prospect dict
             prospect = {
                 "id": str(uuid.uuid4()),
-                "first_name": faker.first_name(),
-                "last_name": faker.last_name(),
+                "first_name": first_name,
+                "last_name": last_name,
                 "position": position,
                 "age": age,
                 "overall_rating": overall_rating,
                 "potential": potential,
-                "nationality": faker.country(),
+                "nationality": nationality,
                 "height": random.randint(68, 79),  # Height in inches (5'8" to 6'7")
                 "weight": random.randint(160, 240),  # Weight in pounds
                 "draft_year": self.draft_year,

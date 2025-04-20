@@ -498,8 +498,8 @@ def get_team_formation(team_abbreviation):
         # Import TeamFormation locally to avoid circular import
         from .team_formation import TeamFormation
         
-        # Initialize the team formation service
-        formation = TeamFormation(team_abbreviation)
+        # Initialize the team formation service with debug mode enabled
+        formation = TeamFormation(team_abbreviation, debug=True)
         print(f"TeamFormation service initialized for {team_abbreviation}")
         
         # Initialize data
@@ -507,48 +507,11 @@ def get_team_formation(team_abbreviation):
         print(f"TeamFormation initialization success: {init_success}")
         
         if not init_success:
-            print(f"Failed to initialize team formation data for {team_abbreviation}, returning default formation")
-            # Return default formation structure rather than an error
-            # This allows the frontend to still display something
-            default_formation = {
-                'lines': {
-                    'forward_lines': [],
-                    'defense_pairs': [],
-                    'goalies': [],
-                    'power_play_1': {'forwards': [], 'defense': []},
-                    'power_play_2': {'forwards': [], 'defense': []},
-                    'penalty_kill_1': {'forwards': [], 'defense': []},
-                    'penalty_kill_2': {'forwards': [], 'defense': []}
-                },
-                'chemistry': {
-                    'forward_lines': [],
-                    'defense_pairs': [],
-                    'power_play': [],
-                    'penalty_kill': [],
-                    'overall': 0.0
-                },
-                'team_rating': {
-                    'overall': 75,
-                    'offense': 75,
-                    'defense': 75,
-                    'special_teams': 75,
-                    'goaltending': 75,
-                    'component_ratings': {
-                        'line_1': 80,
-                        'line_2': 77,
-                        'line_3': 74,
-                        'line_4': 70,
-                        'pair_1': 80,
-                        'pair_2': 76,
-                        'pair_3': 73,
-                        'power_play_1': 79,
-                        'power_play_2': 76,
-                        'penalty_kill_1': 78,
-                        'penalty_kill_2': 75
-                    }
-                }
-            }
-            return jsonify(default_formation), 200
+            print(f"Failed to initialize team formation data for {team_abbreviation}")
+            return jsonify({
+                'error': f"Failed to initialize team formation data for {team_abbreviation}",
+                'success': False
+            }), 400
             
         # Generate optimal lines
         print(f"Generating optimal lines for {team_abbreviation}")
@@ -563,28 +526,9 @@ def get_team_formation(team_abbreviation):
                 for key in ['overall', 'offense', 'defense', 'special_teams', 'goaltending']:
                     if key in team_rating:
                         team_rating[key] = round(float(team_rating[key]), 1)
-                    else:
-                        team_rating[key] = 75.0  # Default value
-                
-                # Ensure component ratings are present
-                if 'component_ratings' not in team_rating:
-                    team_rating['component_ratings'] = {}
-                
-                # Ensure all component ratings have valid values
-                component_rating_defaults = {
-                    'line_1': 80, 'line_2': 77, 'line_3': 74, 'line_4': 70,
-                    'pair_1': 80, 'pair_2': 76, 'pair_3': 73,
-                    'power_play_1': 79, 'power_play_2': 76,
-                    'penalty_kill_1': 78, 'penalty_kill_2': 75
-                }
-                
-                for comp, default in component_rating_defaults.items():
-                    if comp not in team_rating['component_ratings'] or team_rating['component_ratings'][comp] <= 0:
-                        team_rating['component_ratings'][comp] = default
             
-            # Save ratings to database
+            # Get the ratings (but don't actually save to database)
             try:
-                # Get the ratings without saving to database
                 team_ratings = formation.save_team_overall_to_database()
                 print("Retrieved team ratings")
             except Exception as save_error:
@@ -596,90 +540,18 @@ def get_team_formation(team_abbreviation):
         except Exception as gen_error:
             print(f"Error generating optimal lines: {gen_error}")
             traceback.print_exc()
-            # Return default formation on error
-            default_formation = {
-                'lines': {
-                    'forward_lines': [],
-                    'defense_pairs': [],
-                    'goalies': [],
-                    'power_play_1': {'forwards': [], 'defense': []},
-                    'power_play_2': {'forwards': [], 'defense': []},
-                    'penalty_kill_1': {'forwards': [], 'defense': []},
-                    'penalty_kill_2': {'forwards': [], 'defense': []}
-                },
-                'chemistry': {
-                    'forward_lines': [],
-                    'defense_pairs': [],
-                    'power_play': [],
-                    'penalty_kill': [],
-                    'overall': 0.0
-                },
-                'team_rating': {
-                    'overall': 75,
-                    'offense': 75,
-                    'defense': 75,
-                    'special_teams': 75,
-                    'goaltending': 75,
-                    'component_ratings': {
-                        'line_1': 80,
-                        'line_2': 77,
-                        'line_3': 74,
-                        'line_4': 70,
-                        'pair_1': 80,
-                        'pair_2': 76,
-                        'pair_3': 73,
-                        'power_play_1': 79,
-                        'power_play_2': 76,
-                        'penalty_kill_1': 78,
-                        'penalty_kill_2': 75
-                    }
-                }
-            }
-            return jsonify(default_formation), 200
+            return jsonify({
+                'error': f"Error generating optimal lines: {str(gen_error)}",
+                'success': False
+            }), 500
     except Exception as e:
         print(f"Error generating team formation: {e}")
         traceback.print_exc()
         
-        # Return default formation in case of any error
-        default_formation = {
-            'lines': {
-                'forward_lines': [],
-                'defense_pairs': [],
-                'goalies': [],
-                'power_play_1': {'forwards': [], 'defense': []},
-                'power_play_2': {'forwards': [], 'defense': []},
-                'penalty_kill_1': {'forwards': [], 'defense': []},
-                'penalty_kill_2': {'forwards': [], 'defense': []}
-            },
-            'chemistry': {
-                'forward_lines': [],
-                'defense_pairs': [],
-                'power_play': [],
-                'penalty_kill': [],
-                'overall': 0.0
-            },
-            'team_rating': {
-                'overall': 75,
-                'offense': 75,
-                'defense': 75,
-                'special_teams': 75,
-                'goaltending': 75,
-                'component_ratings': {
-                    'line_1': 80,
-                    'line_2': 77,
-                    'line_3': 74,
-                    'line_4': 70,
-                    'pair_1': 80,
-                    'pair_2': 76,
-                    'pair_3': 73,
-                    'power_play_1': 79,
-                    'power_play_2': 76,
-                    'penalty_kill_1': 78,
-                    'penalty_kill_2': 75
-                }
-            }
-        }
-        return jsonify(default_formation), 200
+        return jsonify({
+            'error': f"Error generating team formation: {str(e)}",
+            'success': False
+        }), 500
 
 @lines_bp.route("/chemistry/<team_abbreviation>", methods=['GET'])
 def get_team_chemistry(team_abbreviation):
@@ -689,7 +561,7 @@ def get_team_chemistry(team_abbreviation):
         from .team_formation import TeamFormation
         
         # Initialize the team formation service
-        formation = TeamFormation(team_abbreviation)
+        formation = TeamFormation(team_abbreviation, debug=True)
         print(f"Chemistry: TeamFormation service initialized for {team_abbreviation}")
         
         # Initialize data
@@ -697,31 +569,11 @@ def get_team_chemistry(team_abbreviation):
         print(f"Chemistry: TeamFormation initialization success: {init_success}")
         
         if not init_success:
-            print(f"Failed to initialize team chemistry data for {team_abbreviation}, returning default chemistry")
-            # Return default chemistry values
-            default_chemistry = {
-                'forward_lines': [
-                    {'line': 1, 'chemistry': 1, 'factors': {}},
-                    {'line': 2, 'chemistry': 0, 'factors': {}},
-                    {'line': 3, 'chemistry': 0, 'factors': {}},
-                    {'line': 4, 'chemistry': 0, 'factors': {}}
-                ],
-                'defense_pairs': [
-                    {'pair': 1, 'chemistry': 1, 'factors': {}},
-                    {'pair': 2, 'chemistry': 0, 'factors': {}},
-                    {'pair': 3, 'chemistry': 0, 'factors': {}}
-                ],
-                'power_play': [
-                    {'unit': 1, 'chemistry': 1, 'factors': {}},
-                    {'unit': 2, 'chemistry': 0, 'factors': {}}
-                ],
-                'penalty_kill': [
-                    {'unit': 1, 'chemistry': 1, 'factors': {}},
-                    {'unit': 2, 'chemistry': 0, 'factors': {}}
-                ],
-                'overall': 0.5
-            }
-            return jsonify(default_chemistry), 200
+            print(f"Failed to initialize team chemistry data for {team_abbreviation}")
+            return jsonify({
+                'error': f"Failed to initialize team chemistry data for {team_abbreviation}",
+                'success': False
+            }), 400
             
         # Get chemistry without recalculating lines
         print(f"Getting chemistry for {team_abbreviation}")
@@ -733,30 +585,10 @@ def get_team_chemistry(team_abbreviation):
         print(f"Error getting team chemistry: {e}")
         traceback.print_exc()
         
-        # Return default chemistry values in case of error
-        default_chemistry = {
-            'forward_lines': [
-                {'line': 1, 'chemistry': 1, 'factors': {}},
-                {'line': 2, 'chemistry': 0, 'factors': {}},
-                {'line': 3, 'chemistry': 0, 'factors': {}},
-                {'line': 4, 'chemistry': 0, 'factors': {}}
-            ],
-            'defense_pairs': [
-                {'pair': 1, 'chemistry': 1, 'factors': {}},
-                {'pair': 2, 'chemistry': 0, 'factors': {}},
-                {'pair': 3, 'chemistry': 0, 'factors': {}}
-            ],
-            'power_play': [
-                {'unit': 1, 'chemistry': 1, 'factors': {}},
-                {'unit': 2, 'chemistry': 0, 'factors': {}}
-            ],
-            'penalty_kill': [
-                {'unit': 1, 'chemistry': 1, 'factors': {}},
-                {'unit': 2, 'chemistry': 0, 'factors': {}}
-            ],
-            'overall': 0.5
-        }
-        return jsonify(default_chemistry), 200
+        return jsonify({
+            'error': f"Error getting team chemistry: {str(e)}",
+            'success': False
+        }), 500
 
 @lines_bp.route("/update-team-overall/<team_abbreviation>", methods=['GET'])
 def update_team_overall(team_abbreviation):
@@ -767,100 +599,44 @@ def update_team_overall(team_abbreviation):
         
         # Initialize the team formation service
         print(f"Starting team formation initialization for {team_abbreviation}")
-        formation = TeamFormation(team_abbreviation)
+        formation = TeamFormation(team_abbreviation, debug=True)
         
         # Initialize data
         init_success = formation.initialize()
         print(f"Team formation initialization result: {init_success}")
         
         if not init_success:
-            print(f"Failed to initialize team formation data for {team_abbreviation}, returning default ratings")
-            # Return default ratings instead of an error when initialization fails
-            # This allows the frontend to still display something
-            default_rating = {
-                'overall_rating': 75,  # Default overall rating
-                'offense': 75,
-                'defense': 75,
-                'special_teams': 75,
-                'goaltending': 75,
-                'component_ratings': {
-                    'line_1': 80,
-                    'line_2': 77,
-                    'line_3': 74,
-                    'line_4': 70,
-                    'pair_1': 80,
-                    'pair_2': 76,
-                    'pair_3': 73,
-                    'power_play_1': 79,
-                    'power_play_2': 76,
-                    'penalty_kill_1': 78,
-                    'penalty_kill_2': 75
-                }
-            }
-            return jsonify(default_rating), 200
+            print(f"Failed to initialize team formation data for {team_abbreviation}")
+            return jsonify({
+                'error': f"Failed to initialize team formation data for {team_abbreviation}",
+                'success': False
+            }), 400
             
         # Generate optimal lines and calculate ratings
         print(f"Generating optimal lines for {team_abbreviation}")
         lines_data = formation.generate_optimal_lines()
         team_rating = lines_data.get('team_rating', {})
         
-        # Get the ratings directly without saving to database
+        # Get the ratings without saving to database
         try:
             ratings = formation.save_team_overall_to_database()
             print("Retrieved team ratings")
         except Exception as save_error:
             print(f"Error getting team ratings: {save_error}")
-            # Continue even if getting ratings fails
+            return jsonify({
+                'error': f"Error getting team ratings: {str(save_error)}",
+                'success': False
+            }), 500
         
-        # Return a formatted response that matches what the frontend expects
-        # Ensure all fields are properly formatted and present
-        response = {
-            'overall_rating': round(team_rating.get('overall', 75), 1),
-            'offense': round(team_rating.get('offense', 75), 1),
-            'defense': round(team_rating.get('defense', 75), 1),
-            'special_teams': round(team_rating.get('special_teams', 75), 1),
-            'goaltending': round(team_rating.get('goaltending', 75), 1),
-            'component_ratings': {
-                'line_1': round(team_rating.get('component_ratings', {}).get('line_1', 80), 1),
-                'line_2': round(team_rating.get('component_ratings', {}).get('line_2', 77), 1),
-                'line_3': round(team_rating.get('component_ratings', {}).get('line_3', 74), 1),
-                'line_4': round(team_rating.get('component_ratings', {}).get('line_4', 70), 1),
-                'pair_1': round(team_rating.get('component_ratings', {}).get('pair_1', 80), 1),
-                'pair_2': round(team_rating.get('component_ratings', {}).get('pair_2', 76), 1),
-                'pair_3': round(team_rating.get('component_ratings', {}).get('pair_3', 73), 1),
-                'power_play_1': round(team_rating.get('component_ratings', {}).get('power_play_1', 79), 1),
-                'power_play_2': round(team_rating.get('component_ratings', {}).get('power_play_2', 76), 1),
-                'penalty_kill_1': round(team_rating.get('component_ratings', {}).get('penalty_kill_1', 78), 1),
-                'penalty_kill_2': round(team_rating.get('component_ratings', {}).get('penalty_kill_2', 75), 1)
-            }
-        }
-        
+        # Return the calculated ratings
         print(f"Successfully generated team rating for {team_abbreviation}")
-        return jsonify(response), 200
+        return jsonify(ratings), 200
     
     except Exception as e:
         print(f"Error updating team overall: {e}")
         traceback.print_exc()
         
-        # Return default ratings in case of any error
-        default_rating = {
-            'overall_rating': 75,  # Default overall rating
-            'offense': 75,
-            'defense': 75,
-            'special_teams': 75,
-            'goaltending': 75,
-            'component_ratings': {
-                'line_1': 80,
-                'line_2': 77,
-                'line_3': 74,
-                'line_4': 70,
-                'pair_1': 80,
-                'pair_2': 76,
-                'pair_3': 73,
-                'power_play_1': 79,
-                'power_play_2': 76,
-                'penalty_kill_1': 78,
-                'penalty_kill_2': 75
-            }
-        }
-        return jsonify(default_rating), 200
+        return jsonify({
+            'error': f"Error updating team overall: {str(e)}",
+            'success': False
+        }), 500

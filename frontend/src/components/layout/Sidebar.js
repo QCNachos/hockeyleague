@@ -127,6 +127,7 @@ const Sidebar = () => {
         <NavContent isOpen={sections.gameModes}>
           <StyledNavLink to="/franchise">Franchise Mode</StyledNavLink>
           <StyledNavLink to="/be-a-pro">Be a Pro Mode</StyledNavLink>
+          <StyledNavLink to="/game">Game</StyledNavLink>
           <StyledNavLink to="/season">Season Mode</StyledNavLink>
           <StyledNavLink to="/tournaments">Tournaments</StyledNavLink>
           <DisabledNavLink>Owner Mode</DisabledNavLink>

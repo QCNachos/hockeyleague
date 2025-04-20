@@ -22,11 +22,17 @@ import AssetMovement from './pages/AssetMovement';
 import FranchiseMode from './pages/gameModes/FranchiseMode';
 import BeAProMode from './pages/gameModes/BeAProMode';
 import BeAProCreate from './pages/gameModes/BeAProCreate';
+import GameMode from './pages/gameModes/GameMode';
+import PreGame from './pages/gameModes/PreGame';
 import Tournaments from './pages/gameModes/Tournaments';
 import OwnerMode from './pages/gameModes/OwnerMode';
 import SeasonMode from './pages/gameModes/SeasonMode';
 import TournamentSetup from './pages/gameModes/TournamentSetup';
 import StanleyCupSetup from './pages/gameModes/StanleyCupSetup';
+import FranchiseSettings from './pages/gameModes/FranchiseSettings';
+import FranchiseTeamSelection from './pages/gameModes/FranchiseTeamSelection';
+import FranchiseExpansionSetup from './pages/gameModes/FranchiseExpansionSetup';
+import FranchiseSummary from './pages/gameModes/FranchiseSummary';
 
 // Auth guard component
 const PrivateRoute = ({ children }) => {
@@ -48,15 +54,22 @@ function App() {
           
           {/* Game Modes */}
           <Route path="franchise" element={<FranchiseMode />} />
+          <Route path="franchise/create/:franchiseType" element={<FranchiseSettings />} />
+          <Route path="franchise/team-selection" element={<FranchiseTeamSelection />} />
+          <Route path="franchise/expansion-setup" element={<FranchiseExpansionSetup />} />
+          <Route path="franchise/summary" element={<FranchiseSummary />} />
+          <Route path="franchise/setup" element={<div>Franchise Setup Page (Coming Soon)</div>} />
           <Route path="be-a-pro" element={<BeAProMode />} />
           <Route path="be-a-pro/create/:startType" element={<BeAProCreate />} />
+          <Route path="game" element={<GameMode />} />
+          <Route path="game/pre-game" element={<PreGame />} />
+          <Route path="season" element={<SeasonMode />} />
           <Route path="tournaments" element={<Tournaments />} />
           <Route path="tournaments/stanley-cup/setup" element={<StanleyCupSetup />} />
           <Route path="tournaments/stanley-cup/play" element={<div>Stanley Cup Playoffs (Coming Soon)</div>} />
           <Route path="tournaments/:tournamentId/setup" element={<TournamentSetup />} />
           <Route path="tournaments/play" element={<div>Tournament Play Page (Coming Soon)</div>} />
           <Route path="owner" element={<OwnerMode />} />
-          <Route path="season" element={<SeasonMode />} />
           
           {/* Management */}
           <Route path="players" element={<PlayerEditor />} />

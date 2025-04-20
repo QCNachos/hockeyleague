@@ -141,6 +141,17 @@ const Home = () => {
         </FeatureCard>
         
         <FeatureCard>
+          <h3>Quick Game</h3>
+          <p>
+            Jump into the action with a single match between any two teams.
+            Choose your preferred teams, customize game settings, and select play style
+            from real-time gameplay to fast simulation, 
+            enjoy realistic game results.
+          </p>
+          <ActionButton to="/game">Play Quick Game</ActionButton>
+        </FeatureCard>
+        
+        <FeatureCard>
           <h3>Season Mode</h3>
           <p>
             Play through a complete hockey season with your favorite team. Control scheduling,

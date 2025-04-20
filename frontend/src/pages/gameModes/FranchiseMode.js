@@ -148,12 +148,12 @@ const FranchiseMode = () => {
               </OptionCard>
               
               <OptionCard>
-                <h3>Fantasy Draft</h3>
+                <h3>Junior Franchise</h3>
                 <p>
-                  Start with a clean slate! All NHL players are placed into a draft pool,
-                  and you'll build your roster from scratch in a fantasy draft.
+                  Take control of a junior hockey league team and develop the next generation
+                  of hockey superstars. Focus on player development.
                 </p>
-                <ActionButton to="/franchise/create/fantasy">Start Fantasy Draft</ActionButton>
+                <Button disabled>Coming Soon</Button>
               </OptionCard>
               
               <OptionCard>

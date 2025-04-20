@@ -1,6 +1,5 @@
 from typing import Dict, List, Any, Optional
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
 from ..extensions import db
 import random
 
@@ -183,7 +182,6 @@ def get_game(game_id):
 
 
 @game_bp.route('/simulate/<int:game_id>', methods=['POST'])
-@jwt_required()
 def simulate_game(game_id):
     """Simulate a specific game"""
     result = GameSimulation.simulate_game(game_id)

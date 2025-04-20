@@ -152,21 +152,42 @@ class CoachStrategy:
         import copy
         adjusted_lines = copy.deepcopy(lines)
         
-        # Adjust forward lines
-        if 'forward_lines' in adjusted_lines:
-            self._adjust_forward_lines(adjusted_lines['forward_lines'])
+        try:
+            # Adjust forward lines
+            if 'forward_lines' in adjusted_lines:
+                self._adjust_forward_lines(adjusted_lines['forward_lines'])
+                
+            # Adjust defense pairs
+            if 'defense_pairs' in adjusted_lines:
+                self._adjust_defense_pairs(adjusted_lines['defense_pairs'])
+                
+            # Handle both old and new format for power play units
+            if 'power_play_units' in adjusted_lines:
+                self._adjust_special_teams(adjusted_lines['power_play_units'], 'offensive')
+            elif 'power_play_1' in adjusted_lines and 'power_play_2' in adjusted_lines:
+                # Create a temporary list to adjust both units
+                pp_units = [adjusted_lines['power_play_1'], adjusted_lines['power_play_2']]
+                self._adjust_special_teams(pp_units, 'offensive')
+                # Update the original dictionaries
+                adjusted_lines['power_play_1'] = pp_units[0]
+                adjusted_lines['power_play_2'] = pp_units[1]
             
-        # Adjust defense pairs
-        if 'defense_pairs' in adjusted_lines:
-            self._adjust_defense_pairs(adjusted_lines['defense_pairs'])
-            
-        # Adjust power play
-        if 'power_play_units' in adjusted_lines:
-            self._adjust_special_teams(adjusted_lines['power_play_units'], 'offensive')
-            
-        # Adjust penalty kill
-        if 'penalty_kill_units' in adjusted_lines:
-            self._adjust_special_teams(adjusted_lines['penalty_kill_units'], 'defensive')
+            # Handle both old and new format for penalty kill units
+            if 'penalty_kill_units' in adjusted_lines:
+                self._adjust_special_teams(adjusted_lines['penalty_kill_units'], 'defensive')
+            elif 'penalty_kill_1' in adjusted_lines and 'penalty_kill_2' in adjusted_lines:
+                # Create a temporary list to adjust both units
+                pk_units = [adjusted_lines['penalty_kill_1'], adjusted_lines['penalty_kill_2']]
+                self._adjust_special_teams(pk_units, 'defensive')
+                # Update the original dictionaries
+                adjusted_lines['penalty_kill_1'] = pk_units[0]
+                adjusted_lines['penalty_kill_2'] = pk_units[1]
+        except Exception as e:
+            import traceback
+            print(f"Error in adjust_lines_for_strategy: {e}")
+            traceback.print_exc()
+            # If there's an error, just return the original lines
+            # This ensures we don't crash the entire application
         
         return adjusted_lines
     
@@ -224,26 +245,67 @@ class CoachStrategy:
                 defense_pairs[0]['RD'], defense_pairs[1]['RD'] = \
                     defense_pairs[1]['RD'], defense_pairs[0]['RD']
     
-    def _adjust_special_teams(self, units: List[Dict[str, Any]], unit_type: str) -> None:
+    def _adjust_special_teams(self, units, unit_type: str) -> None:
         """
         Adjust special teams units based on coach strategy.
         
         Args:
-            units: List of special teams unit dictionaries
+            units: List of special teams unit dictionaries or a single unit dictionary
             unit_type: Type of unit ('offensive' for PP, 'defensive' for PK)
         """
-        # Example: For power play (offensive units), offensive coaches
-        # might use 4 forwards, 1 defenseman instead of 3F-2D
-        if unit_type == 'offensive' and self.attributes.get('offensive_bias', 0.5) > 0.8:
-            # Implement 4F-1D power play if we have enough forwards
-            # This would be more complex in a real implementation
-            pass
+        import random
         
-        # For penalty kill, defensive coaches prefer defensive specialists
-        elif unit_type == 'defensive' and self.attributes.get('defensive_bias', 0.5) > 0.8:
-            # Prioritize defensive specialists for PK
-            # This would be more complex in a real implementation
-            pass
+        # If we're dealing with a single unit instead of a list, handle it properly
+        is_single_unit = not isinstance(units, list)
+        units_list = [units] if is_single_unit else units
+        
+        try:
+            # For power play (offensive units)
+            if unit_type == 'offensive' and self.attributes.get('offensive_bias', 0.5) > 0.8:
+                # Check if the unit has the expected structure
+                for unit in units_list:
+                    # Handle both old format (players list) and new format (forwards/defense)
+                    if 'players' in unit:
+                        # Original format with 'players' list - no action needed for now
+                        pass
+                    elif 'forwards' in unit and 'defense' in unit:
+                        # New format with separate forwards and defense lists
+                        # Example: If a coach is very offensive-minded, we might
+                        # try to use 4 forwards/1 defenseman on power play
+                        forwards = unit.get('forwards', [])
+                        defense = unit.get('defense', [])
+                        
+                        # Only make this adjustment if we have enough forwards and the coach is offensive
+                        if len(forwards) >= 3 and len(defense) >= 1 and random.random() < 0.3:
+                            # If we have multiple defensemen, remove one and add a forward
+                            # (this is just a simple example - actual implementation would be more complex)
+                            pass
+            
+            # For penalty kill (defensive units)
+            elif unit_type == 'defensive' and self.attributes.get('defensive_bias', 0.5) > 0.8:
+                # Check if the unit has the expected structure
+                for unit in units_list:
+                    # Handle both old format (players list) and new format (forwards/defense)
+                    if 'players' in unit:
+                        # Original format with 'players' list - no action needed for now
+                        pass
+                    elif 'forwards' in unit and 'defense' in unit:
+                        # New format with separate forwards and defense lists
+                        # For penalty kill, defensive coaches prefer defensive specialists
+                        forwards = unit.get('forwards', [])
+                        
+                        # Example: Sort forwards by defensive ability if available
+                        if forwards and 'defense' in forwards[0]:
+                            forwards.sort(key=lambda p: p.get('defense', 0), reverse=True)
+                        
+                        # More complex defensive adjustment logic would go here
+                        pass
+        
+        except Exception as e:
+            import traceback
+            print(f"Error adjusting special teams: {e}")
+            traceback.print_exc()
+            # Continue without adjustments rather than crashing
     
     def get_ice_time_distribution(self) -> Dict[str, Dict[str, float]]:
         """

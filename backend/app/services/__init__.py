@@ -18,6 +18,13 @@ def register_service_blueprints(app):
     from . import team_formation, chemistry, coach, game_simulation, team_service
     from . import db_initialization
     
+    # Print all available routes before registration to help debug
+    print("Available blueprints to register:")
+    if hasattr(lines, 'lines_bp'):
+        print(f"- lines_bp blueprint available")
+    if hasattr(team_formation, 'team_rating_bp'):
+        print(f"- team_rating_bp blueprint available")
+    
     # Register individual service blueprints
     # These will be created or modified in each service file
     if hasattr(calendar, 'calendar_bp'):
@@ -29,14 +36,18 @@ def register_service_blueprints(app):
     if hasattr(draft_engine, 'draft_bp'):
         app.register_blueprint(draft_engine.draft_bp, url_prefix='/api/draft')
     
+    # Register lines blueprint first to give it precedence for shared routes
     if hasattr(lines, 'lines_bp'):
         app.register_blueprint(lines.lines_bp, url_prefix='/api/lines')
+        print("Registered lines blueprint with prefix /api/lines")
+    
+    # Register team_rating blueprint after lines
+    if hasattr(team_formation, 'team_rating_bp'):
+        app.register_blueprint(team_formation.team_rating_bp, url_prefix='/api/team_rating')
+        print("Registered team_rating blueprint with prefix /api/team_rating")
     
     if hasattr(statistics, 'stats_bp'):
         app.register_blueprint(statistics.stats_bp, url_prefix='/api/stats')
-    
-    if hasattr(team_formation, 'team_rating_bp'):
-        app.register_blueprint(team_formation.team_rating_bp, url_prefix='/api/team_rating')
     
     if hasattr(game_simulation, 'game_bp'):
         app.register_blueprint(game_simulation.game_bp, url_prefix='/api/games')
@@ -50,7 +61,10 @@ def register_service_blueprints(app):
     if hasattr(db_initialization, 'init_bp'):
         app.register_blueprint(db_initialization.init_bp, url_prefix='/api/init')
 
-    # Add other blueprints as needed
+    # Print all routes after registration to help debug
+    print("All registered routes:")
+    for rule in app.url_map.iter_rules():
+        print(f"{rule.endpoint}: {rule}")
 
 # Update this list to remove the classes that cause circular imports
 __all__ = [

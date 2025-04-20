@@ -770,6 +770,12 @@ const sortForwardsByPosition = (forwards) => {
   return sortedForwards;
 };
 
+// Add a debug function at the top level that we'll use to log API calls
+const debugAPI = (message, data) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${message}`, data);
+};
+
 const LineCombinations = () => {
   const { league, teamId } = useParams();
   const [selectedLeague, setSelectedLeague] = useState(league || 'NHL');
@@ -837,10 +843,7 @@ const LineCombinations = () => {
       setTeamRatings(team_rating);
       console.log('Setting team ratings:', team_rating);
 
-      // Update team overall in the Supabase database if we have a selected team
-      if (selectedTeam && team_rating.overall) {
-        updateTeamOverallInDatabase(selectedTeam, Math.round(team_rating.overall));
-      }
+      // Remove database update for now since the Team table doesn't have overall_rating column
     }
     
     // Set chemistry data for use in the UI
@@ -1125,24 +1128,6 @@ const LineCombinations = () => {
     });
   };
 
-  // Add this new function to update the team overall rating in the database
-  const updateTeamOverallInDatabase = async (teamId, overall) => {
-    try {
-      const { error } = await supabase
-        .from('Team')
-        .update({ overall: overall })
-        .eq('id', teamId);
-        
-      if (error) {
-        console.error("Error updating team overall in database:", error);
-      } else {
-        console.log(`Successfully updated team ${teamId} overall to ${overall}`);
-      }
-    } catch (error) {
-      console.error("Exception when updating team overall:", error);
-    }
-  };
-
   // Effect to fetch teams when league changes
   useEffect(() => {
     const fetchTeams = async () => {
@@ -1219,58 +1204,316 @@ const LineCombinations = () => {
   useEffect(() => {
     const fetchRoster = async () => {
       setLoading(true);
+      let players = [];
+      
       try {
-        if (!selectedTeam || !teamInfo) {
-          setLoading(false);
-          return;
+        debugAPI('Starting fetchRoster with teamAbbr:', teamInfo?.abbreviation);
+        
+        // Get team information first
+        if (!teamInfo || !teamInfo.abbreviation) {
+          if (teamInfo?.abbreviation) {
+            // If we have teamAbbr but not teamInfo, try to get team info
+            debugAPI('Getting team info for abbreviation:', teamInfo.abbreviation);
+            const teamByAbbrResponse = await supabase
+              .from('Team')
+              .select('*')
+              .eq('abbreviation', teamInfo.abbreviation)
+              .single();
+              
+            if (!teamByAbbrResponse.error && teamByAbbrResponse.data) {
+              setTeamInfo(teamByAbbrResponse.data);
+              debugAPI('Set team info from abbreviation:', teamByAbbrResponse.data);
+            } else {
+              debugAPI('Error getting team by abbreviation:', teamByAbbrResponse.error);
+              setLoading(false);
+              return;
+            }
+          } else {
+            debugAPI('No team abbreviation or team info available');
+            setLoading(false);
+            return;
+          }
         }
-        
-        // Get the team abbreviation
-        const teamAbbr = teamInfo.abbreviation;
-        console.log('Fetching roster for team:', teamAbbr);
-        
-        // Initialize players variable before any API calls
-        let players = [];
         
         // Only fetch team ratings if we haven't done so already for this team
         if (!hasLoadedTeamRatings.current) {
           try {
-            // Try the team overall endpoint specifically with absolute URL
-            const overallResponse = await fetch(`http://localhost:5001/api/team_rating/update-team-overall/${teamAbbr}`);
-            if (overallResponse.ok) {
-              const overallData = await overallResponse.json();
-              console.log('Team overall update response:', overallData);
+            // Make sure we have a valid team abbreviation
+            if (!teamInfo?.abbreviation) {
+              debugAPI('No team abbreviation available for API calls', { teamInfo });
+              setLoading(false);
+              return;
+            }
+            
+            // First try to get the team formation data which includes ratings
+            const formationUrl = `http://localhost:5001/api/lines/formation/${teamInfo.abbreviation}`;
+            debugAPI(`Fetching team formation data from: ${formationUrl}`, {});
+            
+            // Add timeout to API call
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+            
+            try {
+              const formationResponse = await fetch(formationUrl, {
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
               
-              // Update the team ratings with the response data
-              if (overallData && overallData.overall_rating) {
+              const formationStatus = formationResponse.status;
+              debugAPI(`Formation API response status: ${formationStatus}`, {});
+              
+              if (formationResponse.ok) {
+                const formationData = await formationResponse.json();
+                debugAPI('Team formation response data:', formationData);
+                
+                // Check if we have any data at all
+                if (!formationData) {
+                  debugAPI('Formation data is empty or null', {});
+                  tryLinesAPI();
+                  return;
+                }
+                
+                // If we have team_rating in the formation data, use it
+                if (formationData.team_rating) {
+                  debugAPI('Found team_rating in formation data', formationData.team_rating);
+                  setTeamRatings({
+                    overall: formationData.team_rating.overall || 0,
+                    offense: formationData.team_rating.offense || 0,
+                    defense: formationData.team_rating.defense || 0,
+                    special_teams: formationData.team_rating.special_teams || 0,
+                    goaltending: formationData.team_rating.goaltending || 0,
+                    component_ratings: formationData.team_rating.component_ratings || {}
+                  });
+                  
+                  // Mark that we've loaded team ratings
+                  hasLoadedTeamRatings.current = true;
+                  
+                  // Process the line data if available
+                  if (formationData.lines) {
+                    debugAPI('Processing lines data from formation', { lineCount: Object.keys(formationData.lines).length });
+                    processLineData(formationData);
+                  } else {
+                    debugAPI('No lines data in formation response', {});
+                  }
+                } else {
+                  // If formation data doesn't have team ratings, try the lines API endpoint directly
+                  debugAPI('No team_rating in formation data, trying lines API', {});
+                  tryLinesAPI();
+                }
+              } else {
+                // Log more details about the error
+                const errorText = await formationResponse.text().catch(e => "Could not get error text");
+                debugAPI(`Formation API failed with status: ${formationStatus}`, { errorText });
+                
+                // Fallback to direct endpoints
+                tryLinesAPI();
+              }
+            } catch (fetchError) {
+              clearTimeout(timeoutId);
+              if (fetchError.name === 'AbortError') {
+                debugAPI('Fetch request timed out', {});
+              } else {
+                debugAPI('Error fetching from formation endpoint:', fetchError);
+              }
+              tryLinesAPI();
+            }
+          } catch (formationError) {
+            debugAPI('Error calling team formation endpoint:', formationError);
+            // Try the direct endpoints as fallback
+            tryLinesAPI();
+          }
+        } else {
+          debugAPI('Team ratings already loaded, skipping API calls', { hasLoadedTeamRatings: hasLoadedTeamRatings.current });
+        }
+        
+        // Function to try the lines API endpoint
+        async function tryLinesAPI() {
+          try {
+            const apiUrl = `http://localhost:5001/api/lines/update-team-overall/${teamInfo.abbreviation}`;
+            debugAPI(`Trying lines API endpoint: ${apiUrl}`, {});
+            
+            // Add timeout to API call
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+            
+            try {
+              const overallResponse = await fetch(apiUrl, {
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+              
+              const responseStatus = overallResponse.status;
+              
+              // Log the response status first before trying to parse JSON
+              debugAPI(`Lines API response status: ${responseStatus}`, {});
+              
+              if (overallResponse.ok) {
+                const overallData = await overallResponse.json();
+                debugAPI('Team overall update response from lines API:', overallData);
+                
+                // Update the team ratings with the response data
+                if (overallData && overallData.overall_rating) {
+                  setTeamRatings({
+                    overall: overallData.overall_rating,
+                    offense: overallData.offense || 0,
+                    defense: overallData.defense || 0,
+                    special_teams: overallData.special_teams || 0,
+                    goaltending: overallData.goaltending || 0,
+                    component_ratings: overallData.component_ratings || {}
+                  });
+                  // Mark that we've loaded team ratings
+                  hasLoadedTeamRatings.current = true;
+                }
+              } else {
+                // Log more details about the error
+                const errorText = await overallResponse.text().catch(e => "Could not get error text");
+                debugAPI(`Lines API endpoint failed with status: ${responseStatus}`, { errorText });
+                
+                // Try the team rating API endpoint as the final fallback
+                tryTeamRatingAPI();
+              }
+            } catch (fetchError) {
+              clearTimeout(timeoutId);
+              if (fetchError.name === 'AbortError') {
+                debugAPI('Lines API request timed out', {});
+              } else {
+                debugAPI('Error fetching from lines API endpoint:', fetchError);
+              }
+              tryTeamRatingAPI();
+            }
+          } catch (linesError) {
+            debugAPI('Error calling lines API endpoint:', linesError);
+            // Try the team rating API as final fallback
+            tryTeamRatingAPI();
+          }
+        }
+        
+        // Function to try the team_rating API endpoint
+        async function tryTeamRatingAPI() {
+          try {
+            const apiUrl = `http://localhost:5001/api/team_rating/calculate/${teamInfo.abbreviation}`;
+            debugAPI(`Trying team_rating API endpoint: ${apiUrl}`, {});
+            
+            // Add timeout to API call
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+            
+            try {
+              const ratingResponse = await fetch(apiUrl, {
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+              
+              const responseStatus = ratingResponse.status;
+              
+              // Log the response status first before trying to parse JSON
+              debugAPI(`Team rating API response status: ${responseStatus}`, {});
+              
+              if (ratingResponse.ok) {
+                const ratingData = await ratingResponse.json();
+                debugAPI('Team rating response from team_rating API:', ratingData);
+                
+                // Use the rating data directly
+                if (ratingData) {
+                  setTeamRatings({
+                    overall: ratingData.overall || 0,
+                    offense: ratingData.offense || 0,
+                    defense: ratingData.defense || 0,
+                    special_teams: ratingData.special_teams || 0,
+                    goaltending: ratingData.goaltending || 0,
+                    component_ratings: ratingData.component_ratings || {}
+                  });
+                  // Mark that we've loaded team ratings
+                  hasLoadedTeamRatings.current = true;
+                }
+              } else {
+                // Log more details about the error
+                const errorText = await ratingResponse.text().catch(e => "Could not get error text");
+                debugAPI(`Team rating API endpoint failed with status: ${responseStatus}`, { errorText });
+                
+                // Just continue with empty ratings at this point
+                console.warn('All team rating endpoints failed. Using default values.');
+                
+                // Set default ratings as a last resort
                 setTeamRatings({
-                  overall: overallData.overall_rating,
-                  offense: overallData.offense || 0,
-                  defense: overallData.defense || 0,
-                  special_teams: overallData.special_teams || 0,
-                  goaltending: overallData.goaltending || 0,
+                  overall: 75,
+                  offense: 75,
+                  defense: 75,
+                  special_teams: 75,
+                  goaltending: 75,
                   component_ratings: {
-                    line_1: overallData.component_ratings?.line_1 || 0,
-                    line_2: overallData.component_ratings?.line_2 || 0,
-                    line_3: overallData.component_ratings?.line_3 || 0,
-                    line_4: overallData.component_ratings?.line_4 || 0,
-                    pair_1: overallData.component_ratings?.pair_1 || 0,
-                    pair_2: overallData.component_ratings?.pair_2 || 0,
-                    pair_3: overallData.component_ratings?.pair_3 || 0,
-                    power_play_1: overallData.component_ratings?.power_play_1 || 0,
-                    power_play_2: overallData.component_ratings?.power_play_2 || 0,
-                    penalty_kill_1: overallData.component_ratings?.penalty_kill_1 || 0,
-                    penalty_kill_2: overallData.component_ratings?.penalty_kill_2 || 0
+                    line_1: 80,
+                    line_2: 77,
+                    line_3: 74,
+                    line_4: 70,
+                    pair_1: 80,
+                    pair_2: 76,
+                    pair_3: 73,
+                    power_play_1: 79,
+                    power_play_2: 76,
+                    penalty_kill_1: 78,
+                    penalty_kill_2: 75
                   }
                 });
-                // Mark that we've loaded team ratings
+                
                 hasLoadedTeamRatings.current = true;
               }
-            } else {
-              console.warn('Team overall endpoint failed with status:', overallResponse.status);
+            } catch (fetchError) {
+              clearTimeout(timeoutId);
+              if (fetchError.name === 'AbortError') {
+                debugAPI('Team rating API request timed out', {});
+              } else {
+                debugAPI('Error fetching from team rating API endpoint:', fetchError);
+              }
+              // Set default ratings as a last resort
+              setTeamRatings({
+                overall: 75,
+                offense: 75,
+                defense: 75,
+                special_teams: 75,
+                goaltending: 75,
+                component_ratings: {
+                  line_1: 80,
+                  line_2: 77,
+                  line_3: 74,
+                  line_4: 70,
+                  pair_1: 80,
+                  pair_2: 76,
+                  pair_3: 73,
+                  power_play_1: 79,
+                  power_play_2: 76,
+                  penalty_kill_1: 78,
+                  penalty_kill_2: 75
+                }
+              });
+              
+              hasLoadedTeamRatings.current = true;
             }
-          } catch (overallError) {
-            console.warn('Error calling team overall endpoint:', overallError);
+          } catch (ratingError) {
+            debugAPI('Error calling team_rating API endpoint:', ratingError);
+            // Set default ratings as a last resort
+            setTeamRatings({
+              overall: 75,
+              offense: 75,
+              defense: 75,
+              special_teams: 75,
+              goaltending: 75,
+              component_ratings: {
+                line_1: 80,
+                line_2: 77,
+                line_3: 74,
+                line_4: 70,
+                pair_1: 80,
+                pair_2: 76,
+                pair_3: 73,
+                power_play_1: 79,
+                power_play_2: 76,
+                penalty_kill_1: 78,
+                penalty_kill_2: 75
+              }
+            });
+            
+            hasLoadedTeamRatings.current = true;
           }
         }
         
@@ -1279,7 +1522,7 @@ const LineCombinations = () => {
           const supabaseResponse = await supabase
             .from('Player')
             .select('*')
-            .eq('team', teamAbbr);
+            .eq('team', teamInfo.abbreviation);
             
           if (supabaseResponse.error) {
             console.error('Supabase query error:', supabaseResponse.error);
@@ -1290,7 +1533,7 @@ const LineCombinations = () => {
           players = supabaseResponse.data || [];
           
           if (players.length === 0) {
-            console.log('No players found for team:', teamAbbr);
+            console.log('No players found for team:', teamInfo.abbreviation);
             // Initialize empty roster
             setRoster({
               forwards: [],

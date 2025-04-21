@@ -7,6 +7,7 @@ import MainLayout from './components/layout/MainLayout';
 import Home from './pages/Home';
 import PlayerEditor from './pages/PlayerEditor';
 import TeamManager from './pages/TeamManager';
+import TeamEditor from './pages/TeamEditor';
 import GameSimulation from './pages/GameSimulation';
 import Calendar from './pages/Calendar';
 import Statistics from './pages/Statistics';
@@ -74,6 +75,8 @@ function App() {
           {/* Management */}
           <Route path="players" element={<PlayerEditor />} />
           <Route path="teams" element={<TeamManager />} />
+          <Route path="team-manager" element={<TeamManager />} />
+          <Route path="team-editor/:teamId" element={<TeamEditor />} />
           <Route path="games" element={<GameSimulation />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="lines" element={<LineCombinations />} />

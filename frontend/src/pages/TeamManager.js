@@ -933,8 +933,8 @@ const TeamManager = () => {
         return;
       }
       
-      // Navigate to line combinations with team info
-      window.location.href = `/lines/${team.league}/${teamId}`;
+      // Navigate to line combinations with team info - use the correct URL format
+      window.location.href = `/line-combinations/${team.league}/${teamId}`;
       
     } catch (error) {
       console.error('Error handling edit lines:', error);
@@ -978,6 +978,37 @@ const TeamManager = () => {
     } catch (error) {
       console.error('[DEBUG] Error in handleEditPlayers:', error);
       alert(`Error loading players: ${error.message}`);
+    }
+  };
+
+  // Add function to handle navigation to Team Editor
+  const handleEditTeam = async (teamId) => {
+    try {
+      console.log(`[DEBUG] handleEditTeam called with teamId: ${teamId}`);
+      
+      // Get the team data
+      const { data: team, error: teamError } = await supabase
+        .from('Team')
+        .select('*')
+        .eq('id', teamId)
+        .single();
+        
+      if (teamError) {
+        console.error('[DEBUG] Error fetching team data:', teamError);
+        throw teamError;
+      }
+      
+      if (!team) {
+        console.error('[DEBUG] Team not found');
+        throw new Error('Team not found');
+      }
+      
+      // Navigate to team editor page with team ID
+      console.log(`[DEBUG] Navigating to TeamEditor with team ID: ${teamId}`);
+      window.location.href = `/team-editor/${teamId}`;
+    } catch (error) {
+      console.error('[DEBUG] Error in handleEditTeam:', error);
+      alert(`Error loading team editor: ${error.message}`);
     }
   };
   
@@ -1336,6 +1367,9 @@ const TeamManager = () => {
                           </TeamButton>
                           <TeamButton onClick={() => handleEditPlayers(team.id)}>
                             Edit Players
+                          </TeamButton>
+                          <TeamButton onClick={() => handleEditTeam(team.id)}>
+                            Edit Team
                           </TeamButton>
                         </TeamActions>
                 </TeamCard>

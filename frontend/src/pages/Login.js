@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, Link } from 'react-router-dom';
 import styled from 'styled-components';
-import { loginUser } from '../store/slices/authSlice';
+import { useAuth } from '../context/AuthContext';
 
 const LoginContainer = styled.div`
   display: flex;
@@ -97,16 +96,21 @@ const RegisterLink = styled.p`
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const dispatch = useDispatch();
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
-  const { loading, error } = useSelector((state) => state.auth);
+  const { login, loading } = useAuth();
   
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    dispatch(loginUser({ email, password }))
-      .unwrap()
-      .then(() => navigate('/'))
-      .catch((err) => console.error('Login failed:', err));
+    setError(null);
+    
+    const result = await login(email, password);
+    
+    if (result.success) {
+      navigate('/');
+    } else {
+      setError(result.error);
+    }
   };
   
   return (

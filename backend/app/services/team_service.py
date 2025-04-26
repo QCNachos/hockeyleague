@@ -1,12 +1,72 @@
 from typing import Dict, List, Any, Optional
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
-from ..models.team import Team
-from ..models.division import Division
+from ..services.league import Division
 from ..extensions import db
+from datetime import datetime
 
 # Create a blueprint for team endpoints
 team_bp = Blueprint('team', __name__)
+
+# Team Model
+class Team(db.Model):
+    """Team model for hockey teams"""
+    __tablename__ = 'teams'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    city = db.Column(db.String(100), nullable=False)
+    abbreviation = db.Column(db.String(3), nullable=False, unique=True)
+    logo_url = db.Column(db.String(255))
+    primary_color = db.Column(db.String(7))  # Hex color code
+    secondary_color = db.Column(db.String(7))  # Hex color code
+    division_id = db.Column(db.Integer, db.ForeignKey('divisions.id'))
+    arena_name = db.Column(db.String(100))
+    arena_capacity = db.Column(db.Integer)
+    gm_name = db.Column(db.String(100))
+    coach_id = db.Column(db.Integer, db.ForeignKey('coaches.id'))
+    prestige = db.Column(db.Integer, default=50)  # 1-100 scale
+    budget = db.Column(db.Integer)  # in $
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships - use string references for all relationships to avoid import issues
+    players = db.relationship('Player', foreign_keys='Player.team_id', back_populates='team')
+    draft_players = db.relationship('Player', foreign_keys='Player.draft_team_id', backref='draft_team')
+    associated_players = db.relationship('Player', foreign_keys='Player.associated_team_id', backref='associated_team')
+    coach = db.relationship('Coach', back_populates='team')
+    division = db.relationship('Division', back_populates='teams')
+    
+    # Games relationships - changed to lazy='dynamic' to avoid circular reference issues
+    # and removed backref/back_populates to let Game define its own relationships
+    home_games = db.relationship('Game', 
+                               foreign_keys='Game.home_team_id',
+                               lazy='dynamic')
+    away_games = db.relationship('Game', 
+                                foreign_keys='Game.away_team_id',
+                                lazy='dynamic')
+    
+    def __repr__(self):
+        return f'<Team {self.name}>'
+    
+    def to_dict(self):
+        """Convert Team object to dictionary"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'city': self.city,
+            'abbreviation': self.abbreviation,
+            'logo_url': self.logo_url,
+            'primary_color': self.primary_color or '#1e1e1e',  # Default dark gray if None
+            'secondary_color': self.secondary_color or '#FFFFFF',  # Default white if None
+            'division_id': self.division_id,
+            'arena_name': self.arena_name,
+            'arena_capacity': self.arena_capacity,
+            'gm_name': self.gm_name,
+            'coach_id': self.coach_id,
+            'prestige': self.prestige,
+            'budget': self.budget
+        }
 
 class TeamService:
     """
@@ -49,6 +109,20 @@ class TeamService:
             Team as dictionary, or None if not found
         """
         team = Team.query.get(team_id)
+        return team.to_dict() if team else None
+    
+    @staticmethod
+    def get_team_by_abbreviation(abbreviation: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific team by its abbreviation.
+        
+        Args:
+            abbreviation: The abbreviation of the team to retrieve (e.g., "TOR", "NYR")
+            
+        Returns:
+            Team as dictionary, or None if not found
+        """
+        team = Team.query.filter_by(abbreviation=abbreviation).first()
         return team.to_dict() if team else None
     
     @staticmethod
@@ -166,6 +240,17 @@ def get_team(team_id):
     
     if not team:
         return jsonify({"error": f"Team with ID {team_id} not found"}), 404
+        
+    return jsonify(team), 200
+
+
+@team_bp.route('/abbreviation/<string:abbreviation>', methods=['GET'])
+def get_team_by_abbreviation(abbreviation):
+    """Get a specific team by abbreviation"""
+    team = TeamService.get_team_by_abbreviation(abbreviation.upper())
+    
+    if not team:
+        return jsonify({"error": f"Team with abbreviation {abbreviation} not found"}), 404
         
     return jsonify(team), 200
 

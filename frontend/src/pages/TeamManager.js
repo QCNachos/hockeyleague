@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSelector } from 'react-redux';
 import styled from 'styled-components';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
+import { useAuth } from '../context/AuthContext';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -343,7 +343,7 @@ const TeamManager = () => {
     prestige: 50
   });
   
-  const { isAuthenticated, token } = useSelector(state => state.auth);
+  const { isAuthenticated, getAuthHeaders } = useAuth();
   
   // Fetch leagues and league types from Supabase
   const fetchLeaguesFromSupabase = async () => {
@@ -667,9 +667,7 @@ const TeamManager = () => {
     
     // Use the real API
     axios.post('/api/teams', newTeam, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+      headers: getAuthHeaders()
     })
       .then(response => {
         // Add the new team to the state
@@ -702,9 +700,7 @@ const TeamManager = () => {
     setInitMessage(null);
     
     axios.post('/api/init/nhl-data', {}, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+      headers: getAuthHeaders()
     })
       .then(response => {
         setInitMessage({
@@ -1016,7 +1012,7 @@ const TeamManager = () => {
     <Container>
       <Title>Team Management</Title>
       
-      {isAuthenticated && (
+      {isAuthenticated() && (
         <div style={{ marginBottom: '20px' }}>
           <SubmitButton 
             onClick={initializeNHLTeams} 
@@ -1054,7 +1050,7 @@ const TeamManager = () => {
           >
             Current Teams
           </TabButton>
-          {isAuthenticated && (
+          {isAuthenticated() && (
             <TabButton 
               active={activeTab === 'create'} 
               onClick={() => setActiveTab('create')}
@@ -1064,7 +1060,7 @@ const TeamManager = () => {
           )}
         </TabButtons>
         
-        {activeTab === 'create' && isAuthenticated && (
+        {activeTab === 'create' && isAuthenticated() && (
           <NewTeamForm onSubmit={handleNewTeamSubmit}>
             <h2>Create New Team</h2>
             

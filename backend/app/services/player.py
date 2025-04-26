@@ -1,11 +1,177 @@
 from typing import Dict, List, Any, Optional
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
-from ..models.player import Player
 from ..extensions import db
+from datetime import datetime, date
 
 # Create a blueprint for player endpoints
 player_bp = Blueprint('player', __name__)
+
+# Player Model
+class PlayerAttributes:
+    """Helper class for player attributes"""
+    def __init__(self, player):
+        self.skating = player.skating
+        self.shooting = player.shooting_skill
+        self.puck_skills = player.puck_skills
+        self.physical = player.physical
+        self.defense = player.defense
+        
+        # Goalie attributes
+        self.agility = player.agility
+        self.positioning = player.positioning
+        self.reflexes = player.reflexes
+        self.puck_control = player.puck_control
+        self.mental = player.mental
+
+
+class Player(db.Model):
+    """Player model for hockey players"""
+    __tablename__ = 'players'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    first_name = db.Column(db.String(50), nullable=False)
+    last_name = db.Column(db.String(50), nullable=False)
+    jersey = db.Column(db.Integer)
+    position_primary = db.Column(db.String(2), nullable=False)  # C, LW, RW, D, G
+    position_secondary = db.Column(db.String(2))
+    team_id = db.Column(db.Integer, db.ForeignKey('teams.id'))
+    associated_team_id = db.Column(db.Integer, db.ForeignKey('teams.id'))  # For prospects assigned to NHL teams
+    overall_rating = db.Column(db.Integer, nullable=False)
+    
+    # Potential attributes
+    potential = db.Column(db.String(2))  # A, A-, B+, B, B-, C+, C, C-, D+, D
+    potential_precision = db.Column(db.Integer, default=50)  # 0-100, higher is more precise
+    potential_volatility = db.Column(db.Integer, default=50)  # 0-100, higher means more volatile
+    
+    player_type = db.Column(db.String(50))
+    nationality = db.Column(db.String(50))
+    birthdate = db.Column(db.Date)
+    age = db.Column(db.Integer)
+    
+    # Physical attributes
+    height = db.Column(db.Integer)  # in cm
+    weight = db.Column(db.Integer)  # in kg
+    shooting = db.Column(db.String(1), default="L")  # L or R
+    
+    # Performance attributes
+    skating = db.Column(db.Integer, default=0)
+    shooting_skill = db.Column(db.Integer, default=0)
+    puck_skills = db.Column(db.Integer, default=0)
+    physical = db.Column(db.Integer, default=0)
+    defense = db.Column(db.Integer, default=0)
+    
+    # Goalie attributes
+    agility = db.Column(db.Integer, default=0)
+    positioning = db.Column(db.Integer, default=0)
+    reflexes = db.Column(db.Integer, default=0)
+    puck_control = db.Column(db.Integer, default=0)
+    mental = db.Column(db.Integer, default=0)
+    
+    # Draft information
+    draft_year = db.Column(db.Integer)
+    draft_round = db.Column(db.Integer)
+    draft_pick = db.Column(db.Integer)  # Pick within round
+    draft_overall = db.Column(db.Integer)  # Overall pick number
+    draft_team_id = db.Column(db.Integer, db.ForeignKey('teams.id'))
+    
+    # Status
+    injury_status = db.Column(db.String(20))  # IR, DTD, OUT
+    return_timeline = db.Column(db.String(50))
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships - use string references to avoid circular imports
+    team = db.relationship('Team', foreign_keys=[team_id], back_populates='players')
+    prospect = db.relationship('DraftPick', foreign_keys='DraftPick.player_id', back_populates='player')
+    
+    def __repr__(self):
+        return f'<Player {self.first_name} {self.last_name}>'
+    
+    def is_draft_eligible(self) -> bool:
+        """Determine if player is draft eligible based on age"""
+        return self.age == 17 and not self.draft_year
+    
+    def is_prospect(self) -> bool:
+        """Determine if player is a prospect (drafted but not on NHL roster)"""
+        return self.draft_year is not None and self.associated_team_id is not None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert Player object to dictionary"""
+        return {
+            'id': self.id,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'jersey': self.jersey,
+            'position_primary': self.position_primary,
+            'position_secondary': self.position_secondary,
+            'team_id': self.team_id,
+            'team': self.team.name if self.team else None,
+            'associated_team_id': self.associated_team_id,
+            'overall_rating': self.overall_rating,
+            'potential': self.potential,
+            'potential_precision': self.potential_precision,
+            'potential_volatility': self.potential_volatility,
+            'player_type': self.player_type,
+            'nationality': self.nationality,
+            'birthdate': self.birthdate.isoformat() if self.birthdate else None,
+            'age': self.age,
+            'height': self.height,
+            'weight': self.weight,
+            'shooting': self.shooting,
+            'skating': self.skating,
+            'shooting_skill': self.shooting_skill,
+            'puck_skills': self.puck_skills,
+            'physical': self.physical,
+            'defense': self.defense,
+            'agility': self.agility,
+            'positioning': self.positioning,
+            'reflexes': self.reflexes,
+            'puck_control': self.puck_control,
+            'mental': self.mental,
+            'draft_year': self.draft_year,
+            'draft_round': self.draft_round,
+            'draft_pick': self.draft_pick,
+            'draft_overall': self.draft_overall,
+            'draft_team_id': self.draft_team_id,
+            'injury_status': self.injury_status,
+            'return_timeline': self.return_timeline
+        }
+        
+    def to_chemistry_format(self) -> Dict[str, Any]:
+        """Convert player to format expected by ChemistryCalculator"""
+        return {
+            'id': self.id,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'name': f'{self.first_name} {self.last_name}',
+            'position': self.position_primary,
+            'position_primary': self.position_primary,
+            'position_secondary': self.position_secondary,
+            'player_type': self.player_type,
+            'overall': self.overall_rating,
+            'potential': self.potential,
+            'number': self.jersey,
+            'weight': self.weight,
+            'height': self.height,
+            'shooting': self.shooting,
+            'team': self.team.name if self.team else None,
+            'attributes': {
+                'skating': self.skating,
+                'shooting': self.shooting_skill,
+                'hands': self.puck_skills,
+                'checking': self.physical,
+                'defense': self.defense,
+                # Goalie attributes
+                'agility': self.agility,
+                'positioning': self.positioning,
+                'reflexes': self.reflexes,
+                'puck_control': self.puck_control,
+                'mental': self.mental
+            }
+        }
 
 class PlayerService:
     """

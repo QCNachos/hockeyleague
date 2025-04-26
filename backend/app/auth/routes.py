@@ -6,7 +6,7 @@ from flask_jwt_extended import (
     get_jwt_identity
 )
 from . import auth_bp
-from ..models.user import User
+from .user import User
 from ..extensions import db, bcrypt
 
 

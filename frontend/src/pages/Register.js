@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, Link } from 'react-router-dom';
 import styled from 'styled-components';
-import { registerUser } from '../store/slices/authSlice';
+import axios from 'axios';
 
 const RegisterContainer = styled.div`
   display: flex;
@@ -98,16 +97,23 @@ const Register = () => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const dispatch = useDispatch();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
-  const { loading, error } = useSelector((state) => state.auth);
   
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    dispatch(registerUser({ username, email, password }))
-      .unwrap()
-      .then(() => navigate('/login'))
-      .catch((err) => console.error('Registration failed:', err));
+    setLoading(true);
+    setError(null);
+    
+    try {
+      await axios.post('/api/auth/register', { username, email, password });
+      setLoading(false);
+      navigate('/login');
+    } catch (err) {
+      setLoading(false);
+      setError(err.response?.data?.message || 'Registration failed');
+    }
   };
   
   return (

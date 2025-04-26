@@ -16,5 +16,16 @@ jwt = JWTManager()
 # Password hashing
 bcrypt = Bcrypt()
 
-# CORS
-cors = CORS()
+# CORS - explicit configuration
+cors = CORS(resources={
+    r"/api/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"]
+    },
+    r"/api/draft/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"]
+    }
+})

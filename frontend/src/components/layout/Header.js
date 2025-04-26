@@ -1,8 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useSelector, useDispatch } from 'react-redux';
 import styled from 'styled-components';
-import { logout } from '../../store/slices/authSlice';
+import { useAuth } from '../../context/AuthContext';
 
 const HeaderContainer = styled.header`
   display: flex;
@@ -33,23 +32,6 @@ const Logo = styled(Link)`
   }
 `;
 
-const NavLinks = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 20px;
-`;
-
-const NavLink = styled(Link)`
-  color: #C4CED4;
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.2s;
-  
-  &:hover {
-    color: #B30E16;
-  }
-`;
-
 const AuthButton = styled.button`
   background: #B30E16;
   color: white;
@@ -65,13 +47,29 @@ const AuthButton = styled.button`
   }
 `;
 
+const UserInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+`;
+
+const UserName = styled.span`
+  color: #C4CED4;
+  font-weight: 500;
+`;
+
+const RightContent = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 20px;
+`;
+
 const Header = () => {
-  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useSelector((state) => state.auth);
+  const { user, isAuthenticated, logout } = useAuth();
   
   const handleLogout = () => {
-    dispatch(logout());
+    logout();
     navigate('/login');
   };
   
@@ -83,19 +81,18 @@ const Header = () => {
         </h1>
       </Logo>
       
-      <NavLinks>
-        {isAuthenticated ? (
-          <>
-            <span>Welcome, {user?.username}</span>
+      <RightContent>
+        {isAuthenticated() ? (
+          <UserInfo>
+            <UserName>{user?.username || 'User'}</UserName>
             <AuthButton onClick={handleLogout}>Logout</AuthButton>
-          </>
+          </UserInfo>
         ) : (
-          <>
-            <NavLink to="/login">Login</NavLink>
-            <NavLink to="/register">Register</NavLink>
-          </>
+          <UserInfo>
+            <AuthButton onClick={() => navigate('/login')}>Login</AuthButton>
+          </UserInfo>
         )}
-      </NavLinks>
+      </RightContent>
     </HeaderContainer>
   );
 };

@@ -1,8 +1,7 @@
 from ..extensions import db
-from ..models.conference import Conference
-from ..models.division import Division
-from ..models.team import Team
-from ..models.coach import Coach
+from ..services.league import Conference, Division
+from ..services.team_service import Team
+from ..services.coach import Coach
 
 def init_nhl_data():
     """Initialize database with NHL conferences, divisions, and teams"""

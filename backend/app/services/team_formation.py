@@ -4,10 +4,10 @@ import os
 from supabase import create_client, Client
 from flask import Blueprint, jsonify, request
 import traceback
-from ..models.player import Player
-from ..models.team import Team
+from ..services.player import Player
+from ..services.team_service import Team
 from ..extensions import db
-from ..database import create_supabase_client
+from ..supabase_client import get_supabase_client
 from .chemistry import ChemistryCalculator
 from .coach import CoachStrategy
 from .lines import LineOptimizer
@@ -39,7 +39,7 @@ class TeamFormation:
             debug: Whether to run in debug mode with additional logging
         """
         self.team_abbreviation = team_abbreviation
-        self.supabase_client = supabase_client or create_supabase_client()
+        self.supabase_client = supabase_client or get_supabase_client()
         self.chemistry_calculator = ChemistryCalculator()
         self.coach_strategy = CoachStrategy()
         self.roster = []
@@ -110,7 +110,7 @@ class TeamFormation:
                 # Try to fetch players directly from Supabase as a last resort
                 try:
                     print(f"TeamFormation: Attempting direct fetch from Supabase for {self.team_abbreviation}")
-                    client = create_supabase_client()
+                    client = get_supabase_client()
                     response = client.table('Player').select('*').eq('team', self.team_abbreviation).execute()
                     if response.data and len(response.data) > 0:
                         print(f"TeamFormation: Found {len(response.data)} players via direct Supabase query")
@@ -310,7 +310,7 @@ class TeamFormation:
         
         try:
             # First try SQLAlchemy model if it exists
-            from ..models.coach import Coach
+            from .coach import Coach
             coach = Coach.query.filter_by(id=coach_id).first()
             if coach:
                 return coach.to_dict()
@@ -2266,7 +2266,7 @@ def debug_player_ratings(team_abbreviation):
         
         # Create a client for direct testing
         try:
-            client = create_supabase_client()
+            client = get_supabase_client()
             print(f"Created Supabase client: {client}")
             debug_data["supabase_connection"]["client_created"] = True
             
@@ -2463,7 +2463,7 @@ def test_supabase_connection():
         supabase_key = os.getenv("SUPABASE_KEY")
         
         # Test creating a client
-        test_client = create_supabase_client()
+        test_client = get_supabase_client()
         
         # Test a simple query
         response = None
@@ -2510,7 +2510,7 @@ def debug_team_data(team_abbreviation):
         # Try SQLAlchemy directly
         team_sqlalchemy = None
         try:
-            from ..models.team import Team
+            from ..services.team_service import Team
             db_team = Team.query.filter_by(abbreviation=team_abbreviation).first()
             if db_team:
                 team_sqlalchemy = {
@@ -2531,7 +2531,7 @@ def debug_team_data(team_abbreviation):
         # Try Supabase directly
         team_supabase = None
         try:
-            client = create_supabase_client()
+            client = get_supabase_client()
             response = client.table('Team').select('*').eq('abbreviation', team_abbreviation).execute()
             team_supabase = {
                 "success": True if response.data else False,

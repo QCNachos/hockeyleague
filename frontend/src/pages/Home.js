@@ -246,7 +246,7 @@ const Home = () => {
             Discover the next generation of talent in the annual entry draft.
             Scout prospects and make strategic picks to build for the future.
           </p>
-          <ActionButton to="/draft">Enter Draft</ActionButton>
+          <ActionButton to="/draft">Draft Center</ActionButton>
         </FeatureCard>
       </FeaturesGrid>
     </HomeContainer>

@@ -1,11 +1,61 @@
 from typing import Dict, List, Any, Optional
-from ..models.calendar import Calendar
+from datetime import datetime
 from ..extensions import db
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 
 # Create a blueprint for calendar endpoints
 calendar_bp = Blueprint('calendar', __name__)
+
+# Calendar Model
+class Calendar(db.Model):
+    """
+    Model for calendar events in the hockey league.
+    """
+    __tablename__ = 'calendar_events'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(100), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    type = db.Column(db.String(50), default='other')
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert the model instance to a dictionary.
+        
+        Returns:
+            Dictionary representation of the calendar event
+        """
+        return {
+            'id': self.id,
+            'title': self.title,
+            'date': self.date.isoformat() if self.date else None,
+            'type': self.type,
+            'description': self.description,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+        
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Calendar':
+        """
+        Create a new Calendar instance from a dictionary.
+        
+        Args:
+            data: Dictionary with calendar event data
+            
+        Returns:
+            New Calendar instance
+        """
+        return cls(
+            title=data.get('title'),
+            date=datetime.fromisoformat(data.get('date')).date() if data.get('date') else None,
+            type=data.get('type', 'other'),
+            description=data.get('description')
+        )
 
 class CalendarService:
     """
@@ -23,34 +73,17 @@ class CalendarService:
         Returns:
             List of calendar events as dictionaries
         """
-        # This is a placeholder implementation - update when Calendar model is implemented
-        # In a real implementation, this would query the database
-        events = [
-            {
-                "id": 1,
-                "title": "Regular Season Start",
-                "date": "2023-10-10",
-                "type": "season_event"
-            },
-            {
-                "id": 2,
-                "title": "Trade Deadline",
-                "date": "2024-02-15",
-                "type": "deadline"
-            },
-            {
-                "id": 3,
-                "title": "Draft Lottery",
-                "date": "2024-04-20",
-                "type": "draft_event"
-            }
-        ]
+        # Query the database for events
+        query = Calendar.query
         
         # Apply filters if provided
         if filters:
             for key, value in filters.items():
-                events = [event for event in events if event.get(key) == value]
-                
+                if hasattr(Calendar, key):
+                    query = query.filter(getattr(Calendar, key) == value)
+        
+        # Execute query and convert to dictionaries
+        events = [event.to_dict() for event in query.all()]
         return events
     
     @staticmethod
@@ -64,13 +97,8 @@ class CalendarService:
         Returns:
             Calendar event as dictionary, or None if not found
         """
-        # Placeholder implementation
-        events = CalendarService.get_all_events()
-        for event in events:
-            if event.get("id") == event_id:
-                return event
-                
-        return None
+        event = Calendar.query.get(event_id)
+        return event.to_dict() if event else None
     
     @staticmethod
     def create_event(event_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -83,16 +111,14 @@ class CalendarService:
         Returns:
             Created event as dictionary
         """
-        # Placeholder implementation
-        # In a real implementation, this would create a new Calendar model instance
-        event = {
-            "id": 4,  # Would be auto-generated in a real implementation
-            "title": event_data.get("title", "Untitled Event"),
-            "date": event_data.get("date"),
-            "type": event_data.get("type", "other")
-        }
+        # Create new Calendar instance
+        new_event = Calendar.from_dict(event_data)
         
-        return event
+        # Add to database
+        db.session.add(new_event)
+        db.session.commit()
+        
+        return new_event.to_dict()
     
     @staticmethod
     def update_event(event_id: int, event_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -106,16 +132,21 @@ class CalendarService:
         Returns:
             Updated event as dictionary, or None if not found
         """
-        # Placeholder implementation
-        event = CalendarService.get_event_by_id(event_id)
+        event = Calendar.query.get(event_id)
         if not event:
             return None
             
         # Update event fields
         for key, value in event_data.items():
-            event[key] = value
-            
-        return event
+            if hasattr(event, key):
+                if key == 'date' and isinstance(value, str):
+                    value = datetime.fromisoformat(value).date()
+                setattr(event, key, value)
+        
+        # Commit changes
+        db.session.commit()
+        
+        return event.to_dict()
     
     @staticmethod
     def delete_event(event_id: int) -> bool:
@@ -128,10 +159,15 @@ class CalendarService:
         Returns:
             Boolean indicating success
         """
-        # Placeholder implementation
-        event = CalendarService.get_event_by_id(event_id)
-        return event is not None 
-
+        event = Calendar.query.get(event_id)
+        if not event:
+            return False
+            
+        # Delete event
+        db.session.delete(event)
+        db.session.commit()
+        
+        return True
 
 # API endpoints that utilize the service
 

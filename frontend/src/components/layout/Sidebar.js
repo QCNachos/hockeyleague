@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { useSelector } from 'react-redux';
+import { useAuth } from '../../context/AuthContext';
 import styled from 'styled-components';
 import { FaChevronDown, FaChevronRight } from 'react-icons/fa';
 
@@ -56,11 +56,6 @@ const StyledNavLink = styled(NavLink)`
   }
 `;
 
-const SubNavLink = styled(StyledNavLink)`
-  padding-left: 35px;
-  font-size: 0.95em;
-`;
-
 const DisabledNavLink = styled.div`
   display: flex;
   align-items: center;
@@ -90,7 +85,7 @@ const NavContent = styled.div`
 `;
 
 const Sidebar = () => {
-  const { isAuthenticated } = useSelector((state) => state.auth);
+  const { isAuthenticated } = useAuth();
   const [sections, setSections] = useState({
     general: true,
     management: true,
@@ -155,10 +150,11 @@ const Sidebar = () => {
         <NavContent isOpen={sections.analytics}>
           <StyledNavLink to="/stats">Statistics</StyledNavLink>
           <StyledNavLink to="/standings">Standings</StyledNavLink>
+          <StyledNavLink to="/draft">Draft Center</StyledNavLink>
         </NavContent>
       </NavSection>
       
-      {isAuthenticated && (
+      {isAuthenticated() && (
         <>
           <Divider />
           <NavSection>
@@ -168,7 +164,6 @@ const Sidebar = () => {
             </h3>
             <NavContent isOpen={sections.admin}>
               <StyledNavLink to="/contracts">Contracts</StyledNavLink>
-              <StyledNavLink to="/draft">Draft</StyledNavLink>
             </NavContent>
           </NavSection>
         </>

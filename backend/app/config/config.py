@@ -9,6 +9,11 @@ class Config:
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    
+    # Supabase configuration
+    SUPABASE_URL = os.environ.get('SUPABASE_URL')
+    SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
+    USE_SUPABASE = os.environ.get('USE_SUPABASE', 'True').lower() in ('true', '1', 't')
 
 
 class DevelopmentConfig(Config):

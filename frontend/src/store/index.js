@@ -10,12 +10,12 @@ import teamReducer from './slices/teamSlice';
 const persistConfig = {
   key: 'root',
   storage,
-  whitelist: ['auth'] // Only persist auth state
+  whitelist: [] // We're using AuthContext now, so no need to persist auth
 };
 
 // Combine reducers
 const rootReducer = combineReducers({
-  auth: authReducer,
+  auth: authReducer, // Keep for backward compatibility
   game: gameReducer,
   players: playerReducer,
   teams: teamReducer

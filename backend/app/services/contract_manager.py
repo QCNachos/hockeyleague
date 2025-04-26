@@ -1,15 +1,90 @@
-from typing import Dict, List, Any, Optional
-import random
-from datetime import datetime, timedelta
-from ..models.player import Player
-from ..models.team import Team
-from ..models.contract import Contract
-from ..extensions import db
+from typing import Dict, List, Any, Optional, Tuple
 from flask import Blueprint, jsonify, request
+from datetime import datetime, timedelta
+from ..extensions import db
+from ..services.team_service import Team
+from ..services.player import Player
+import random
+import logging
 from flask_jwt_extended import jwt_required
 
 # Create a blueprint for contract endpoints
 contract_bp = Blueprint('contract', __name__)
+
+# Contract model definition (moved from models/contract.py)
+class Contract(db.Model):
+    """
+    Model for player contracts in the hockey league.
+    """
+    __tablename__ = 'contracts'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    player_id = db.Column(db.Integer, db.ForeignKey('players.id'), nullable=False)
+    team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
+    years = db.Column(db.Integer, nullable=False)
+    salary = db.Column(db.Integer, nullable=False)  # Annual salary in dollars
+    signing_bonus = db.Column(db.Integer, default=0)  # Signing bonus in dollars
+    no_trade_clause = db.Column(db.Boolean, default=False)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Define relationships (SQLAlchemy will use these to create joins)
+    player = db.relationship('Player', backref=db.backref('contract', lazy=True))
+    team = db.relationship('Team', backref=db.backref('contracts', lazy=True))
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert the model instance to a dictionary.
+        
+        Returns:
+            Dictionary representation of the contract
+        """
+        return {
+            'id': self.id,
+            'player_id': self.player_id,
+            'team_id': self.team_id,
+            'years': self.years,
+            'salary': self.salary,
+            'signing_bonus': self.signing_bonus,
+            'no_trade_clause': self.no_trade_clause,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'end_date': self.end_date.isoformat() if self.end_date else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+        
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Contract':
+        """
+        Create a new Contract instance from a dictionary.
+        
+        Args:
+            data: Dictionary with contract data
+            
+        Returns:
+            New Contract instance
+        """
+        # Parse date strings to datetime objects
+        start_date = None
+        if data.get('start_date'):
+            start_date = datetime.fromisoformat(data['start_date']).date() if isinstance(data['start_date'], str) else data['start_date']
+            
+        end_date = None
+        if data.get('end_date'):
+            end_date = datetime.fromisoformat(data['end_date']).date() if isinstance(data['end_date'], str) else data['end_date']
+        
+        return cls(
+            player_id=data.get('player_id'),
+            team_id=data.get('team_id'),
+            years=data.get('years'),
+            salary=data.get('salary'),
+            signing_bonus=data.get('signing_bonus', 0),
+            no_trade_clause=data.get('no_trade_clause', False),
+            start_date=start_date,
+            end_date=end_date
+        )
 
 class ContractManager:
     """
@@ -27,58 +102,17 @@ class ContractManager:
         Returns:
             List of contract dictionaries
         """
-        # Placeholder implementation
-        # In a real implementation, this would query the database
-        contracts = [
-            {
-                "id": 1,
-                "player_id": 1,
-                "team_id": 1,
-                "years": 8,
-                "salary": 10500000,
-                "signing_bonus": 2000000,
-                "no_trade_clause": True,
-                "start_date": "2020-07-01",
-                "end_date": "2028-06-30"
-            },
-            {
-                "id": 2,
-                "player_id": 2,
-                "team_id": 1,
-                "years": 5,
-                "salary": 8750000,
-                "signing_bonus": 1000000,
-                "no_trade_clause": False,
-                "start_date": "2022-07-01",
-                "end_date": "2027-06-30"
-            },
-            {
-                "id": 3,
-                "player_id": 3,
-                "team_id": 2,
-                "years": 3,
-                "salary": 6500000,
-                "signing_bonus": 500000,
-                "no_trade_clause": False,
-                "start_date": "2021-07-01",
-                "end_date": "2024-06-30"
-            }
-        ]
+        # Real implementation using the Contract model
+        query = Contract.query
         
-        # Apply filters if provided
+        # Apply filters
         if filters:
-            filtered_contracts = []
-            for contract in contracts:
-                match = True
-                for key, value in filters.items():
-                    if contract.get(key) != value:
-                        match = False
-                        break
-                if match:
-                    filtered_contracts.append(contract)
-            return filtered_contracts
-            
-        return contracts
+            for key, value in filters.items():
+                if hasattr(Contract, key):
+                    query = query.filter(getattr(Contract, key) == value)
+                    
+        # Convert to dictionaries
+        return [contract.to_dict() for contract in query.all()]
     
     @staticmethod
     def get_contract_by_id(contract_id: int) -> Optional[Dict[str, Any]]:
@@ -91,12 +125,8 @@ class ContractManager:
         Returns:
             Contract dictionary, or None if not found
         """
-        contracts = ContractManager.get_all_contracts()
-        for contract in contracts:
-            if contract.get("id") == contract_id:
-                return contract
-                
-        return None
+        contract = Contract.query.get(contract_id)
+        return contract.to_dict() if contract else None
     
     @staticmethod
     def get_player_contract(player_id: int) -> Optional[Dict[str, Any]]:
@@ -109,8 +139,8 @@ class ContractManager:
         Returns:
             Contract dictionary, or None if not found
         """
-        contracts = ContractManager.get_all_contracts({"player_id": player_id})
-        return contracts[0] if contracts else None
+        contract = Contract.query.filter_by(player_id=player_id).first()
+        return contract.to_dict() if contract else None
     
     @staticmethod
     def get_team_contracts(team_id: int) -> List[Dict[str, Any]]:
@@ -123,7 +153,8 @@ class ContractManager:
         Returns:
             List of contract dictionaries
         """
-        return ContractManager.get_all_contracts({"team_id": team_id})
+        contracts = Contract.query.filter_by(team_id=team_id).all()
+        return [contract.to_dict() for contract in contracts]
     
     @staticmethod
     def create_contract(contract_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -136,27 +167,14 @@ class ContractManager:
         Returns:
             Created contract as dictionary
         """
-        # Placeholder implementation
-        # In a real implementation, this would create a new Contract model instance
+        # Create a new contract using the from_dict class method
+        new_contract = Contract.from_dict(contract_data)
         
-        # Calculate end date based on start date and years
-        start_date = datetime.strptime(contract_data.get("start_date", "2023-07-01"), "%Y-%m-%d")
-        years = contract_data.get("years", 1)
-        end_date = start_date + timedelta(days=365 * years)
+        # Add to database and commit
+        db.session.add(new_contract)
+        db.session.commit()
         
-        contract = {
-            "id": 4,  # Would be auto-generated in a real implementation
-            "player_id": contract_data.get("player_id"),
-            "team_id": contract_data.get("team_id"),
-            "years": years,
-            "salary": contract_data.get("salary", 0),
-            "signing_bonus": contract_data.get("signing_bonus", 0),
-            "no_trade_clause": contract_data.get("no_trade_clause", False),
-            "start_date": start_date.strftime("%Y-%m-%d"),
-            "end_date": end_date.strftime("%Y-%m-%d")
-        }
-        
-        return contract
+        return new_contract.to_dict()
     
     @staticmethod
     def update_contract(contract_id: int, contract_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -170,23 +188,19 @@ class ContractManager:
         Returns:
             Updated contract as dictionary, or None if not found
         """
-        contract = ContractManager.get_contract_by_id(contract_id)
+        contract = Contract.query.get(contract_id)
         if not contract:
             return None
             
-        # Update contract fields
+        # Update contract attributes
         for key, value in contract_data.items():
-            if key not in ["id", "player_id", "team_id"]:  # Protect key fields
-                contract[key] = value
-            
-        # Recalculate end date if years changed
-        if "years" in contract_data:
-            start_date = datetime.strptime(contract.get("start_date"), "%Y-%m-%d")
-            years = contract.get("years")
-            end_date = start_date + timedelta(days=365 * years)
-            contract["end_date"] = end_date.strftime("%Y-%m-%d")
-            
-        return contract
+            if key not in ["id", "player_id", "team_id"] and hasattr(contract, key):
+                setattr(contract, key, value)
+        
+        # Commit changes
+        db.session.commit()
+        
+        return contract.to_dict()
     
     @staticmethod
     def terminate_contract(contract_id: int) -> bool:
@@ -199,8 +213,14 @@ class ContractManager:
         Returns:
             Boolean indicating success
         """
-        contract = ContractManager.get_contract_by_id(contract_id)
-        return contract is not None
+        contract = Contract.query.get(contract_id)
+        if not contract:
+            return False
+            
+        db.session.delete(contract)
+        db.session.commit()
+        
+        return True
     
     @staticmethod
     def calculate_team_cap_hit(team_id: int) -> Dict[str, float]:
@@ -213,10 +233,10 @@ class ContractManager:
         Returns:
             Dictionary with cap information
         """
-        contracts = ContractManager.get_team_contracts(team_id)
+        contracts = Contract.query.filter_by(team_id=team_id).all()
         
-        total_salary = sum(contract.get("salary", 0) for contract in contracts)
-        total_bonuses = sum(contract.get("signing_bonus", 0) for contract in contracts)
+        total_salary = sum(contract.salary for contract in contracts)
+        total_bonuses = sum(contract.signing_bonus for contract in contracts)
         
         return {
             "team_id": team_id,

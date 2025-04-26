@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { createClient } from '@supabase/supabase-js';
-import { useSelector } from 'react-redux';
+import { useAuth } from '../context/AuthContext';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -207,7 +207,7 @@ const SuccessMessage = styled.div`
 const TeamEditor = () => {
   const { teamId } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated, token } = useSelector(state => state.auth);
+  const { isAuthenticated } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -344,7 +344,7 @@ const TeamEditor = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!isAuthenticated) {
+    if (!isAuthenticated()) {
       setError('You must be logged in to save changes');
       return;
     }
@@ -355,7 +355,7 @@ const TeamEditor = () => {
       setSuccess(null);
       
       // Update the team in Supabase
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('Team')
         .update({
           team: teamData.team,

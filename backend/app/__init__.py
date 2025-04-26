@@ -13,7 +13,9 @@ def create_app(config_name='development'):
     migrate.init_app(app, db)
     jwt.init_app(app)
     bcrypt.init_app(app)
-    cors.init_app(app)
+    
+    # CORS is now configured at the application level in app.py
+    # cors.init_app(app, resources={r"/api/*": {"origins": "*"}})
     
     # Register blueprints
     from .services import register_service_blueprints

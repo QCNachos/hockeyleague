@@ -4,14 +4,16 @@ from app import create_app
 from flask_cors import CORS
 from app.supabase_client import get_data, get_item_by_id, get_supabase
 from app.services.draft.draft_ranking import draft_ranking_bp
+from app.services.draft.draft_order import draft_order_bp
 
 app = create_app(os.getenv('FLASK_ENV', 'development'))
 
 # Use a single CORS configuration for the entire app
 CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
-# Register the new blueprint
+# Register the blueprints
 app.register_blueprint(draft_ranking_bp, url_prefix='/api/draft/rankings')
+app.register_blueprint(draft_order_bp, url_prefix='/api/draft/order')
 
 @app.route('/api/supabase/<table_name>', methods=['GET'])
 def get_supabase_data(table_name):
@@ -72,4 +74,13 @@ def get_supabase_item(table_name, item_id):
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 5001)), debug=True) 
+    import sys
+    import argparse
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Run the Flask application')
+    parser.add_argument('--port', type=int, default=5001, help='Port to run the server on')
+    args = parser.parse_args()
+    
+    print(f"Starting Flask server on port {args.port}")
+    app.run(host='0.0.0.0', port=args.port, debug=True) 

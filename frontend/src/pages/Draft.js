@@ -587,109 +587,65 @@ const Draft = () => {
   // Fetch draft order
   const fetchDraftOrder = useCallback(async () => {
     try {
-      // Use the debug endpoint instead
-      console.log(`Fetching draft picks for year ${draftYear}...`);
-      const response = await axios.get(`${API_BASE_URL}/teams/draft-picks-debug?year=${draftYear}`);
+      // Use our new draft order endpoint which follows the correct standings order
+      console.log(`Fetching draft order using new endpoint for year ${draftYear}...`);
+      const response = await axios.get(`${API_BASE_URL}/draft/order?year=${draftYear}&use_lottery=false`);
       
-      if (response.data) {
-        // Debug: Log raw data
-        console.log('Raw API response data:', response.data);
+      if (response.data && Array.isArray(response.data)) {
+        // Process the draft order data
+        const picks = response.data;
+        console.log(`Successfully loaded ${picks.length} picks from draft order endpoint`);
         
-        // The debug endpoint has a different structure - use raw_data for the picks
-        const picksData = response.data.raw_data || [];
-        
-        // Process the picks from the debug endpoint
-        const picks = picksData.map(pick => {
-          // Get the team abbreviation
-          const teamAbbrev = pick.team || 'Unknown';
-          
-          // Check for received picks
-          const receivedFrom = pick.received_pick_1 || pick.received_pick_2 || 
-                              pick.received_pick_3 || pick.received_pick_4 || 
-                              pick.received_pick_5 || pick.received_pick_6 || null;
-          
-          // Basic pick information
-          return {
-            id: pick.id,
-            team_abbreviation: teamAbbrev,
-            round_num: pick.round,
-            pick_status: pick.pick_status || 'Owned',
-            received_from: receivedFrom,
-            // Add overall pick number based on round and id for display
-            overall_pick: ((pick.round - 1) * 32) + (parseInt(pick.id) % 32) || pick.id,
-            // Additional fields to maintain compatibility with UI
-            player_id: null,
-            team: {
-              abbreviation: teamAbbrev,
-              name: teamAbbrev, // Will be replaced with actual team name if available
-              primary_color: '#333', // Default color
-              secondary_color: '#fff' // Default color
-            }
-          };
-        });
-        
-        // Sort picks by round and then by overall pick
-        picks.sort((a, b) => {
-          if (a.round_num !== b.round_num) {
-            return a.round_num - b.round_num;
-          }
-          return a.overall_pick - b.overall_pick;
-        });
-        
-        // Debug: Look for any pick with special handling needed
-        const receivedPicks = picks.filter(p => p.received_from);
-        if (receivedPicks.length > 0) {
-          console.log('Picks with received_from attribute:', receivedPicks);
-        }
-        
-        // Debug: Look for any pick with non-standard status
-        const nonStandardPicks = picks.filter(p => p.pick_status !== 'Owned');
-        console.log('Picks with non-standard status:', nonStandardPicks);
-        console.log('Non-owned picks from API:', response.data.non_owned_picks);
-        console.log('Status counts:', response.data.status_counts);
-        
-        // Try to fetch team details to add colors and full names
-        try {
-          const teamsResponse = await axios.get(`${API_BASE_URL}/teams/nhl`);
-          if (teamsResponse.data && Array.isArray(teamsResponse.data)) {
-            const teamMap = {};
-            teamsResponse.data.forEach(team => {
-              teamMap[team.abbreviation] = team;
-            });
-            
-            // Update picks with team information
-            picks.forEach(pick => {
-              const team = teamMap[pick.team_abbreviation];
-              if (team) {
-                pick.team = {
-                  id: team.id,
-                  abbreviation: team.abbreviation,
-                  name: team.name,
-                  city: team.city,
-                  primary_color: team.primary_color || '#333',
-                  secondary_color: team.secondary_color || '#fff'
-                };
-              }
-            });
-          }
-        } catch (teamErr) {
-          console.error('Error fetching team details:', teamErr);
-          // Continue with basic team info
+        // Log the first few picks to verify order
+        if (picks.length > 0) {
+          console.log("First 5 picks:", picks.slice(0, 5).map(p => 
+            `${p.overall_pick}. ${p.team?.abbreviation || 'Unknown'}`
+          ));
         }
         
         setDraftOrder(picks);
         setCompletedPicks([]);
-        
-        console.log(`Loaded ${picks.length} picks from debug endpoint`);
         return picks;
       } else {
-        console.error('Invalid data format for draft picks:', response.data);
+        console.error('Invalid data format from draft order endpoint:', response.data);
+        
+        // Fall back to the original endpoint
+        try {
+          console.log('Falling back to original draft/picks endpoint...');
+          const fallbackResponse = await axios.get(`${API_BASE_URL}/draft/picks?year=${draftYear}`);
+          
+          if (fallbackResponse.data && Array.isArray(fallbackResponse.data)) {
+            console.log('Using data from fallback endpoint');
+            setDraftOrder(fallbackResponse.data);
+            setCompletedPicks([]);
+            return fallbackResponse.data;
+          }
+        } catch (fallbackErr) {
+          console.error('Fallback endpoint also failed:', fallbackErr);
+        }
+        
         setDraftOrder([]);
         setCompletedPicks([]);
         return [];
       }
     } catch (err) {
       console.error('Error fetching draft order:', err);
+      
+      // Try the original picks endpoint as fallback
+      try {
+        console.log('Trying original draft/picks endpoint as fallback...');
+        const fallbackResponse = await axios.get(`${API_BASE_URL}/draft/picks?year=${draftYear}`);
+        
+        if (fallbackResponse.data && Array.isArray(fallbackResponse.data)) {
+          console.log(`Loaded ${fallbackResponse.data.length} picks from fallback endpoint`);
+          setDraftOrder(fallbackResponse.data);
+          setCompletedPicks([]);
+          return fallbackResponse.data;
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback endpoint also failed:', fallbackErr);
+      }
+      
       setDraftOrder([]);
       setCompletedPicks([]);
       return [];
@@ -1237,8 +1193,8 @@ const Draft = () => {
   useEffect(() => {
     const fetchDraftPicksWithFetch = async () => {
       try {
-        console.log('FETCH API TEST: Requesting draft picks from API...');
-        const response = await fetch(`${API_BASE_URL}/draft/picks?year=${draftYear}`);
+        console.log('FETCH API TEST: Requesting draft picks from new order endpoint...');
+        const response = await fetch(`${API_BASE_URL}/draft/order?year=${draftYear}&use_lottery=false`);
         
         if (!response.ok) {
           console.error('FETCH API TEST: HTTP error', response.status);
@@ -1246,7 +1202,7 @@ const Draft = () => {
         }
         
         const data = await response.json();
-        console.log('FETCH API TEST RESULT:', data);
+        console.log('FETCH API TEST RESULT:', data.slice(0, 5)); // Log just the first 5 for readability
         
         if (data && data.length > 0) {
           // Check pick status in the API data
@@ -1260,7 +1216,18 @@ const Draft = () => {
           
           // Log picks with special statuses
           const nonOwnedPicks = data.filter(p => p.pick_status && p.pick_status !== 'Owned');
-          console.log('FETCH API TEST - Non-owned picks:', nonOwnedPicks);
+          console.log('FETCH API TEST - Non-owned picks:', nonOwnedPicks.length);
+          
+          // Verify SJS (last place team) is picking first
+          const sjsPick = data.find(p => p.team?.abbreviation === 'SJS' && p.round_num === 1);
+          console.log('FETCH API TEST - SJS Pick:', sjsPick ? `Overall #${sjsPick.overall_pick}` : 'Not found');
+          
+          // Verify first 5 picks follow standings
+          console.log('FETCH API TEST - First 5 picks:',
+            data.filter(p => p.round_num === 1).sort((a, b) => a.overall_pick - b.overall_pick).slice(0, 5).map(p => 
+              `${p.overall_pick}. ${p.team?.abbreviation || 'Unknown'}`
+            )
+          );
         }
       } catch (err) {
         console.error('FETCH API TEST ERROR:', err);
@@ -1279,7 +1246,7 @@ const Draft = () => {
         }
         
         const data = await response.json();
-        console.log('TEAM API TEST RESULT:', data);
+        console.log('TEAM API TEST RESULT:', data.slice(0, 5)); // Log just the first 5 for readability
         
         if (data && data.length > 0) {
           // Log sample picks and their statuses
@@ -1555,8 +1522,48 @@ Check console for full details.`);
       
       {activeTab === 'draftBoard' && (
         <DraftBoard>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
           <h2>Pick Order</h2>
+            <button 
+              onClick={async () => {
+                try {
+                  setLoading(true);
+                  console.log("Manually refreshing draft order...");
+                  // Force reload using our specific endpoint
+                  const response = await axios.get(`${API_BASE_URL}/draft/order?year=${draftYear}&use_lottery=false`);
+                  if (response.data && Array.isArray(response.data)) {
+                    console.log(`Refreshed ${response.data.length} draft picks`);
+                    setDraftOrder(response.data);
+                    setCompletedPicks([]);
+                  } else {
+                    console.error("Invalid response format when refreshing draft order");
+                  }
+                } catch (err) {
+                  console.error("Error refreshing draft order:", err);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              style={{
+                backgroundColor: '#B30E16',
+                color: 'white',
+                border: 'none',
+                padding: '8px 15px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                fontSize: '14px'
+              }}
+            >
+              Refresh Order
+            </button>
+          </div>
           
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '20px' }}>
+              Loading draft order...
+            </div>
+          ) : (
           <DraftPicksTable>
             <tbody>
               {Object.keys(picksByRound).sort((a, b) => Number(a) - Number(b)).map(roundNum => (
@@ -1565,6 +1572,7 @@ Check console for full details.`);
                     <td colSpan="3">{roundNum === '1' ? '1st Round' : roundNum === '2' ? '2nd Round' : roundNum === '3' ? '3rd Round' : `${roundNum}th Round`}</td>
                   </tr>
                   {picksByRound[roundNum]
+                    // Important: Always sort by overall_pick to ensure proper draft order
                     .sort((a, b) => a.overall_pick - b.overall_pick)
                     .map(pick => {
                       // Get team abbreviation and received from info
@@ -1613,6 +1621,7 @@ Check console for full details.`);
               ))}
             </tbody>
           </DraftPicksTable>
+          )}
           
           {/* Add legend */}
           <div style={{ marginTop: '20px', padding: '10px', backgroundColor: '#222', borderRadius: '4px' }}>

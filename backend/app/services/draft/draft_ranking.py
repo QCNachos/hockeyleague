@@ -22,7 +22,7 @@ class DraftRankingService:
     """Service for calculating and managing draft prospect rankings"""
     
     # Enable/disable detailed logging
-    LOG_ENABLED = True
+    LOG_ENABLED = False
     
     # Define weight constants for the ranking formula
     WEIGHTS = {

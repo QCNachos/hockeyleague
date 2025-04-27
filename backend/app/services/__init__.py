@@ -17,7 +17,8 @@ def register_service_blueprints(app):
     # Import all services with blueprints
     from . import contract_manager, lines, statistics
     from . import team_formation, chemistry, coach, game_simulation, team_service
-    from . import db_initialization, league
+    from . import league
+    from ..supabase_client import supabase_bp
     
     # Print all available routes before registration to help debug
     print("Available blueprints to register:")
@@ -61,8 +62,9 @@ def register_service_blueprints(app):
     if hasattr(team_service, 'team_bp'):
         app.register_blueprint(team_service.team_bp, url_prefix='/api/teams')
     
-    if hasattr(db_initialization, 'init_bp'):
-        app.register_blueprint(db_initialization.init_bp, url_prefix='/api/init')
+    # Register the Supabase blueprint for DB health checks
+    app.register_blueprint(supabase_bp, url_prefix='/api/db')
+    print("Registered Supabase blueprint with prefix /api/db")
         
     if hasattr(league, 'league_bp'):
         app.register_blueprint(league.league_bp, url_prefix='/api/leagues')

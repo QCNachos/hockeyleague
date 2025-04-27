@@ -216,6 +216,91 @@ class DraftEngine:
             nhl_teams = []
             
             try:
+                # Try to use the TeamService to get NHL teams from Supabase
+                from ...services.team_service import TeamService
+                nhl_teams_data = TeamService.get_nhl_teams()
+                
+                if nhl_teams_data:
+                    print(f"Found {len(nhl_teams_data)} NHL teams from TeamService")
+                    
+                    # Get draft picks from Supabase
+                    try:
+                        draft_picks_data = TeamService.get_draft_picks()
+                        if draft_picks_data:
+                            print(f"Found {len(draft_picks_data)} draft picks from Supabase")
+                            
+                            # Create custom draft order based on Draft_Picks table
+                            # Group picks by round
+                            picks_by_round = {}
+                            for pick in draft_picks_data:
+                                round_num = pick.get('round_num', 1)
+                                if round_num not in picks_by_round:
+                                    picks_by_round[round_num] = []
+                                picks_by_round[round_num].append(pick)
+                            
+                            # Create draft picks based on the custom order
+                            overall_pick_counter = 1
+                            for round_num in range(1, 8):  # 7 rounds
+                                round_picks = picks_by_round.get(round_num, [])
+                                
+                                # If no picks found for this round, create default order
+                                if not round_picks:
+                                    team_ids = [team.get('id') for team in nhl_teams_data]
+                                    for pick_num, team_id in enumerate(team_ids, 1):
+                                        draft_pick = DraftPick(
+                                            draft_id=self.draft.id,
+                                            round_num=round_num,
+                                            pick_num=pick_num,
+                                            team_id=team_id,
+                                            overall_pick=overall_pick_counter
+                                        )
+                                        db.session.add(draft_pick)
+                                        overall_pick_counter += 1
+                                else:
+                                    # Create picks based on Draft_Picks table
+                                    for pick_num, pick_data in enumerate(round_picks, 1):
+                                        team_id = pick_data.get('team_id')
+                                        owning_team_id = pick_data.get('owning_team_id', team_id)
+                                        
+                                        draft_pick = DraftPick(
+                                            draft_id=self.draft.id,
+                                            round_num=round_num,
+                                            pick_num=pick_num,
+                                            team_id=owning_team_id,  # Use the team that owns the pick
+                                            overall_pick=overall_pick_counter
+                                        )
+                                        db.session.add(draft_pick)
+                                        overall_pick_counter += 1
+                            
+                            # Save all picks
+                            db.session.commit()
+                            return
+                    except Exception as pick_err:
+                        print(f"Error processing draft picks: {str(pick_err)}")
+                        # Continue with standard draft order generation
+                    
+                    # If we get here, create standard draft order with teams from NHL
+                    for team_data in nhl_teams_data:
+                        team = Team.query.get(team_data.get('id'))
+                        if team:
+                            nhl_teams.append(team)
+                        else:
+                            # Create a new team record if it doesn't exist in local DB
+                            new_team = Team(
+                                id=team_data.get('id'),
+                                name=team_data.get('team', ''),
+                                city=team_data.get('city', ''),
+                                abbreviation=team_data.get('abbreviation', ''),
+                                division_id=team_data.get('division_id')
+                            )
+                            db.session.add(new_team)
+                            db.session.commit()
+                            nhl_teams.append(new_team)
+            except Exception as e:
+                print(f"Error using TeamService: {str(e)}. Falling back to direct database query.")
+            
+            # If no NHL teams found from TeamService, fall back to direct database query
+            if not nhl_teams:
                 # First, try to query teams that have a league field set to "NHL"
                 try:
                     # Check if the league column exists in the Team model
@@ -238,10 +323,6 @@ class DraftEngine:
                     if all_teams:
                         nhl_teams = all_teams
                         print(f"Using {len(nhl_teams)} teams as NHL teams")
-            except Exception as e:
-                print(f"Error finding NHL teams: {str(e)}. Getting all teams instead.")
-                # If all else fails, get all teams
-                nhl_teams = Team.query.all()
             
             if not nhl_teams:
                 # Fallback if no teams are found
@@ -312,10 +393,33 @@ class DraftEngine:
         if not self.draft:
             return []
         
-        # Get all picks for this draft with team information
-        picks = DraftPick.query.filter_by(draft_id=self.draft.id).order_by(DraftPick.overall_pick).all()
-        
-        return [pick.to_dict() for pick in picks]
+        try:
+            # Get all picks for this draft with team information
+            picks = DraftPick.query.filter_by(draft_id=self.draft.id).order_by(DraftPick.overall_pick).all()
+            
+            # Build list of picks with team information
+            picks_with_teams = []
+            for pick in picks:
+                pick_dict = pick.to_dict()
+                
+                # Add team information if available
+                if pick.team_id:
+                    team = Team.query.get(pick.team_id)
+                    if team:
+                        pick_dict['team'] = team.to_dict()
+                
+                # Add player information if available
+                if pick.player_id:
+                    player = Player.query.get(pick.player_id)
+                    if player:
+                        pick_dict['player'] = player.to_dict()
+                        
+                picks_with_teams.append(pick_dict)
+            
+            return picks_with_teams
+        except Exception as e:
+            print(f"Error getting draft order: {str(e)}")
+            return []
     
     def get_draft_eligible_players(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """
@@ -606,14 +710,55 @@ def get_draft_info():
 def get_draft_prospects():
     """Get draft prospects"""
     try:
-        # Try to check Player model accessibility first
+        # Try using Supabase first for better reliability
+        try:
+            from ...supabase_client import get_draft_eligible_players
+            
+            # Get the current year or from query param
+            year = request.args.get('year', datetime.now().year, type=int)
+            limit = request.args.get('limit', 100, type=int)
+            
+            # Try to fetch directly with Supabase
+            print("Trying to fetch draft eligible players directly from Supabase first")
+            prospects = get_draft_eligible_players(limit)
+            
+            if prospects and len(prospects) > 0:
+                print(f"Successfully fetched {len(prospects)} prospects from Supabase")
+                return jsonify(prospects), 200
+            else:
+                print("No prospects found in direct Supabase query, trying SQLAlchemy...")
+        except Exception as supabase_err:
+            print(f"Initial Supabase attempt error: {str(supabase_err)}")
+            # Continue to try with SQLAlchemy
+        
+        # Try to check Player model accessibility
         try:
             player_check = Player.query.limit(1).all()
             print(f"Player model check: found {len(player_check)} players")
         except Exception as player_err:
             print(f"Player model error: {str(player_err)}")
-            # If Player model fails, return an empty array
-            return jsonify([]), 200
+            # If Player model fails, try using Supabase directly
+            try:
+                from ...supabase_client import get_draft_eligible_players
+                
+                # Get the current year or from query param
+                year = request.args.get('year', datetime.now().year, type=int)
+                limit = request.args.get('limit', 100, type=int)
+                
+                # Try to fetch directly with Supabase
+                print("Trying to fetch draft eligible players directly from Supabase as fallback")
+                prospects = get_draft_eligible_players(limit)
+                
+                if prospects and len(prospects) > 0:
+                    print(f"Successfully fetched {len(prospects)} prospects from Supabase")
+                    return jsonify(prospects), 200
+                else:
+                    print("No prospects found in Supabase")
+                    return jsonify([]), 200
+            except Exception as supabase_err:
+                print(f"Supabase error: {str(supabase_err)}")
+                # If Supabase also fails, return an empty array
+                return jsonify([]), 200
             
         # Create a draft engine instance
         draft_engine = DraftEngine()
@@ -633,8 +778,24 @@ def get_draft_prospects():
             return jsonify(prospects), 200
         except Exception as draft_err:
             print(f"Draft initialization error in prospects: {str(draft_err)}")
-            # Return empty array on draft initialization error
-            return jsonify([]), 200
+            # Fall back to Supabase if draft engine fails
+            try:
+                from ...supabase_client import get_draft_eligible_players
+                
+                # Try to fetch directly with Supabase
+                print("Falling back to Supabase after draft engine error")
+                prospects = get_draft_eligible_players(limit)
+                
+                if prospects and len(prospects) > 0:
+                    print(f"Successfully fetched {len(prospects)} prospects from Supabase fallback")
+                    return jsonify(prospects), 200
+                else:
+                    print("No prospects found in Supabase fallback")
+                    return jsonify([]), 200
+            except Exception as supabase_err:
+                print(f"Supabase fallback error: {str(supabase_err)}")
+                # Return empty array on all failures
+                return jsonify([]), 200
             
     except Exception as e:
         print(f"Error in get_draft_prospects: {str(e)}")
@@ -659,9 +820,18 @@ def get_draft_order():
             print(f"Team model check: found {len(team_check)} teams")
         except Exception as team_err:
             print(f"Team model error: {str(team_err)}")
-            # If Team model fails, return an empty array with a 200 status
-            # This is better than a 500 error that breaks the frontend
-            return jsonify([]), 200
+            # If Team model fails, try to get NHL teams from Supabase
+            try:
+                from ...services.team_service import TeamService
+                nhl_teams = TeamService.get_nhl_teams()
+                if nhl_teams:
+                    return jsonify(generate_mock_draft_order(nhl_teams, year)), 200
+                else:
+                    # Still fails, return an empty array with a 200 status
+                    return jsonify([]), 200
+            except Exception:
+                # If Supabase also fails, return mock data
+                return jsonify(generate_mock_draft_order([], year)), 200
         
         try:
             # Initialize draft for the given year
@@ -673,13 +843,67 @@ def get_draft_order():
             return jsonify(order), 200
         except Exception as draft_err:
             print(f"Draft initialization error: {str(draft_err)}")
-            # Return empty array on draft initialization error
-            return jsonify([]), 200
+            # Try to use Supabase as fallback
+            try:
+                from ...services.team_service import TeamService
+                nhl_teams = TeamService.get_nhl_teams()
+                if nhl_teams:
+                    return jsonify(generate_mock_draft_order(nhl_teams, year)), 200
+                else:
+                    # Return empty array on draft initialization error
+                    return jsonify([]), 200
+            except Exception:
+                # Return empty array if everything fails
+                return jsonify([]), 200
             
     except Exception as e:
         print(f"Error in get_draft_order: {str(e)}")
         # Return an empty array instead of error - helps frontend handle gracefully
         return jsonify([]), 200
+
+
+def generate_mock_draft_order(teams_data, year):
+    """Generate mock draft order using supplied team data"""
+    print("Generating mock draft order")
+    
+    # If no teams provided, create mock teams
+    if not teams_data or len(teams_data) == 0:
+        teams_data = []
+        for i in range(1, 33):
+            teams_data.append({
+                'id': i,
+                'name': f'Team {i}',
+                'city': f'City {i}',
+                'abbreviation': f'T{i}'
+            })
+    
+    # Sort teams to ensure consistent order (by ID or name)
+    teams_data = sorted(teams_data, key=lambda t: t.get('id', 0) if t.get('id') else t.get('team', ''))
+    
+    # Generate mock draft picks
+    picks = []
+    for round_num in range(1, 8):  # 7 rounds
+        for pick_num, team in enumerate(teams_data, 1):
+            overall_pick = (round_num - 1) * len(teams_data) + pick_num
+            
+            pick = {
+                'id': overall_pick,
+                'draft_id': 1,
+                'round_num': round_num,
+                'pick_num': pick_num,
+                'team_id': team.get('id', pick_num),
+                'player_id': None,
+                'overall_pick': overall_pick,
+                'team': {
+                    'id': team.get('id', pick_num),
+                    'name': team.get('team', team.get('name', f'Team {pick_num}')),
+                    'city': team.get('city', f'City {pick_num}'),
+                    'abbreviation': team.get('abbreviation', f'T{pick_num}')
+                }
+            }
+            picks.append(pick)
+            
+    return picks
 
 
 @draft_bp.route('/pick', methods=['POST'])
@@ -1007,4 +1231,183 @@ def debug_draft_database():
             'status': 'error',
             'message': str(e)
         }), 500
+
+
+@draft_bp.route('/picks', methods=['GET'])
+def get_draft_picks():
+    """
+    Get all draft picks from the Draft_Picks table for a specific year.
+    
+    Returns:
+        JSON array of draft picks
+    """
+    try:
+        year = request.args.get('year', datetime.now().year, type=int)
+        
+        from ...supabase_client import get_supabase_client
+        
+        # Try to get draft picks from Supabase
+        try:
+            supabase = get_supabase_client()
+            
+            # Query the Draft_Picks table - get all picks, not just 'Owned'
+            response = supabase.table('Draft_Picks') \
+                .select('*, team:Team(id, team, abbreviation, primary_color, secondary_color)') \
+                .eq('year', year) \
+                .order('round', {'ascending': True}) \
+                .execute()
+                
+            if response.data:
+                # Log sample data for debugging
+                if len(response.data) > 0:
+                    print(f"Sample raw pick data from Supabase: {response.data[0]}")
+                    print(f"Sample pick fields: {list(response.data[0].keys())}")
+                    
+                    # Log counts of different pick statuses
+                    status_counts = {}
+                    for pick in response.data:
+                        status = pick.get('pick_status')
+                        if status:
+                            status_counts[status] = status_counts.get(status, 0) + 1
+                        else:
+                            status_counts['null'] = status_counts.get('null', 0) + 1
+                            
+                    print(f"Pick status counts from Supabase: {status_counts}")
+                
+                formatted_picks = []
+                for i, pick in enumerate(response.data):
+                    # Create a formatted pick object
+                    formatted_pick = {
+                        'id': pick.get('id'),
+                        'overall_pick': i + 1,
+                        'round_num': pick.get('round'),
+                        'pick_num': (i % 32) + 1,
+                        'team': pick.get('team'),
+                        'team_abbreviation': pick.get('team', {}).get('abbreviation') or pick.get('team'),
+                        'player_id': None,  # No player assigned yet in the Draft_Picks table
+                        # Explicitly preserve the pick_status field, defaulting to 'Owned' ONLY if null
+                        'pick_status': pick.get('pick_status') if pick.get('pick_status') is not None else 'Owned',
+                        'received_pick_1': pick.get('received_pick_1'),   # Include received pick source
+                        'received_pick_2': pick.get('received_pick_2'),
+                        'received_pick_3': pick.get('received_pick_3'),
+                        # Add debugging flag
+                        'direct_from_supabase': True
+                    }
+                    formatted_picks.append(formatted_pick)
+                
+                # Log a sample of formatted picks
+                if formatted_picks:
+                    print(f"Sample formatted pick: {formatted_picks[0]}")
+                
+                return jsonify(formatted_picks)
+            
+            # If no picks found, log warning and return empty array
+            print(f"No draft picks found in Supabase for year {year}")
+            return jsonify([])
+            
+        except Exception as e:
+            print(f"Error fetching draft picks from Supabase: {str(e)}")
+            
+            # Fallback to the normal draft_order endpoint
+            try:
+                # Use the existing draft order function
+                draft_engine = DraftEngine()
+                draft_order = draft_engine.get_draft_order()
+                
+                # If no picks in database, generate mock data
+                if not draft_order:
+                    # Get NHL teams
+                    from ...services.team_service import TeamService
+                    teams_data = TeamService.get_nhl_teams()
+                    
+                    if not teams_data:
+                        # Fallback to default team abbreviations
+                        mock_teams = [
+                            {'abbreviation': 'ANA'}, {'abbreviation': 'BOS'}, {'abbreviation': 'BUF'}, 
+                            {'abbreviation': 'CAR'}, {'abbreviation': 'CBJ'}, {'abbreviation': 'CGY'}, 
+                            {'abbreviation': 'CHI'}, {'abbreviation': 'COL'}, {'abbreviation': 'DAL'}, 
+                            {'abbreviation': 'DET'}, {'abbreviation': 'EDM'}, {'abbreviation': 'FLA'}, 
+                            {'abbreviation': 'LAK'}, {'abbreviation': 'MIN'}, {'abbreviation': 'MTL'}, 
+                            {'abbreviation': 'NJD'}, {'abbreviation': 'NSH'}, {'abbreviation': 'NYI'}, 
+                            {'abbreviation': 'NYR'}, {'abbreviation': 'OTT'}, {'abbreviation': 'PHI'}, 
+                            {'abbreviation': 'PIT'}, {'abbreviation': 'SEA'}, {'abbreviation': 'SJS'}, 
+                            {'abbreviation': 'STL'}, {'abbreviation': 'TBL'}, {'abbreviation': 'TOR'}, 
+                            {'abbreviation': 'UTA'}, {'abbreviation': 'VAN'}, {'abbreviation': 'VGK'}, 
+                            {'abbreviation': 'WPG'}, {'abbreviation': 'WSH'}
+                        ]
+                        draft_order = generate_mock_draft_order(mock_teams, year)
+                    else:
+                        draft_order = generate_mock_draft_order(teams_data, year)
+                
+                # Add fallback indicator so frontend can alert the user
+                for pick in draft_order:
+                    pick['using_fallback_data'] = True
+                    
+                print(f"Using fallback draft order generation, created {len(draft_order)} picks")
+                return jsonify(draft_order)
+                
+            except Exception as fallback_error:
+                print(f"Error generating fallback draft order: {str(fallback_error)}")
+                return jsonify([]), 500
+    
+    except Exception as e:
+        print(f"General error in get_draft_picks: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@draft_bp.route('/picks-debug', methods=['GET'])
+def get_draft_picks_debug():
+    """
+    Debug endpoint to get raw draft picks data from Supabase.
+    Returns unfiltered data directly from the Draft_Picks table.
+    
+    Returns:
+        JSON array of raw draft picks data
+    """
+    try:
+        year = request.args.get('year', datetime.now().year, type=int)
+        
+        from ...supabase_client import get_supabase_client
+        
+        # Try to get draft picks from Supabase
+        try:
+            supabase = get_supabase_client()
+            
+            # Query the Draft_Picks table - completely raw, no filtering
+            response = supabase.table('Draft_Picks') \
+                .select('*') \
+                .eq('year', year) \
+                .execute()
+                
+            if response.data:
+                # Return raw data with minimal processing
+                return jsonify({
+                    'raw_data': response.data,
+                    'count': len(response.data),
+                    'status_counts': count_statuses(response.data),
+                    'non_owned_picks': [p for p in response.data if p.get('pick_status') != 'Owned']
+                })
+            
+            # If no picks found, log warning and return empty array
+            print(f"No draft picks found in Supabase for year {year}")
+            return jsonify({'error': 'No picks found', 'count': 0})
+            
+        except Exception as e:
+            print(f"Error fetching draft picks from Supabase: {str(e)}")
+            return jsonify({'error': str(e)})
+    
+    except Exception as e:
+        print(f"General error in get_draft_picks_debug: {str(e)}")
+        return jsonify({'error': str(e)})
+
+def count_statuses(picks):
+    """Helper function to count pick statuses"""
+    counts = {}
+    for pick in picks:
+        status = pick.get('pick_status')
+        if status:
+            counts[status] = counts.get(status, 0) + 1
+        else:
+            counts['null'] = counts.get('null', 0) + 1
+    return counts
 

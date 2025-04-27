@@ -4,9 +4,32 @@ from flask_jwt_extended import jwt_required
 from ..services.league import Division
 from ..extensions import db
 from datetime import datetime
+import os
+from supabase import create_client, Client
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Create a blueprint for team endpoints
 team_bp = Blueprint('team', __name__)
+
+# Create Supabase client
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+def get_supabase_client():
+    """Get a Supabase client instance"""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        logger.error("Supabase credentials not configured")
+        return None
+    
+    try:
+        return create_client(SUPABASE_URL, SUPABASE_KEY)
+    except Exception as e:
+        logger.error(f"Error connecting to Supabase: {e}")
+        return None
 
 # Team Model
 class Team(db.Model):
@@ -84,6 +107,30 @@ class TeamService:
         Returns:
             List of teams as dictionaries
         """
+        # First try to get teams from Supabase
+        try:
+            supabase = get_supabase_client()
+            if supabase:
+                # Fetch all NHL teams from Supabase
+                query = supabase.table("Team").select("*")
+                
+                # Apply filters if provided
+                if filters:
+                    if 'league' in filters:
+                        query = query.eq("league", filters['league'])
+                    if 'division_id' in filters:
+                        query = query.eq("division_id", filters['division_id'])
+                
+                # Execute query
+                response = query.execute()
+                
+                if response.data:
+                    logger.info(f"Fetched {len(response.data)} teams from Supabase")
+                    return response.data
+        except Exception as e:
+            logger.error(f"Error fetching teams from Supabase: {e}")
+        
+        # Fallback to local database if Supabase fetch fails
         # Start with base query
         query = Team.query
         
@@ -96,6 +143,91 @@ class TeamService:
         teams = [team.to_dict() for team in query.all()]
         
         return teams
+    
+    @staticmethod
+    def get_nhl_teams() -> List[Dict[str, Any]]:
+        """
+        Get all NHL teams from Supabase.
+        
+        Returns:
+            List of NHL teams as dictionaries
+        """
+        try:
+            supabase = get_supabase_client()
+            if supabase:
+                # Fetch all NHL teams from Supabase
+                response = supabase.table("Team").select("*").eq("league", "NHL").execute()
+                
+                if response.data:
+                    logger.info(f"Fetched {len(response.data)} NHL teams from Supabase")
+                    return response.data
+                else:
+                    logger.warning("No NHL teams found in Supabase")
+            else:
+                logger.warning("Could not connect to Supabase")
+        except Exception as e:
+            logger.error(f"Error fetching NHL teams from Supabase: {e}")
+        
+        # Fallback to local database if Supabase fetch fails
+        try:
+            # Try to query teams that have league column set to "NHL"
+            teams = []
+            try:
+                teams = Team.query.filter_by(league="NHL").all()
+            except Exception:
+                # If league column doesn't exist, try using divisions 1-4
+                teams = Team.query.filter(Team.division_id.between(1, 4)).all()
+                
+            if not teams:
+                # If still no teams, get first 32 teams
+                teams = Team.query.limit(32).all()
+                
+            return [team.to_dict() for team in teams]
+        except Exception as e:
+            logger.error(f"Error fetching NHL teams from local database: {e}")
+            return []
+    
+    @staticmethod
+    def get_draft_picks(year=None, pick_status=None) -> List[Dict[str, Any]]:
+        """
+        Get the draft picks from Supabase.
+        
+        Args:
+            year: Optional filter for draft year
+            pick_status: Optional filter for pick status (Owned, Traded, etc.)
+            
+        Returns:
+            List of draft picks as dictionaries
+        """
+        try:
+            supabase = get_supabase_client()
+            if supabase:
+                # Start building the query
+                query = supabase.table("Draft_Picks").select("*, team(*)")
+                
+                # Apply filters if provided
+                if year:
+                    query = query.eq("year", year)
+                if pick_status:
+                    query = query.eq("pick_status", pick_status)
+                    
+                # Sort by round, then team
+                query = query.order("round", {"ascending": True})
+                    
+                # Execute query
+                response = query.execute()
+                
+                if response.data:
+                    logger.info(f"Fetched {len(response.data)} draft picks from Supabase")
+                    return response.data
+                else:
+                    logger.warning("No draft picks found in Supabase")
+            else:
+                logger.warning("Could not connect to Supabase")
+        except Exception as e:
+            logger.error(f"Error fetching draft picks from Supabase: {e}")
+        
+        return []
     
     @staticmethod
     def get_team_by_id(team_id: int) -> Optional[Dict[str, Any]]:
@@ -307,4 +439,134 @@ def delete_team(team_id):
 def get_divisions():
     """Get all divisions"""
     divisions = TeamService.get_all_divisions()
-    return jsonify(divisions), 200 
+    return jsonify(divisions), 200
+
+
+@team_bp.route('/nhl', methods=['GET'])
+def get_nhl_teams():
+    """Get all NHL teams"""
+    teams = TeamService.get_nhl_teams()
+    return jsonify(teams), 200
+
+
+@team_bp.route('/draft-picks', methods=['GET'])
+def get_draft_picks():
+    """
+    Get draft picks, optionally filtered by year and status.
+    
+    Returns:
+        JSON array of draft picks
+    """
+    try:
+        # Get filter parameters
+        year = request.args.get('year', type=int)
+        pick_status = request.args.get('pick_status')  # Make optional
+        
+        # Get draft picks from service
+        picks = TeamService.get_draft_picks(year=year, pick_status=pick_status)
+        
+        if not picks:
+            logger.warning(f"No draft picks found for year {year}")
+            return jsonify([])
+        
+        # Log sample data for debugging
+        if len(picks) > 0:
+            sample_pick = picks[0]
+            logger.info(f"Sample raw pick data: {sample_pick}")
+            logger.info(f"Sample pick fields: {list(sample_pick.keys())}")
+            
+            # Log counts of different pick statuses
+            status_counts = {}
+            for pick in picks:
+                status = pick.get('pick_status')
+                if status:
+                    status_counts[status] = status_counts.get(status, 0) + 1
+                else:
+                    status_counts['null'] = status_counts.get('null', 0) + 1
+                    
+            logger.info(f"Pick status counts: {status_counts}")
+        
+        # Format picks for frontend - carefully preserving the pick_status field
+        formatted_picks = []
+        for i, pick in enumerate(picks):
+            # Create a formatted pick object for the frontend
+            formatted_pick = {
+                'id': pick.get('id'),
+                'round_num': pick.get('round'),
+                'overall_pick': i + 1,  # Calculate overall pick number
+                'pick_num': (i % 32) + 1,  # Calculate pick number within round
+                'team_abbreviation': pick.get('team', {}).get('abbreviation') or pick.get('team'),
+                'team': pick.get('team'),
+                # Explicitly preserve the pick_status field, defaulting to 'Owned' ONLY if null
+                'pick_status': pick.get('pick_status') if pick.get('pick_status') is not None else 'Owned',
+                'year': pick.get('year'),
+                'received_pick_1': pick.get('received_pick_1'),
+                'received_pick_2': pick.get('received_pick_2'),
+                'received_pick_3': pick.get('received_pick_3'),
+                'received_pick_4': pick.get('received_pick_4'),
+                'received_pick_5': pick.get('received_pick_5'),
+                'received_pick_6': pick.get('received_pick_6')
+            }
+            formatted_picks.append(formatted_pick)
+        
+        # Log a sample of formatted picks
+        if formatted_picks:
+            logger.info(f"Sample formatted pick: {formatted_picks[0]}")
+            
+        return jsonify(formatted_picks)
+    except Exception as e:
+        logger.error(f"Error in draft picks endpoint: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@team_bp.route('/draft-picks-debug', methods=['GET'])
+def get_draft_picks_debug():
+    """
+    Debug endpoint to get raw draft picks data directly from Supabase.
+    
+    Returns:
+        Raw JSON data from Supabase
+    """
+    try:
+        # Get filter parameters
+        year = request.args.get('year', type=int)
+        
+        # Get Supabase client
+        supabase = get_supabase_client()
+        if not supabase:
+            return jsonify({"error": "Could not connect to Supabase"}), 500
+        
+        # Make raw query without any processing
+        query = supabase.table("Draft_Picks").select("*")
+        
+        # Apply year filter if provided
+        if year:
+            query = query.eq("year", year)
+            
+        # Execute query
+        response = query.execute()
+        
+        if response.data:
+            # Count status values
+            status_counts = {}
+            for pick in response.data:
+                status = pick.get('pick_status')
+                if status:
+                    status_counts[status] = status_counts.get(status, 0) + 1
+                else:
+                    status_counts['null'] = status_counts.get('null', 0) + 1
+                    
+            # Get non-owned picks
+            non_owned = [pick for pick in response.data if pick.get('pick_status') != 'Owned']
+            
+            return jsonify({
+                "raw_data": response.data,
+                "count": len(response.data),
+                "status_counts": status_counts,
+                "non_owned_picks": non_owned
+            })
+        else:
+            return jsonify({"error": "No draft picks found", "count": 0})
+    except Exception as e:
+        logger.error(f"Error in draft picks debug endpoint: {e}")
+        return jsonify({"error": str(e)}), 500 

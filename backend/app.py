@@ -3,11 +3,15 @@ from flask import Flask, request, jsonify
 from app import create_app
 from flask_cors import CORS
 from app.supabase_client import get_data, get_item_by_id, get_supabase
+from app.services.draft.draft_ranking import draft_ranking_bp
 
 app = create_app(os.getenv('FLASK_ENV', 'development'))
 
 # Use a single CORS configuration for the entire app
 CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+
+# Register the new blueprint
+app.register_blueprint(draft_ranking_bp, url_prefix='/api/draft/rankings')
 
 @app.route('/api/supabase/<table_name>', methods=['GET'])
 def get_supabase_data(table_name):

@@ -11,6 +11,7 @@ import sqlalchemy as sa
 import os
 from sqlalchemy import inspect
 import logging
+from .draft_ranking import DraftRankingService
 
 # Create a blueprint for draft endpoints
 draft_bp = Blueprint('draft', __name__)
@@ -423,15 +424,18 @@ class DraftEngine:
     
     def get_draft_eligible_players(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """
-        Get players eligible for the draft.
+        Get players eligible for the draft with ranking information.
         
         Args:
             limit: Optional limit on number of players to return
             
         Returns:
-            List of draft-eligible player dictionaries
+            List of draft-eligible player dictionaries with ranking information
         """
         try:
+            from ...services.team_service import TeamService
+            
+            # First, get all draft-eligible players
             query = Player.query.filter(
                 Player.age == 17,
                 Player.draft_year.is_(None)
@@ -439,8 +443,48 @@ class DraftEngine:
             
             if limit:
                 query = query.limit(limit)
+            
+            players = query.all()
+            
+            # Get all teams to map team abbreviations to leagues
+            teams_data = TeamService.get_nhl_teams()
+            team_leagues = {}
+            if teams_data:
+                for team in teams_data:
+                    if 'abbreviation' in team and 'league' in team:
+                        team_leagues[team['abbreviation']] = team['league']
+            
+            # Enhance player data with league information
+            enhanced_players = []
+            for player in players:
+                player_dict = player.to_dict()
                 
-            return [player.to_dict() for player in query.all()]
+                # Add league information if team abbreviation exists
+                if player_dict.get('team') and player_dict['team'] in team_leagues:
+                    player_dict['league'] = team_leagues[player_dict['team']]
+                
+                enhanced_players.append(player_dict)
+            
+            # Get draft rankings for these players using the new service
+            try:
+                # Calculate ranking value for each player
+                for player in enhanced_players:
+                    player['ranking_value'] = DraftRankingService.calculate_draft_ranking_value(player)
+                
+                # Sort by ranking value in descending order
+                enhanced_players.sort(key=lambda p: p.get('ranking_value', 0), reverse=True)
+                
+                # Add ranking position
+                for i, player in enumerate(enhanced_players):
+                    player['draft_ranking'] = i + 1
+                    # Format the ranking value to 2 decimal places for display
+                    player['ranking_display'] = f"{int(player.get('draft_ranking', 0))}"
+            except Exception as rank_err:
+                print(f"Error calculating draft rankings: {str(rank_err)}")
+                # Continue without rankings if there's an error
+            
+            return enhanced_players
+            
         except Exception as e:
             print(f"Error getting draft-eligible players: {str(e)}")
             return []  # Return empty list on error
@@ -708,11 +752,12 @@ def get_draft_info():
 
 @draft_bp.route('/prospects', methods=['GET'])
 def get_draft_prospects():
-    """Get draft prospects"""
+    """Get draft prospects with rankings"""
     try:
         # Try using Supabase first for better reliability
         try:
             from ...supabase_client import get_draft_eligible_players
+            from ...services.team_service import TeamService
             
             # Get the current year or from query param
             year = request.args.get('year', datetime.now().year, type=int)
@@ -723,6 +768,37 @@ def get_draft_prospects():
             prospects = get_draft_eligible_players(limit)
             
             if prospects and len(prospects) > 0:
+                # Enhance prospects with league information
+                teams_data = TeamService.get_nhl_teams()
+                team_leagues = {}
+                if teams_data:
+                    for team in teams_data:
+                        if 'abbreviation' in team and 'league' in team:
+                            team_leagues[team['abbreviation']] = team['league']
+                
+                # Add league information to each prospect
+                for prospect in prospects:
+                    if prospect.get('team') and prospect['team'] in team_leagues:
+                        prospect['league'] = team_leagues[prospect['team']]
+                
+                # Calculate draft rankings
+                try:
+                    # Calculate ranking value for each player
+                    for player in prospects:
+                        player['ranking_value'] = DraftRankingService.calculate_draft_ranking_value(player)
+                    
+                    # Sort by ranking value in descending order
+                    prospects.sort(key=lambda p: p.get('ranking_value', 0), reverse=True)
+                    
+                    # Add ranking position
+                    for i, player in enumerate(prospects):
+                        player['draft_ranking'] = i + 1
+                        # Format the ranking value to 2 decimal places for display
+                        player['ranking_display'] = f"{int(player.get('draft_ranking', 0))}"
+                except Exception as rank_err:
+                    print(f"Error calculating draft rankings: {str(rank_err)}")
+                    # Continue without rankings if there's an error
+                
                 print(f"Successfully fetched {len(prospects)} prospects from Supabase")
                 return jsonify(prospects), 200
             else:
@@ -750,6 +826,23 @@ def get_draft_prospects():
                 prospects = get_draft_eligible_players(limit)
                 
                 if prospects and len(prospects) > 0:
+                    # Calculate draft rankings
+                    try:
+                        # Calculate ranking value for each player
+                        for player in prospects:
+                            player['ranking_value'] = DraftRankingService.calculate_draft_ranking_value(player)
+                        
+                        # Sort by ranking value in descending order
+                        prospects.sort(key=lambda p: p.get('ranking_value', 0), reverse=True)
+                        
+                        # Add ranking position
+                        for i, player in enumerate(prospects):
+                            player['draft_ranking'] = i + 1
+                            # Format the ranking value for display
+                            player['ranking_display'] = f"{int(player.get('draft_ranking', 0))}"
+                    except Exception as rank_err:
+                        print(f"Error calculating draft rankings: {str(rank_err)}")
+                    
                     print(f"Successfully fetched {len(prospects)} prospects from Supabase")
                     return jsonify(prospects), 200
                 else:
@@ -787,6 +880,23 @@ def get_draft_prospects():
                 prospects = get_draft_eligible_players(limit)
                 
                 if prospects and len(prospects) > 0:
+                    # Calculate draft rankings
+                    try:
+                        # Calculate ranking value for each player
+                        for player in prospects:
+                            player['ranking_value'] = DraftRankingService.calculate_draft_ranking_value(player)
+                        
+                        # Sort by ranking value in descending order
+                        prospects.sort(key=lambda p: p.get('ranking_value', 0), reverse=True)
+                        
+                        # Add ranking position
+                        for i, player in enumerate(prospects):
+                            player['draft_ranking'] = i + 1
+                            # Format the ranking value for display
+                            player['ranking_display'] = f"{int(player.get('draft_ranking', 0))}"
+                    except Exception as rank_err:
+                        print(f"Error calculating draft rankings: {str(rank_err)}")
+                    
                     print(f"Successfully fetched {len(prospects)} prospects from Supabase fallback")
                     return jsonify(prospects), 200
                 else:
@@ -1497,4 +1607,21 @@ def count_statuses(picks):
         else:
             counts['null'] = counts.get('null', 0) + 1
     return counts
+
+# Add a new endpoint for draft rankings
+@draft_bp.route('/rankings', methods=['GET'])
+def get_rankings():
+    """Get draft rankings for eligible players"""
+    try:
+        # Get year from query params, default to current year
+        year = request.args.get('year', datetime.now().year, type=int)
+        
+        # Get draft rankings using the ranking service
+        rankings = DraftRankingService.get_draft_rankings(year)
+        
+        # Return rankings
+        return jsonify(rankings), 200
+    except Exception as e:
+        print(f"Error in get_rankings: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 

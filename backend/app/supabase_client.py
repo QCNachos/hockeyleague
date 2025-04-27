@@ -279,9 +279,27 @@ def get_draft_eligible_players(limit=None):
         response = query.execute()
         print(f"First query found {len(response.data)} draft-eligible players in Supabase")
         
-        # If we found players, return them
+        # If we found players, enhance them with league information
         if response.data and len(response.data) > 0:
-            return response.data
+            players = response.data
+            
+            # Get teams to map abbreviations to leagues
+            try:
+                teams_query = supabase.table('Team').select('abbreviation,league').execute()
+                if teams_query.data:
+                    team_leagues = {}
+                    for team in teams_query.data:
+                        if 'abbreviation' in team and 'league' in team:
+                            team_leagues[team['abbreviation']] = team['league']
+                    
+                    # Add league information to each player
+                    for player in players:
+                        if player.get('team') and player['team'] in team_leagues:
+                            player['league'] = team_leagues[player['team']]
+            except Exception as teams_err:
+                print(f"Error fetching team information for leagues: {str(teams_err)}")
+            
+            return players
             
         print("No players found using age=17 + draft_year is null, trying alternatives...")
         

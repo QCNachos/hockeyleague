@@ -3,6 +3,16 @@ import styled from 'styled-components';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 
+// Import all flag images
+import flagCanada from '../assets/Flag_Canada.png';
+import flagUSA from '../assets/Flag_United States.png';
+import flagSweden from '../assets/Flag_Sweden.png';
+import flagGermany from '../assets/Flag_Germany.png';
+import flagCzechia from '../assets/Flag_Czechia.png';
+import flagRussia from '../assets/Flag_Russia.png';
+import flagSlovakia from '../assets/Flag_Slovakia.png';
+import flagSwitzerland from '../assets/Flag_Switzerland.png';
+
 // Initialize Supabase client
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
 const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
@@ -138,6 +148,7 @@ const ProspectTable = styled.table`
     padding: 10px;
     color: #C4CED4;
     border-bottom: 1px solid #333;
+    white-space: nowrap;
   }
   
   td {
@@ -148,6 +159,45 @@ const ProspectTable = styled.table`
   
   tr:hover td {
     background-color: #2a2a2a;
+  }
+  
+  .centered {
+    text-align: center;
+  }
+  
+  .age-column, .overall-column, .csr-column, .height-column {
+    text-align: center;
+  }
+  
+  /* Column widths */
+  .name-column {
+    width: 15%;
+    max-width: 180px;
+  }
+  
+  .position-column, .age-column, .height-column {
+    width: 8%;
+  }
+  
+  .league-column, .team-column {
+    width: 12%;
+  }
+  
+  .player-type-column {
+    width: 10%;
+  }
+  
+  /* Section styling */
+  .section-border-right {
+    border-right: 1px solid #444;
+  }
+  
+  .section-border-left {
+    border-left: 1px solid #444;
+  }
+  
+  th.section-header {
+    background-color: #292929;
   }
 `;
 
@@ -330,6 +380,187 @@ const ReceivedIndicator = styled.span`
   margin-left: 8px;
 `;
 
+// Add new styled component for potential visualization
+const PotentialBox = styled.div`
+  background-color: ${props => {
+    // Color based on potential precision/certainty
+    switch(props.precision?.toLowerCase()) {
+      case 'mature': return '#9E9E9E'; // Light grey
+      case 'very high': return '#4FAEEA'; // Blue
+      case 'high': return '#4EAD5B'; // Green
+      case 'medium': return '#F5C242'; // Yellow
+      case 'low': return '#E93323'; // Red
+      case 'unknown':
+      default: return '#AF2318'; // Dark Red
+    }
+  }};
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  font-weight: 500;
+  text-align: center;
+  min-width: 120px;
+  width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
+
+// Add styled component for accuracy bars
+const AccuracyBars = styled.div`
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  vertical-align: middle;
+`;
+
+const AccuracyBar = styled.div`
+  width: 6px;
+  height: 14px;
+  background-color: ${props => props.filled ? '#aaa' : '#333'};
+  margin-right: 2px;
+  
+  &:last-child {
+    margin-right: 0;
+  }
+`;
+
+// Helper function to get standardized display text for potential
+const getStandardizedPotential = (potential) => {
+  if (!potential) return 'N/A';
+  
+  // Map potential values to standardized display text
+  switch(potential) {
+    case 'Generational Goalie': return 'Generational';
+    case 'Generational Def': return 'Generational';
+    case 'Generational': return 'Generational';
+    case 'Franchise Goalie': return 'Franchise';
+    case 'Franchise Def': return 'Franchise';
+    case 'Franchise': return 'Franchise';
+    case 'Game Breaker Goalie': return 'Game Breaker';
+    case 'Game Breaker Def': return 'Game Breaker';
+    case 'Game Breaker': return 'Game Breaker';
+    case 'Elite Goalie': return 'Elite';
+    case 'Elite Def': return 'Elite';
+    case 'Elite': return 'Elite';
+    case 'Lead Starter': return 'Lead Starter';
+    case 'Top Pair': return 'Top Pair';
+    case 'Top Line': return 'Top Line';
+    case 'Starter': return 'Starter';
+    case 'Top 3': return 'Top 3';
+    case 'Top 6 F': return 'Top 6 F';
+    case 'Occasional Starter': return 'Occ. Starter';
+    case 'Top 4': return 'Top 4';
+    case 'Middle 6': return 'Middle 6';
+    case 'Backup': return 'Backup';
+    case 'Top 6': return 'Top 6';
+    case 'Bottom 6': return 'Bottom 6';
+    case 'Fringe NHLer Goalie': return 'Fringe NHLer';
+    case 'Fringe NHLer Def': return 'Fringe NHLer';
+    case 'Fringe NHLer': return 'Fringe NHLer';
+    case 'Lead Starter AHL': return 'AHL Lead Starter';
+    case 'Top Pair AHL': return 'AHL Top Pair';
+    case 'Top Line AHL': return 'AHL Top Line';
+    case 'Starter AHL': return 'AHL Starter';
+    case 'Top 3 AHL': return 'AHL Top 3';
+    case 'Top 6 F AHL': return 'AHL Top 6 F';
+    case 'Occasional Starter AHL': return 'AHL Occ. Starter';
+    case 'Top 4 AHL': return 'AHL Top 4';
+    case 'Middle 6 AHL': return 'AHL Middle 6';
+    case 'Backup AHL': return 'AHL Backup';
+    case 'Top 6 AHL': return 'AHL Top 6';
+    case 'Bottom 6 AHL': return 'AHL Bottom 6';
+    default: return potential;
+  }
+};
+
+// Helper function to get flag image based on nationality
+const getFlagImage = (nationality) => {
+  switch(nationality?.toLowerCase()) {
+    case 'canada':
+    case 'canadian':
+      return flagCanada;
+    case 'united states':
+    case 'usa':
+    case 'american':
+    case 'united states of america':
+      return flagUSA;
+    case 'sweden':
+    case 'swedish':
+      return flagSweden;
+    case 'germany':
+    case 'german':
+      return flagGermany;
+    case 'czechia':
+    case 'czech':
+    case 'czech republic':
+      return flagCzechia;
+    case 'russia':
+    case 'russian':
+      return flagRussia;
+    case 'slovakia':
+    case 'slovak':
+      return flagSlovakia;
+    case 'switzerland':
+    case 'swiss':
+      return flagSwitzerland;
+    default:
+      return null;
+  }
+};
+
+// Generate a Central Scouting Ranking based on overall rating
+const generateCSRanking = (overall, position) => {
+  if (!overall) return 'N/R'; // Not Ranked
+  
+  // Determine if player is a skater or goalie
+  const isSkater = position !== 'G';
+  
+  if (overall >= 85) {
+    return isSkater ? '1-10' : '1-3';
+  } else if (overall >= 75) {
+    return isSkater ? '11-32' : '4-6';
+  } else if (overall >= 65) {
+    return isSkater ? '33-64' : '7-10';
+  } else if (overall >= 55) {
+    return isSkater ? '65-100' : '11-15';
+  } else {
+    return isSkater ? '101+' : '16+';
+  }
+};
+
+// Flag image component
+const FlagImage = styled.img`
+  width: 24px;
+  height: 16px;
+  margin-right: 8px;
+  vertical-align: middle;
+  object-fit: contain;
+  border: 1px solid #444;
+`;
+
+// Helper function to get number of accuracy bars based on volatility/certainty
+const getAccuracyBars = (volatility) => {
+  if (!volatility) return 0;
+  
+  // Map volatility values to number of bars (0-4)
+  switch(volatility.toLowerCase()) {
+    case 'minimal':
+      return 4;
+    case 'low':
+      return 3;
+    case 'medium':
+      return 2;
+    case 'high':
+      return 1;
+    case 'very high':
+    case 'unknown':
+    default:
+      return 0;
+  }
+};
+
 const Draft = () => {
   const [activeTab, setActiveTab] = useState('prospects');
   const [searchQuery, setSearchQuery] = useState('');
@@ -347,6 +578,8 @@ const Draft = () => {
   // Added filtering states
   const [positionFilter, setPositionFilter] = useState('all');
   const [nationalityFilter, setNationalityFilter] = useState('all');
+  const [teamFilter, setTeamFilter] = useState('all');
+  const [leagueFilter, setLeagueFilter] = useState('all');
   const [sortBy, setSortBy] = useState('overall');
   const [sortDirection, setSortDirection] = useState('desc');
   const [selectedPlayer, setSelectedPlayer] = useState(null);
@@ -471,7 +704,15 @@ const Draft = () => {
       
       if (response.data && Array.isArray(response.data)) {
         console.log(`Loaded ${response.data.length} draft prospects`);
-      setDraftablePlayers(response.data);
+        
+        // Log detailed player data to inspect the response
+        console.log('Detailed player data sample:', response.data.slice(0, 3));
+        
+        // Check if league information is present in the response
+        const leaguesFound = response.data.filter(player => player.league && player.league !== 'N/A').length;
+        console.log(`Found ${leaguesFound} players with league information out of ${response.data.length}`);
+        
+        setDraftablePlayers(response.data);
         return response.data;
       } else {
         console.error('Invalid data format for draft prospects');
@@ -754,6 +995,40 @@ const Draft = () => {
     }
   };
   
+  // Also make sure to compute available positions and nationalities and teams
+  const availablePositions = useMemo(() => {
+    const positions = new Set();
+    draftablePlayers.forEach(player => {
+      if (player.position_primary) positions.add(player.position_primary);
+      if (player.position_secondary && player.position_secondary !== 'no') positions.add(player.position_secondary);
+    });
+    return Array.from(positions).sort();
+  }, [draftablePlayers]);
+  
+  const availableNationalities = useMemo(() => {
+    const nationalities = new Set();
+    draftablePlayers.forEach(player => {
+      if (player.nationality) nationalities.add(player.nationality);
+    });
+    return Array.from(nationalities).sort();
+  }, [draftablePlayers]);
+  
+  const availableTeams = useMemo(() => {
+    const teams = new Set();
+    draftablePlayers.forEach(player => {
+      if (player.team) teams.add(player.team);
+    });
+    return Array.from(teams).sort();
+  }, [draftablePlayers]);
+  
+  const availableLeagues = useMemo(() => {
+    const leagues = new Set();
+    draftablePlayers.forEach(player => {
+      if (player.league) leagues.add(player.league);
+    });
+    return Array.from(leagues).sort();
+  }, [draftablePlayers]);
+  
   // Create filteredAndSortedPlayers variable using useMemo
   const filteredAndSortedPlayers = useMemo(() => {
     // First filter by position if a position filter is applied
@@ -773,6 +1048,20 @@ const Draft = () => {
       );
     }
     
+    // Then filter by team if a team filter is applied
+    if (teamFilter !== 'all') {
+      filtered = filtered.filter(player => 
+        player.team === teamFilter
+      );
+    }
+    
+    // Then filter by league if a league filter is applied
+    if (leagueFilter !== 'all') {
+      filtered = filtered.filter(player => 
+        player.league === leagueFilter
+      );
+    }
+    
     // Then filter by search query if there is one
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
@@ -781,11 +1070,13 @@ const Draft = () => {
         const position = (player.position_primary || '').toLowerCase();
         const nationality = (player.nationality || '').toLowerCase();
         const team = (player.team || '').toLowerCase();
+        const league = (player.league || '').toLowerCase();
         
         return fullName.includes(query) || 
                position.includes(query) || 
                nationality.includes(query) || 
-               team.includes(query);
+               team.includes(query) ||
+               league.includes(query);
       });
     }
     
@@ -806,6 +1097,18 @@ const Draft = () => {
         case 'nationality':
           aValue = a.nationality || '';
           bValue = b.nationality || '';
+          break;
+        case 'team':
+          aValue = a.team || '';
+          bValue = b.team || '';
+          break;
+        case 'league':
+          aValue = a.league || '';
+          bValue = b.league || '';
+          break;
+        case 'player_type':
+          aValue = a.player_type || '';
+          bValue = b.player_type || '';
           break;
         case 'overall':
           aValue = a.overall_rating || 0;
@@ -839,6 +1142,10 @@ const Draft = () => {
           aValue = certaintyMap[a.potential_precision] || 0;
           bValue = certaintyMap[b.potential_precision] || 0;
           break;
+        case 'draft_ranking':
+          aValue = parseInt(a.draft_ranking || 9999);
+          bValue = parseInt(b.draft_ranking || 9999);
+          break;
         default:
           aValue = a.overall_rating || 0;
           bValue = b.overall_rating || 0;
@@ -851,25 +1158,7 @@ const Draft = () => {
         return aValue < bValue ? 1 : -1;
       }
     });
-  }, [draftablePlayers, positionFilter, nationalityFilter, searchQuery, sortBy, sortDirection]);
-  
-  // Also make sure to compute available positions and nationalities
-  const availablePositions = useMemo(() => {
-    const positions = new Set();
-    draftablePlayers.forEach(player => {
-      if (player.position_primary) positions.add(player.position_primary);
-      if (player.position_secondary && player.position_secondary !== 'no') positions.add(player.position_secondary);
-    });
-    return Array.from(positions).sort();
-  }, [draftablePlayers]);
-  
-  const availableNationalities = useMemo(() => {
-    const nationalities = new Set();
-    draftablePlayers.forEach(player => {
-      if (player.nationality) nationalities.add(player.nationality);
-    });
-    return Array.from(nationalities).sort();
-  }, [draftablePlayers]);
+  }, [draftablePlayers, positionFilter, nationalityFilter, teamFilter, leagueFilter, searchQuery, sortBy, sortDirection]);
   
   // Make sure picksByRound is defined correctly
   const picksByRound = useMemo(() => {
@@ -1359,7 +1648,8 @@ Check console for full details.`);
               
               <div style={{ 
                 display: 'flex', 
-                justifyContent: 'space-between', 
+                flexWrap: 'wrap',
+                gap: '15px',
                 marginBottom: '20px',
                 color: '#C4CED4'
               }}>
@@ -1384,7 +1674,7 @@ Check console for full details.`);
                 </div>
                 
                 <div>
-                  <label style={{ marginRight: '5px' }}>Nationality:</label>
+                  <label style={{ marginRight: '5px' }}>Country:</label>
                   <select 
                     value={nationalityFilter} 
                     onChange={(e) => setNationalityFilter(e.target.value)}
@@ -1396,9 +1686,49 @@ Check console for full details.`);
                       borderRadius: '4px'
                     }}
                   >
-                    <option value="all">All Nationalities</option>
+                    <option value="all">All Countries</option>
                     {availableNationalities.map(nat => (
                       <option key={nat} value={nat}>{nat}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label style={{ marginRight: '5px' }}>Team:</label>
+                  <select 
+                    value={teamFilter} 
+                    onChange={(e) => setTeamFilter(e.target.value)}
+                    style={{ 
+                      padding: '5px 10px',
+                      backgroundColor: '#2a2a2a',
+                      color: '#fff',
+                      border: '1px solid #333',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    <option value="all">All Teams</option>
+                    {availableTeams.map(team => (
+                      <option key={team} value={team}>{team}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label style={{ marginRight: '5px' }}>League:</label>
+                  <select 
+                    value={leagueFilter} 
+                    onChange={(e) => setLeagueFilter(e.target.value)}
+                    style={{ 
+                      padding: '5px 10px',
+                      backgroundColor: '#2a2a2a',
+                      color: '#fff',
+                      border: '1px solid #333',
+                      borderRadius: '4px'
+                    }}
+                  >
+                    <option value="all">All Leagues</option>
+                    {availableLeagues.map(league => (
+                      <option key={league} value={league}>{league}</option>
                     ))}
                   </select>
                 </div>
@@ -1420,8 +1750,11 @@ Check console for full details.`);
                     <option value="potential">Potential</option>
                     <option value="name">Name</option>
                     <option value="position">Position</option>
-                    <option value="nationality">Nationality</option>
-                    <option value="certainty">Potential Certainty</option>
+                    <option value="team">Team</option>
+                    <option value="league">League</option>
+                    <option value="player_type">Type</option>
+                    <option value="certainty">Certainty</option>
+                    <option value="draft_ranking">Ranking</option>
                   </select>
                   
                   <button 
@@ -1454,51 +1787,165 @@ Check console for full details.`);
             <ProspectTable>
               <thead>
                 <tr>
-                      <th onClick={() => handleSortChange('name')} style={{cursor: 'pointer'}}>
-                        Name {sortBy === 'name' && (sortDirection === 'asc' ? '▲' : '▼')}
-                      </th>
-                      <th onClick={() => handleSortChange('position')} style={{cursor: 'pointer'}}>
-                        Position {sortBy === 'position' && (sortDirection === 'asc' ? '▲' : '▼')}
-                      </th>
-                  <th>Age</th>
-                      <th onClick={() => handleSortChange('nationality')} style={{cursor: 'pointer'}}>
-                        Nationality {sortBy === 'nationality' && (sortDirection === 'asc' ? '▲' : '▼')}
-                      </th>
-                      <th onClick={() => handleSortChange('overall')} style={{cursor: 'pointer'}}>
-                        Overall {sortBy === 'overall' && (sortDirection === 'asc' ? '▲' : '▼')}
-                      </th>
-                      <th onClick={() => handleSortChange('potential')} style={{cursor: 'pointer'}}>
-                        Potential {sortBy === 'potential' && (sortDirection === 'asc' ? '▲' : '▼')}
-                      </th>
-                      <th onClick={() => handleSortChange('certainty')} style={{cursor: 'pointer'}}>
-                        Certainty {sortBy === 'certainty' && (sortDirection === 'asc' ? '▲' : '▼')}
-                      </th>
-                  <th>Volatility</th>
+                  {/* Section 1: Player Identity */}
+                  <th onClick={() => handleSortChange('name')} className="name-column section-header section-border-right" style={{cursor: 'pointer'}}>
+                    Name {sortBy === 'name' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                  
+                  {/* Section 2: Physical */}
+                  <th onClick={() => handleSortChange('position')} className="position-column section-header section-border-left" style={{cursor: 'pointer'}}>
+                    Pos {sortBy === 'position' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                  <th className="height-column section-header">Height</th>
+                  <th className="age-column section-header section-border-right">Age</th>
+                  
+                  {/* Section 3: Team Info */}
+                  <th onClick={() => handleSortChange('league')} className="league-column section-header section-border-left" style={{cursor: 'pointer'}}>
+                    League {sortBy === 'league' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                  <th onClick={() => handleSortChange('team')} className="team-column section-header section-border-right" style={{cursor: 'pointer'}}>
+                    Team {sortBy === 'team' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                  
+                  {/* Section 4: Player Evaluation */}
+                  <th onClick={() => handleSortChange('player_type')} className="player-type-column section-header section-border-left" style={{cursor: 'pointer'}}>
+                    Player Type {sortBy === 'player_type' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                  <th onClick={() => handleSortChange('potential')} className="section-header" style={{cursor: 'pointer', textAlign: 'center'}}>
+                    Potential {sortBy === 'potential' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                  <th onClick={() => handleSortChange('overall')} className="overall-column section-header section-border-right" style={{cursor: 'pointer'}}>
+                    Overall {sortBy === 'overall' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                  
+                  {/* Section 5: Ranking */}
+                  <th onClick={() => handleSortChange('draft_ranking')} className="csr-column section-header section-border-left" style={{cursor: 'pointer'}}>
+                    Ranking {sortBy === 'draft_ranking' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                    {filteredAndSortedPlayers.map((player) => (
-                  <tr key={player.id}>
-                        <td>
-                          <span 
-                            style={{cursor: 'pointer', textDecoration: 'underline'}}
-                            onClick={() => handlePlayerDetails(player)}
-                          >
-                            {player.first_name || ''} {player.last_name || ''}
-                          </span>
-                    </td>
-                        <td>{player.position_primary || player.position || 'N/A'}</td>
-                        <td>{player.age || 'N/A'}</td>
-                        <td>{player.nationality || 'N/A'}</td>
-                        <td>{player.overall_rating || player.overall || 'N/A'}</td>
-                        <td>{player.potential || 'N/A'}</td>
-                        <td>{typeof player.potential_precision === 'string' ? player.potential_precision : (player.potential_precision ? `${player.potential_precision}%` : 'N/A')}</td>
-                        <td>{typeof player.potential_volatility === 'string' ? player.potential_volatility : (player.potential_volatility ? `${player.potential_volatility}%` : 'N/A')}</td>
-                  </tr>
-                ))}
+                    {filteredAndSortedPlayers.map((player) => {
+                      const flagImg = getFlagImage(player.nationality);
+                      const csRanking = generateCSRanking(player.overall_rating || player.overall, player.position_primary);
+                      
+                      // Use height directly as it's already in the right format in the database
+                      const heightDisplay = player.height || 'N/A';
+                      
+                      return (
+                        <tr key={player.id}>
+                          <td className="name-column section-border-right">
+                            {flagImg && (
+                              <FlagImage 
+                                src={flagImg} 
+                                alt={`${player.nationality} flag`} 
+                                title={player.nationality}
+                              />
+                            )}
+                            <span 
+                              style={{cursor: 'pointer', textDecoration: 'underline'}}
+                              onClick={() => handlePlayerDetails(player)}
+                            >
+                              {player.first_name || ''} {player.last_name || ''}
+                            </span>
+                          </td>
+                          
+                          <td className="position-column section-border-left">{player.position_primary || player.position || 'N/A'}</td>
+                          <td className="height-column">{heightDisplay}</td>
+                          <td className="age-column section-border-right">{player.age || 'N/A'}</td>
+                          
+                          <td className="league-column section-border-left">{player.league || 'N/A'}</td>
+                          <td className="team-column section-border-right">{player.team || 'N/A'}</td>
+                          
+                          <td className="player-type-column section-border-left">{player.player_type || 'N/A'}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <PotentialBox precision={player.potential_precision || 'Unknown'}>
+                                {getStandardizedPotential(player.potential)}
+                              </PotentialBox>
+                              <AccuracyBars>
+                                {[...Array(4)].map((_, i) => (
+                                  <AccuracyBar 
+                                    key={i} 
+                                    filled={i < getAccuracyBars(player.potential_volatility || 'unknown')}
+                                  />
+                                ))}
+                              </AccuracyBars>
+                            </div>
+                          </td>
+                          <td className="overall-column section-border-right" style={{color: ratingColor(player.overall_rating || 0)}}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <span>{player.overall_rating || 'N/A'}</span>
+                              <AccuracyBars>
+                                {[...Array(4)].map((_, i) => (
+                                  <AccuracyBar 
+                                    key={i} 
+                                    filled={i < getAccuracyBars(player.potential_volatility || 'unknown')}
+                                  />
+                                ))}
+                              </AccuracyBars>
+                            </div>
+                          </td>
+                          
+                          <td className="csr-column section-border-left">
+                            {player.draft_ranking || player.ranking_display || csRanking}
+                          </td>
+                        </tr>
+                      );
+                    })}
               </tbody>
             </ProspectTable>
               )}
+              
+              {/* Add Scouting Accuracy Legend */}
+              <div style={{ marginTop: '30px', padding: '15px', backgroundColor: '#222', borderRadius: '4px' }}>
+                <h4 style={{ color: '#C4CED4', marginBottom: '15px' }}>SCOUTING VOLATILITY LEGEND</h4>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', color: '#bbb', marginBottom: '15px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <AccuracyBars style={{ marginRight: '10px' }}>
+                      {[...Array(4)].map((_, i) => (
+                        <AccuracyBar key={i} filled={i < 4} />
+                      ))}
+                    </AccuracyBars>
+                    <span>MINIMAL VOLATILITY</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <AccuracyBars style={{ marginRight: '10px' }}>
+                      {[...Array(4)].map((_, i) => (
+                        <AccuracyBar key={i} filled={i < 3} />
+                      ))}
+                    </AccuracyBars>
+                    <span>LOW VOLATILITY</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <AccuracyBars style={{ marginRight: '10px' }}>
+                      {[...Array(4)].map((_, i) => (
+                        <AccuracyBar key={i} filled={i < 2} />
+                      ))}
+                    </AccuracyBars>
+                    <span>MEDIUM VOLATILITY</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <AccuracyBars style={{ marginRight: '10px' }}>
+                      {[...Array(4)].map((_, i) => (
+                        <AccuracyBar key={i} filled={i < 1} />
+                      ))}
+                    </AccuracyBars>
+                    <span>HIGH VOLATILITY</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <AccuracyBars style={{ marginRight: '10px' }}>
+                      {[...Array(4)].map((_, i) => (
+                        <AccuracyBar key={i} filled={false} />
+                      ))}
+                    </AccuracyBars>
+                    <span>VERY HIGH VOLATILITY</span>
+                  </div>
+                </div>
+                <p style={{ color: '#999', fontSize: '13px', lineHeight: '1.5', margin: 0 }}>
+                  The volatility indicates how much a player's potential could change. Lower volatility means more stable projections, while higher volatility suggests greater uncertainty in a player's future development.
+                </p>
+              </div>
             </>
           )}
           
@@ -1599,7 +2046,25 @@ Check console for full details.`);
                     <table style={{width: '100%', color: '#C4CED4'}}>
                       <tbody>
                         <tr>
-                          <td>Overall Rating:</td>
+                          <td>Potential:</td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                              <PotentialBox precision={selectedPlayer.potential_precision || 'Unknown'}>
+                                {getStandardizedPotential(selectedPlayer.potential)}
+                              </PotentialBox>
+                              <AccuracyBars>
+                                {[...Array(4)].map((_, i) => (
+                                  <AccuracyBar 
+                                    key={i} 
+                                    filled={i < getAccuracyBars(selectedPlayer.potential_volatility || 'unknown')}
+                                  />
+                                ))}
+                              </AccuracyBars>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>Scouted Overall:</td>
                           <td>
                             <div style={{
                               backgroundColor: '#333',
@@ -1622,31 +2087,15 @@ Check console for full details.`);
                                 {selectedPlayer.overall_rating}
                               </div>
                             </div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>Potential:</td>
-                          <td>
-                            <div style={{
-                              backgroundColor: '#333',
-                              borderRadius: '4px',
-                              padding: '2px',
-                              width: '100%'
-                            }}>
-                              <div style={{
-                                backgroundColor: ratingColor(selectedPlayer.potential || 0),
-                                width: `${selectedPlayer.potential || 0}%`,
-                                height: '20px',
-                                borderRadius: '2px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#fff',
-                                fontWeight: 'bold',
-                                fontSize: '12px'
-                              }}>
-                                {selectedPlayer.potential}
-                              </div>
+                            <div style={{ display: 'flex', alignItems: 'center', marginTop: '5px' }}>
+                              <AccuracyBars>
+                                {[...Array(4)].map((_, i) => (
+                                  <AccuracyBar 
+                                    key={i} 
+                                    filled={i < getAccuracyBars(selectedPlayer.potential_volatility || 'unknown')}
+                                  />
+                                ))}
+                              </AccuracyBars>
                             </div>
                           </td>
                         </tr>
@@ -1657,6 +2106,12 @@ Check console for full details.`);
                         <tr>
                           <td>Potential Volatility:</td>
                           <td>{typeof selectedPlayer.potential_volatility === 'string' ? selectedPlayer.potential_volatility : (selectedPlayer.potential_volatility ? `${selectedPlayer.potential_volatility}%` : 'N/A')}</td>
+                        </tr>
+                        <tr>
+                          <td>Central Scouting Rank:</td>
+                          <td>
+                            {generateCSRanking(selectedPlayer.overall_rating || selectedPlayer.overall, selectedPlayer.position_primary)}
+                          </td>
                         </tr>
                       </tbody>
                     </table>

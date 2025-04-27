@@ -328,15 +328,10 @@ const ReceivedIndicator = styled.span`
   display: inline-flex;
   align-items: center;
   margin-left: 8px;
-  
-  &::before {
-    content: "→";
-    margin-right: 4px;
-  }
 `;
 
 const Draft = () => {
-  const [activeTab, setActiveTab] = useState('draftBoard');
+  const [activeTab, setActiveTab] = useState('prospects');
   const [searchQuery, setSearchQuery] = useState('');
   const [draftYear, setDraftYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
@@ -407,6 +402,12 @@ const Draft = () => {
           }
           return a.overall_pick - b.overall_pick;
         });
+        
+        // Debug: Look for any pick with special handling needed
+        const receivedPicks = picks.filter(p => p.received_from);
+        if (receivedPicks.length > 0) {
+          console.log('Picks with received_from attribute:', receivedPicks);
+        }
         
         // Debug: Look for any pick with non-standard status
         const nonStandardPicks = picks.filter(p => p.pick_status !== 'Owned');
@@ -1170,12 +1171,19 @@ Check console for full details.`);
     }
   };
   
+  // Add a placeholder function for starting a mock draft
+  const startMockDraft = () => {
+    // This will be implemented in the future
+    alert('Mock Draft feature coming soon!');
+    // For now, just provide feedback to the user
+    console.log('Mock Draft button clicked - feature not yet implemented');
+  };
+  
   if (loading) {
     return (
       <DraftContainer>
         <Header>
           <h1>NHL Draft Central</h1>
-          <p>{draftYear} Draft Class</p>
         </Header>
         <div style={{ textAlign: 'center', margin: '40px 0', color: '#fff' }}>
           <h2>Loading draft information...</h2>
@@ -1185,56 +1193,22 @@ Check console for full details.`);
     );
   }
   
-    return (
+  return (
       <DraftContainer>
         <Header>
         <h1>NHL Draft Central</h1>
-        <p>{draftYear} Draft Class</p>
         </Header>
         
-      {error ? (
-        <ErrorContainer>
-          <h3>Error Loading Draft Information</h3>
-          <p>{error}</p>
-          <p>Prospect information is still available below. You can view prospect details but cannot make draft picks until this error is resolved.</p>
-          <button 
-            onClick={fetchData} 
-            style={{
-              padding: '8px 15px',
-              backgroundColor: '#555',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              marginTop: '10px'
-            }}
-          >
-            Retry
-          </button>
-        </ErrorContainer>
-      ) : null}
-        
-      {draftInfo && !error && (
+      {draftInfo && (
         <>
-          {draftInfo.mock_data && (
-            <InfoMessage>
-              <h3>Using Demo Draft Data</h3>
-              <p>Some features may be limited in demo mode.</p>
-            </InfoMessage>
-          )}
-          
-          {/* Draft Controls Section */}
+          {/* Replace simulation buttons with a single Start Mock Draft button */}
           <div style={{ marginTop: '10px', marginBottom: '20px' }}>
-            {/* Simulation buttons */}
             <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-              <Button onClick={simulateNextPick} style={{ backgroundColor: '#4CAF50' }}>
-                Simulate Next Pick
-              </Button>
-              <Button onClick={simulateRound} style={{ backgroundColor: '#4CAF50' }}>
-                Simulate Round
-              </Button>
-              <Button onClick={simulateEntireDraft} style={{ backgroundColor: '#4CAF50' }}>
-                Simulate Entire Draft
+              <Button 
+                onClick={startMockDraft}
+                style={{ backgroundColor: '#4CAF50', fontWeight: 'bold' }}
+              >
+                Start Mock Draft
               </Button>
               
               <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1259,32 +1233,21 @@ Check console for full details.`);
               </div>
             </div>
             
-            {/* Debug buttons */}
+            {/* Debug buttons - already hidden */}
             <div style={{ display: 'flex', gap: '10px' }}>
-              <Button onClick={checkSupabaseData} style={{ backgroundColor: '#3498db' }}>
+              <Button onClick={checkSupabaseData} style={{ backgroundColor: '#3498db', display: 'none' }}>
                 Check Raw Supabase Data
               </Button>
-              <Button onClick={checkDebugEndpoints} style={{ backgroundColor: '#e74c3c' }}>
+              <Button onClick={checkDebugEndpoints} style={{ backgroundColor: '#e74c3c', display: 'none' }}>
                 Check Debug Endpoints
               </Button>
-              <Button onClick={highlightNonOwnedPicks} style={{ backgroundColor: '#2ecc71' }}>
+              <Button onClick={highlightNonOwnedPicks} style={{ backgroundColor: '#2ecc71', display: 'none' }}>
                 Highlight Non-Owned Picks
               </Button>
-          </div>
+            </div>
           </div>
         </>
       )}
-      
-      {/* Add debug info about players being loaded */}
-      <div style={{color: '#aaa', fontSize: '0.8rem', marginBottom: '10px', textAlign: 'right'}}>
-        {draftablePlayers.length > 0 ? 
-          `${draftablePlayers.length} draft-eligible players loaded. ` : 
-          'No draft-eligible players loaded. '
-        }
-        {filteredAndSortedPlayers.length !== draftablePlayers.length && 
-          `${filteredAndSortedPlayers.length} players after filtering.`
-        }
-      </div>
       
       <TabContainer>
         <TabButton 
@@ -1299,64 +1262,11 @@ Check console for full details.`);
         >
           Pick Order
         </TabButton>
-        <TabButton 
-          active={activeTab === 'yourPicks'} 
-          onClick={() => setActiveTab('yourPicks')}
-        >
-          Your Picks
-        </TabButton>
-        <TabButton 
-          active={activeTab === 'settings'} 
-          onClick={() => setActiveTab('settings')}
-        >
-          Settings
-        </TabButton>
       </TabContainer>
       
       {activeTab === 'draftBoard' && (
         <DraftBoard>
-          <h2>Pick Order {!draftInfo && '(Limited Information Available)'}</h2>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <label style={{ color: '#C4CED4' }}>Draft Year:</label>
-              <select
-                value={draftYear}
-                onChange={handleYearChange}
-                style={{
-                  padding: '5px 10px',
-                  backgroundColor: '#2a2a2a',
-                  color: '#fff',
-                  border: '1px solid #333',
-                  borderRadius: '4px'
-                }}
-              >
-                <option value="2025">2025</option>
-                <option value="2026">2026</option>
-                <option value="2027">2027</option>
-                <option value="2028">2028</option>
-                <option value="2029">2029</option>
-              </select>
-              
-              {!draftInfo && (
-                <Button onClick={fetchData} style={{ marginLeft: '10px' }}>
-                  Refresh Data
-                </Button>
-              )}
-            </div>
-          </div>
-          
-          {!draftInfo && (
-            <div style={{ 
-              marginBottom: '20px', 
-              padding: '15px', 
-              backgroundColor: 'rgba(255, 0, 0, 0.1)', 
-              borderLeft: '4px solid #B30E16', 
-              color: '#fff' 
-            }}>
-              <p>Draft information is not available due to an error. Using picks data directly from database.</p>
-              <p>You can still view and interact with the draft picks below.</p>
-            </div>
-          )}
+          <h2>Pick Order</h2>
           
           <DraftPicksTable>
             <tbody>
@@ -1382,21 +1292,29 @@ Check console for full details.`);
                             {teamAbbrev}
                           </td>
                           <td>
-                            {pick.team?.name || teamAbbrev}
-                            {receivedFrom && (
-                              <ReceivedIndicator>
-                                {receivedFrom}
-                              </ReceivedIndicator>
-                            )}
-                            {pickStatus === 'Traded' && (
-                              <span style={{ color: '#e74c3c', marginLeft: '8px' }}>
-                                (Traded)
+                            {receivedFrom || pick.received_from ? (
+                              <span>
+                                {pick.team?.name || teamAbbrev}
+                                <ReceivedIndicator>
+                                  ← {receivedFrom || pick.received_from}
+                                </ReceivedIndicator>
                               </span>
-                            )}
-                            {pickStatus === 'Top10Protected' && (
-                              <span style={{ color: '#f39c12', marginLeft: '8px' }}>
-                                (Protected)
+                            ) : pickStatus === 'Traded' ? (
+                              <span>
+                                {pick.team?.name || teamAbbrev}
+                                <span style={{ color: '#e74c3c', marginLeft: '8px' }}>
+                                  (Traded)
+                                </span>
                               </span>
+                            ) : pickStatus === 'Top10Protected' ? (
+                              <span>
+                                {pick.team?.name || teamAbbrev}
+                                <span style={{ color: '#f39c12', marginLeft: '8px' }}>
+                                  (Protected)
+                                </span>
+                              </span>
+                            ) : (
+                              <span>{pick.team?.name || teamAbbrev}</span>
                             )}
                           </td>
                 </tr>
@@ -1412,7 +1330,7 @@ Check console for full details.`);
             <h4 style={{ color: '#C4CED4', marginBottom: '10px' }}>Legend:</h4>
             <div style={{ display: 'flex', gap: '15px' }}>
               <div style={{ color: '#bbb' }}>Team Name</div>
-              <div style={{ color: '#4a90e2' }}>→ Received From</div>
+              <div style={{ color: '#4a90e2' }}>← Received From</div>
               <div style={{ color: '#e74c3c' }}>(Traded)</div>
               <div style={{ color: '#f39c12' }}>(Protected)</div>
             </div>
@@ -1422,14 +1340,11 @@ Check console for full details.`);
       
       {activeTab === 'prospects' && (
         <ProspectPool>
-          <h2>Prospect Pool {!draftInfo && '(Draft Information Unavailable)'}</h2>
+          <h2>Prospect Pool</h2>
           
           {draftablePlayers.length === 0 ? (
             <LoadingMessage>
-              {error ? 
-                'Loading prospect data. Available players may be limited due to the error above.' : 
-                'Loading prospect data. If this persists, draft information may be unavailable.'
-              }
+              Loading prospect data...
             </LoadingMessage>
           ) : (
             <>
@@ -1529,15 +1444,12 @@ Check console for full details.`);
           <p style={{ color: '#bbb', marginBottom: '20px' }}>
                 Displaying {filteredAndSortedPlayers.length} draft-eligible players out of {draftablePlayers.length} total prospects.
                 These players are automatically eligible for the {draftYear} draft.
-                {!draftInfo && " Note: Full draft functionality is limited due to errors loading draft information."}
           </p>
           
               {filteredAndSortedPlayers.length === 0 ? (
-            <InfoMessage>
-              <h3>No Draft-Eligible Players Found</h3>
-                  <p>There are currently no players matching your search criteria.</p>
-              <p>Players will appear here automatically once they meet the draft eligibility criteria (age 17 and not previously drafted).</p>
-            </InfoMessage>
+            <div>
+              <p>No players match your search criteria.</p>
+            </div>
           ) : (
             <ProspectTable>
               <thead>
@@ -1803,20 +1715,6 @@ Check console for full details.`);
             </div>
           )}
         </ProspectPool>
-      )}
-      
-      {activeTab === 'yourPicks' && (
-        <DraftBoard>
-          <h2>My Draft Picks</h2>
-          <p>Your team's upcoming draft selections will appear here.</p>
-        </DraftBoard>
-      )}
-      
-      {activeTab === 'settings' && (
-        <DraftBoard>
-          <h2>Draft Settings</h2>
-          <p>Configure draft options and settings here.</p>
-        </DraftBoard>
       )}
     </DraftContainer>
   );

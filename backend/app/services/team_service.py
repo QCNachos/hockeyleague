@@ -487,31 +487,131 @@ def get_draft_picks():
             logger.info(f"Pick status counts: {status_counts}")
         
         # Format picks for frontend - carefully preserving the pick_status field
+        # First, separate picks by round
+        picks_by_round = {}
+        for pick in picks:
+            round_num = pick.get('round')
+            if round_num not in picks_by_round:
+                picks_by_round[round_num] = []
+            picks_by_round[round_num].append(pick)
+        
+        # Now process each round in order
         formatted_picks = []
-        for i, pick in enumerate(picks):
-            # Create a formatted pick object for the frontend
-            formatted_pick = {
-                'id': pick.get('id'),
-                'round_num': pick.get('round'),
-                'overall_pick': i + 1,  # Calculate overall pick number
-                'pick_num': (i % 32) + 1,  # Calculate pick number within round
-                'team_abbreviation': pick.get('team', {}).get('abbreviation') or pick.get('team'),
-                'team': pick.get('team'),
-                # Explicitly preserve the pick_status field, defaulting to 'Owned' ONLY if null
-                'pick_status': pick.get('pick_status') if pick.get('pick_status') is not None else 'Owned',
-                'year': pick.get('year'),
-                'received_pick_1': pick.get('received_pick_1'),
-                'received_pick_2': pick.get('received_pick_2'),
-                'received_pick_3': pick.get('received_pick_3'),
-                'received_pick_4': pick.get('received_pick_4'),
-                'received_pick_5': pick.get('received_pick_5'),
-                'received_pick_6': pick.get('received_pick_6')
-            }
-            formatted_picks.append(formatted_pick)
+        overall_pick_counter = 1
+        
+        # Sort round numbers
+        sorted_rounds = sorted(picks_by_round.keys())
+        
+        for round_num in sorted_rounds:
+            round_picks = picks_by_round[round_num]
+            pick_num_in_round = 1
+            
+            # We need to identify all teams that have picks in this round
+            # including both original picks and received picks
+            teams_with_picks = set()
+            received_picks = {}
+            
+            # First pass - identify original and received picks
+            for pick in round_picks:
+                team = pick.get('team', {}).get('abbreviation') or pick.get('team')
+                teams_with_picks.add(team)
+                
+                # Check for received picks
+                pick_status = pick.get('pick_status')
+                
+                # If this pick was traded away, note which team has rights to it
+                if pick_status == 'Traded':
+                    for i in range(1, 7):  # Check received_pick_1 through received_pick_6
+                        received_team = pick.get(f'received_pick_{i}')
+                        if received_team:
+                            if received_team not in received_picks:
+                                received_picks[received_team] = []
+                            received_picks[received_team].append({
+                                'original_team': team,
+                                'pick_data': pick
+                            })
+                            teams_with_picks.add(received_team)
+                            break  # Only use the first non-empty received_pick field
+            
+            # Second pass - format picks in correct order
+            for team in sorted(teams_with_picks):
+                # First, add the team's own pick if it has status 'Owned'
+                own_pick = next((p for p in round_picks if 
+                              (p.get('team', {}).get('abbreviation') or p.get('team')) == team and 
+                              p.get('pick_status') == 'Owned'), None)
+                
+                if own_pick:
+                    formatted_pick = {
+                        'id': own_pick.get('id'),
+                        'round_num': round_num,
+                        'overall_pick': overall_pick_counter,
+                        'pick_num': pick_num_in_round,
+                        'team_id': own_pick.get('team', {}).get('id'),
+                        'team_abbreviation': team,
+                        'team': own_pick.get('team'),
+                        'pick_status': 'Owned',
+                        'year': own_pick.get('year')
+                    }
+                    formatted_picks.append(formatted_pick)
+                    overall_pick_counter += 1
+                    pick_num_in_round += 1
+                
+                # Then, add any picks this team has received from other teams
+                if team in received_picks:
+                    for received in received_picks[team]:
+                        original_team = received['original_team']
+                        pick_data = received['pick_data']
+                        
+                        formatted_pick = {
+                            'id': pick_data.get('id'),
+                            'round_num': round_num,
+                            'overall_pick': overall_pick_counter,
+                            'pick_num': pick_num_in_round,
+                            'team_id': pick_data.get('team', {}).get('id'),
+                            'team_abbreviation': team,  # This is the team that now owns the pick
+                            'team': {
+                                'id': pick_data.get('team', {}).get('id'),
+                                'abbreviation': team,
+                                'name': team  # Will be replaced with actual team name if available
+                            },
+                            'pick_status': 'Received',
+                            'received_from': original_team,
+                            'year': pick_data.get('year')
+                        }
+                        formatted_picks.append(formatted_pick)
+                        overall_pick_counter += 1
+                        pick_num_in_round += 1
+        
+        # Now get team name/color information to enhance the display
+        try:
+            teams_data = TeamService.get_nhl_teams()
+            if teams_data:
+                # Create lookup by abbreviation
+                team_info = {}
+                for team in teams_data:
+                    abbrev = team.get('abbreviation')
+                    if abbrev:
+                        team_info[abbrev] = team
+                
+                # Update formatted picks with full team info
+                for pick in formatted_picks:
+                    team_abbrev = pick.get('team_abbreviation')
+                    if team_abbrev and team_abbrev in team_info:
+                        pick['team'] = {
+                            'id': team_info[team_abbrev].get('id'),
+                            'name': team_info[team_abbrev].get('team'),
+                            'abbreviation': team_abbrev,
+                            'city': team_info[team_abbrev].get('city'),
+                            'primary_color': team_info[team_abbrev].get('primary_color', '#333'),
+                            'secondary_color': team_info[team_abbrev].get('secondary_color', '#fff')
+                        }
+        except Exception as team_err:
+            logger.error(f"Error enhancing team data: {team_err}")
         
         # Log a sample of formatted picks
         if formatted_picks:
             logger.info(f"Sample formatted pick: {formatted_picks[0]}")
+            logger.info(f"Total picks formatted: {len(formatted_picks)}")
             
         return jsonify(formatted_picks)
     except Exception as e:

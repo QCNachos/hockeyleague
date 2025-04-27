@@ -1237,6 +1237,7 @@ def debug_draft_database():
 def get_draft_picks():
     """
     Get all draft picks from the Draft_Picks table for a specific year.
+    Based on standings to determine draft order, and handling traded picks.
     
     Returns:
         JSON array of draft picks
@@ -1246,6 +1247,16 @@ def get_draft_picks():
         
         from ...supabase_client import get_supabase_client
         
+        # Define standing order for draft (this would typically come from league standings)
+        # This is the standing order for 2025 based on provided input
+        standing_order = {
+            "SJS": 1, "CHI": 2, "PHI": 3, "NSH": 4, "BOS": 5, "SEA": 6, "BUF": 7, "PIT": 8,
+            "ANA": 9, "NYI": 10, "NYR": 11, "DET": 12, "CBJ": 13, "UTA": 14, "VAN": 15,
+            "CGY": 16, "MTL": 17, "NJD": 18, "STL": 19, "OTT": 20, "MIN": 21, "FLA": 22,
+            "CAR": 23, "EDM": 24, "TBL": 25, "COL": 26, "LAK": 27, "DAL": 28, "TOR": 29,
+            "VGK": 30, "WSH": 31, "WPG": 32
+        }
+        
         # Try to get draft picks from Supabase
         try:
             supabase = get_supabase_client()
@@ -1254,7 +1265,6 @@ def get_draft_picks():
             response = supabase.table('Draft_Picks') \
                 .select('*, team:Team(id, team, abbreviation, primary_color, secondary_color)') \
                 .eq('year', year) \
-                .order('round', {'ascending': True}) \
                 .execute()
                 
             if response.data:
@@ -1262,42 +1272,124 @@ def get_draft_picks():
                 if len(response.data) > 0:
                     print(f"Sample raw pick data from Supabase: {response.data[0]}")
                     print(f"Sample pick fields: {list(response.data[0].keys())}")
-                    
-                    # Log counts of different pick statuses
-                    status_counts = {}
-                    for pick in response.data:
-                        status = pick.get('pick_status')
-                        if status:
-                            status_counts[status] = status_counts.get(status, 0) + 1
-                        else:
-                            status_counts['null'] = status_counts.get('null', 0) + 1
-                            
-                    print(f"Pick status counts from Supabase: {status_counts}")
                 
+                # Organize picks by round and generate draft order
+                all_picks_by_round = {}
+                for pick in response.data:
+                    round_num = pick.get('round')
+                    if round_num not in all_picks_by_round:
+                        all_picks_by_round[round_num] = []
+                    all_picks_by_round[round_num].append(pick)
+                
+                # Format picks in draft order by standing
                 formatted_picks = []
-                for i, pick in enumerate(response.data):
-                    # Create a formatted pick object
-                    formatted_pick = {
-                        'id': pick.get('id'),
-                        'overall_pick': i + 1,
-                        'round_num': pick.get('round'),
-                        'pick_num': (i % 32) + 1,
-                        'team': pick.get('team'),
-                        'team_abbreviation': pick.get('team', {}).get('abbreviation') or pick.get('team'),
-                        'player_id': None,  # No player assigned yet in the Draft_Picks table
-                        # Explicitly preserve the pick_status field, defaulting to 'Owned' ONLY if null
-                        'pick_status': pick.get('pick_status') if pick.get('pick_status') is not None else 'Owned',
-                        'received_pick_1': pick.get('received_pick_1'),   # Include received pick source
-                        'received_pick_2': pick.get('received_pick_2'),
-                        'received_pick_3': pick.get('received_pick_3'),
-                        # Add debugging flag
-                        'direct_from_supabase': True
-                    }
-                    formatted_picks.append(formatted_pick)
+                overall_pick_counter = 1
+                draft_id = 1  # Default draft ID for formatting
+                
+                # For each round
+                for round_num in sorted(all_picks_by_round.keys()):
+                    round_picks = all_picks_by_round[round_num]
+                    # Map team abbreviations to their picks for this round
+                    team_picks = {}
+                    for pick in round_picks:
+                        team_abbrev = pick.get('team')
+                        if team_abbrev:
+                            team_picks[team_abbrev] = pick
+                    
+                    # Use standing order to determine pick order
+                    for pick_position, team_abbrev in enumerate(sorted(standing_order.keys(), key=lambda t: standing_order[t]), 1):
+                        pick = team_picks.get(team_abbrev)
+                        
+                        if not pick:
+                            # Skip if this team has no pick record
+                            continue
+                        
+                        # Check pick status
+                        pick_status = pick.get('pick_status', 'Owned')
+                        
+                        if pick_status == 'Owned':
+                            # Regular owned pick
+                            formatted_pick = {
+                                'id': pick.get('id'),
+                                'draft_id': draft_id,
+                                'round_num': round_num,
+                                'overall_pick': overall_pick_counter,
+                                'pick_num': pick_position,
+                                'team_id': pick.get('team', {}).get('id'),
+                                'player_id': None,  # No player assigned yet
+                                'team': pick.get('team'),
+                                'pick_status': 'Owned',
+                                'direct_from_supabase': True
+                            }
+                            formatted_picks.append(formatted_pick)
+                            overall_pick_counter += 1
+                        
+                        elif pick_status == 'Traded':
+                            # Check which team received this pick
+                            for i in range(1, 7):  # Check received_pick_1 through received_pick_6
+                                received_team = pick.get(f'received_pick_{i}')
+                                if received_team:
+                                    # Get team info for the receiving team
+                                    from ...services.team_service import TeamService
+                                    teams_data = TeamService.get_nhl_teams()
+                                    receiving_team_info = None
+                                    
+                                    if teams_data:
+                                        for t in teams_data:
+                                            if t.get('abbreviation') == received_team:
+                                                receiving_team_info = t
+                                                break
+                                    
+                                    # Add the pick for the receiving team
+                                    formatted_pick = {
+                                        'id': pick.get('id'),
+                                        'draft_id': draft_id,
+                                        'round_num': round_num,
+                                        'overall_pick': overall_pick_counter,
+                                        'pick_num': pick_position,
+                                        'team_id': receiving_team_info.get('id') if receiving_team_info else None,
+                                        'player_id': None,  # No player assigned yet
+                                        'pick_status': 'Traded',
+                                        'team': {
+                                            'id': receiving_team_info.get('id') if receiving_team_info else None,
+                                            'abbreviation': received_team,
+                                            'name': receiving_team_info.get('team') if receiving_team_info else received_team,
+                                            'city': receiving_team_info.get('city') if receiving_team_info else '',
+                                            'primary_color': receiving_team_info.get('primary_color') if receiving_team_info else '#333',
+                                            'secondary_color': receiving_team_info.get('secondary_color') if receiving_team_info else '#fff'
+                                        },
+                                        'received_from': team_abbrev,
+                                        'original_team': {
+                                            'abbreviation': team_abbrev,
+                                            'name': pick.get('team', {}).get('team', team_abbrev)
+                                        },
+                                        'direct_from_supabase': True
+                                    }
+                                    formatted_picks.append(formatted_pick)
+                                    overall_pick_counter += 1
+                                    break  # Only use the first non-empty received_pick field
+                        
+                        elif pick_status == 'Top10Protected':
+                            # Protected pick - still shown with the original team
+                            formatted_pick = {
+                                'id': pick.get('id'),
+                                'draft_id': draft_id,
+                                'round_num': round_num,
+                                'overall_pick': overall_pick_counter,
+                                'pick_num': pick_position,
+                                'team_id': pick.get('team', {}).get('id'),
+                                'player_id': None,  # No player assigned yet
+                                'team': pick.get('team'),
+                                'pick_status': 'Top10Protected',
+                                'direct_from_supabase': True
+                            }
+                            formatted_picks.append(formatted_pick)
+                            overall_pick_counter += 1
                 
                 # Log a sample of formatted picks
                 if formatted_picks:
                     print(f"Sample formatted pick: {formatted_picks[0]}")
+                    print(f"Total picks formatted: {len(formatted_picks)}")
                 
                 return jsonify(formatted_picks)
             
@@ -1314,30 +1406,25 @@ def get_draft_picks():
                 draft_engine = DraftEngine()
                 draft_order = draft_engine.get_draft_order()
                 
-                # If no picks in database, generate mock data
+                # If no picks in database, generate mock data based on standing order
                 if not draft_order:
                     # Get NHL teams
                     from ...services.team_service import TeamService
                     teams_data = TeamService.get_nhl_teams()
                     
-                    if not teams_data:
-                        # Fallback to default team abbreviations
-                        mock_teams = [
-                            {'abbreviation': 'ANA'}, {'abbreviation': 'BOS'}, {'abbreviation': 'BUF'}, 
-                            {'abbreviation': 'CAR'}, {'abbreviation': 'CBJ'}, {'abbreviation': 'CGY'}, 
-                            {'abbreviation': 'CHI'}, {'abbreviation': 'COL'}, {'abbreviation': 'DAL'}, 
-                            {'abbreviation': 'DET'}, {'abbreviation': 'EDM'}, {'abbreviation': 'FLA'}, 
-                            {'abbreviation': 'LAK'}, {'abbreviation': 'MIN'}, {'abbreviation': 'MTL'}, 
-                            {'abbreviation': 'NJD'}, {'abbreviation': 'NSH'}, {'abbreviation': 'NYI'}, 
-                            {'abbreviation': 'NYR'}, {'abbreviation': 'OTT'}, {'abbreviation': 'PHI'}, 
-                            {'abbreviation': 'PIT'}, {'abbreviation': 'SEA'}, {'abbreviation': 'SJS'}, 
-                            {'abbreviation': 'STL'}, {'abbreviation': 'TBL'}, {'abbreviation': 'TOR'}, 
-                            {'abbreviation': 'UTA'}, {'abbreviation': 'VAN'}, {'abbreviation': 'VGK'}, 
-                            {'abbreviation': 'WPG'}, {'abbreviation': 'WSH'}
-                        ]
-                        draft_order = generate_mock_draft_order(mock_teams, year)
+                    if teams_data:
+                        # Order teams by standing
+                        ordered_teams = []
+                        for abbreviation in sorted(standing_order.keys(), key=lambda t: standing_order[t]):
+                            team = next((t for t in teams_data if t.get('abbreviation') == abbreviation), None)
+                            if team:
+                                ordered_teams.append(team)
+                        
+                        # Generate draft order with the ordered teams
+                        draft_order = generate_mock_draft_order(ordered_teams, year)
                     else:
-                        draft_order = generate_mock_draft_order(teams_data, year)
+                        # If no teams data available, use default mock generation
+                        draft_order = generate_mock_draft_order([], year)
                 
                 # Add fallback indicator so frontend can alert the user
                 for pick in draft_order:

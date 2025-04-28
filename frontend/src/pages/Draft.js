@@ -617,7 +617,7 @@ const Draft = () => {
           if (fallbackResponse.data && Array.isArray(fallbackResponse.data)) {
             console.log('Using data from fallback endpoint');
             setDraftOrder(fallbackResponse.data);
-            setCompletedPicks([]);
+        setCompletedPicks([]);
             return fallbackResponse.data;
           }
         } catch (fallbackErr) {

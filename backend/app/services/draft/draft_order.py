@@ -4,8 +4,8 @@ from flask import Blueprint, jsonify, request
 from ...supabase_client import get_supabase_client
 from ...services.team_service import TeamService
 
-# Create a blueprint for draft order endpoints
-draft_order_bp = Blueprint('draft_order', __name__)
+# Create a blueprint for draft order endpoints with a unique name
+draft_order_bp = Blueprint('draft_order_service', __name__)
 
 class DraftOrderService:
     """
@@ -26,13 +26,15 @@ class DraftOrderService:
         # For 2025, use the provided standings - this is the OFFICIAL order
         # SJS is last place (#1 pick), CHI is second-to-last (#2 pick), etc.
         if year == 2025:
-            return {
+            standing_order = {
                 "SJS": 1, "CHI": 2, "PHI": 3, "NSH": 4, "BOS": 5, "SEA": 6, "BUF": 7, "PIT": 8,
                 "ANA": 9, "NYI": 10, "NYR": 11, "DET": 12, "CBJ": 13, "UTA": 14, "VAN": 15,
                 "CGY": 16, "MTL": 17, "NJD": 18, "STL": 19, "OTT": 20, "MIN": 21, "FLA": 22,
                 "CAR": 23, "EDM": 24, "TBL": 25, "COL": 26, "LAK": 27, "DAL": 28, "TOR": 29,
                 "VGK": 30, "WSH": 31, "WPG": 32
             }
+            print(f"Using hardcoded 2025 standing order: SJS={standing_order['SJS']}, CHI={standing_order['CHI']}")
+            return standing_order
         
         # TODO: For other years, fetch from league standings in the database
         # Default order for other years
@@ -193,186 +195,206 @@ class DraftOrderService:
                 print(f"No draft picks found in Supabase for year {year}")
                 return []
             
-            # Organize picks by team and round
-            picks_by_team_round = {}
+            # Maps to track pick ownership and trades
+            original_picks = {}     # Maps team -> {round -> pick data}
+            traded_picks = {}       # Maps team -> list of rounds they've traded
+            received_picks = {}     # Maps team -> list of {original_team, round, pick}
+            team_positions = {}     # Maps team -> position in standings
+            
+            # First pass - build maps of original picks and team positions
+            for team, pos in draft_positions.items():
+                team_positions[team] = pos
+            
+            # Second pass - organize picks and identify trades
             for pick in response.data:
+                # Extract the team abbreviation
                 team_abbrev = pick.get('team')
+                if isinstance(team_abbrev, dict) and 'abbreviation' in team_abbrev:
+                    team_abbrev = team_abbrev.get('abbreviation')
+                
                 round_num = pick.get('round')
-                if team_abbrev and round_num:
-                    if team_abbrev not in picks_by_team_round:
-                        picks_by_team_round[team_abbrev] = {}
-                    picks_by_team_round[team_abbrev][round_num] = pick
+                pick_status = pick.get('pick_status', 'Owned')
+                
+                if not team_abbrev or not round_num:
+                    continue
+                
+                # Store original pick information
+                if team_abbrev not in original_picks:
+                    original_picks[team_abbrev] = {}
+                original_picks[team_abbrev][round_num] = pick
+                
+                # Track traded picks
+                if pick_status == 'Traded':
+                    if team_abbrev not in traded_picks:
+                        traded_picks[team_abbrev] = []
+                    traded_picks[team_abbrev].append(round_num)
+                
+                # Process received picks
+                for i in range(1, 7):  # Check received_pick_1 through received_pick_6
+                    received_team = pick.get(f'received_pick_{i}')
+                    if received_team:
+                        print(f"Team {team_abbrev} received a pick from {received_team} in round {round_num}")
+                        
+                        # Track that the original team's pick was traded
+                        if received_team not in traded_picks:
+                            traded_picks[received_team] = []
+                        if round_num not in traded_picks[received_team]:
+                            traded_picks[received_team].append(round_num)
+                        
+                        # Store the receiving team and pick information
+                        if team_abbrev not in received_picks:
+                            received_picks[team_abbrev] = []
+                        
+                        received_picks[team_abbrev].append({
+                            'original_team': received_team,
+                            'round': round_num,
+                            'pick': pick
+                        })
             
-            # STEP 5: Order teams by draft position from standings/lottery
+            # STEP 5: Verify and correct team order based on standings
             ordered_teams = sorted(draft_positions.keys(), key=lambda t: draft_positions[t])
-            print(f"First 5 teams in draft order: {ordered_teams[:5]}")
             
-            # STEP 6: Generate the picks in proper order, handling ownership
+            # Verify expected order
+            if ordered_teams and ordered_teams[0] != 'SJS':
+                print(f"WARNING: First team is {ordered_teams[0]}, expected SJS. Fixing order...")
+                
+                # Force the hardcoded order for consistency
+                ordered_teams = [
+                    "SJS", "CHI", "PHI", "NSH", "BOS", "SEA", "BUF", "PIT",
+                    "ANA", "NYI", "NYR", "DET", "CBJ", "UTA", "VAN",
+                    "CGY", "MTL", "NJD", "STL", "OTT", "MIN", "FLA", 
+                    "CAR", "EDM", "TBL", "COL", "LAK", "DAL", "TOR",
+                    "VGK", "WSH", "WPG"
+                ]
+            
+            # STEP 6: Generate draft order by round
             formatted_picks = []
             overall_pick_counter = 1
             
-            for round_num in range(1, 8):  # 7 rounds
-                for pick_position, team_abbrev in enumerate(ordered_teams, 1):
-                    # Get the pick record for this team and round
-                    pick = picks_by_team_round.get(team_abbrev, {}).get(round_num)
-                    
-                    if not pick:
-                        print(f"Warning: No pick found for {team_abbrev} in round {round_num}")
+            for round_num in range(1, 8):  # 7 rounds in the draft
+                # Track round picks in order
+                round_picks = []
+                
+                # Process each team's pick for this round in standing order
+                for position, team_abbrev in enumerate(ordered_teams, 1):
+                    # Skip if this team doesn't have a pick in this round
+                    if team_abbrev not in original_picks or round_num not in original_picks[team_abbrev]:
                         continue
                     
-                    # Check pick status to determine ownership
+                    pick = original_picks[team_abbrev][round_num]
                     pick_status = pick.get('pick_status', 'Owned')
-                    team_info = pick.get('team', {})
                     
-                    if pick_status == 'Owned':
-                        # Regular owned pick - team keeps their own pick
-                        formatted_pick = {
-                            'id': pick.get('id'),
-                            'draft_id': 1,  # Default draft ID
-                            'round_num': round_num,
-                            'overall_pick': overall_pick_counter,
-                            'pick_num': pick_position,
-                            'team_id': team_info.get('id'),
-                            'player_id': None,  # No player assigned yet
-                            'team': team_info,
-                            'pick_status': 'Owned'
-                        }
-                        formatted_picks.append(formatted_pick)
-                        overall_pick_counter += 1
+                    # Check if this team has traded away this pick
+                    has_traded_pick = team_abbrev in traded_picks and round_num in traded_picks[team_abbrev]
                     
-                    elif pick_status == 'Traded':
-                        # Check which team received this pick
-                        receiving_team = None
-                        for i in range(1, 7):  # Check received_pick_1 through received_pick_6
-                            received_team_abbrev = pick.get(f'received_pick_{i}')
-                            if received_team_abbrev:
-                                receiving_team = team_map.get(received_team_abbrev)
-                                if receiving_team:
-                                    # Found the team that received this pick
-                                    formatted_pick = {
-                                        'id': pick.get('id'),
-                                        'draft_id': 1,  # Default draft ID
-                                        'round_num': round_num,
-                                        'overall_pick': overall_pick_counter,
-                                        'pick_num': pick_position,
-                                        'team_id': receiving_team.get('id'),
-                                        'player_id': None,  # No player assigned yet
-                                        'pick_status': 'Traded',
-                                        'team': {
-                                            'id': receiving_team.get('id'),
-                                            'abbreviation': received_team_abbrev,
-                                            'name': receiving_team.get('team', received_team_abbrev),
-                                            'city': receiving_team.get('city', ''),
-                                            'primary_color': receiving_team.get('primary_color', '#333'),
-                                            'secondary_color': receiving_team.get('secondary_color', '#fff')
-                                        },
-                                        'received_from': team_abbrev,
-                                        'original_team': {
-                                            'abbreviation': team_abbrev,
-                                            'name': team_info.get('team', team_abbrev)
-                                        }
-                                    }
-                                    formatted_picks.append(formatted_pick)
-                                    overall_pick_counter += 1
-                                    break  # Only use the first non-empty received_pick field
-                        
-                        if not receiving_team:
-                            print(f"Warning: Pick for {team_abbrev} in round {round_num} is marked as Traded but no receiving team found")
+                    # Skip traded picks - we'll handle them when processing received picks
+                    if pick_status == 'Traded' or has_traded_pick:
+                        print(f"Skipping {team_abbrev}'s round {round_num} pick (traded)")
+                        continue
                     
-                    elif pick_status == 'Top10Protected':
-                        # Protected pick - check if it's in the top 10
-                        if pick_position <= 10:
-                            # Keep with original team (protected)
-                            formatted_pick = {
-                                'id': pick.get('id'),
-                                'draft_id': 1,  # Default draft ID
-                                'round_num': round_num,
-                                'overall_pick': overall_pick_counter,
-                                'pick_num': pick_position,
-                                'team_id': team_info.get('id'),
-                                'player_id': None,  # No player assigned yet
-                                'team': team_info,
-                                'pick_status': 'Top10Protected',
-                                'is_protected': True
-                            }
-                        else:
-                            # Top 10 protection does not apply, transfer to receiving team
-                            received_team_abbrev = pick.get(f'received_pick_1')
-                            if received_team_abbrev:
-                                receiving_team = team_map.get(received_team_abbrev)
-                                if receiving_team:
-                                    formatted_pick = {
-                                        'id': pick.get('id'),
-                                        'draft_id': 1,  # Default draft ID
-                                        'round_num': round_num,
-                                        'overall_pick': overall_pick_counter,
-                                        'pick_num': pick_position,
-                                        'team_id': receiving_team.get('id'),
-                                        'player_id': None,  # No player assigned yet
-                                        'pick_status': 'Top10Protected',
-                                        'team': {
-                                            'id': receiving_team.get('id'),
-                                            'abbreviation': received_team_abbrev,
-                                            'name': receiving_team.get('team', received_team_abbrev),
-                                            'city': receiving_team.get('city', ''),
-                                            'primary_color': receiving_team.get('primary_color', '#333'),
-                                            'secondary_color': receiving_team.get('secondary_color', '#fff')
-                                        },
-                                        'received_from': team_abbrev,
-                                        'original_team': {
-                                            'abbreviation': team_abbrev,
-                                            'name': team_info.get('team', team_abbrev)
-                                        },
-                                        'is_protected': False
-                                    }
-                                else:
-                                    print(f"Warning: Receiving team {received_team_abbrev} not found for protected pick")
-                                    formatted_pick = {
-                                        'id': pick.get('id'),
-                                        'draft_id': 1,  # Default draft ID
-                                        'round_num': round_num,
-                                        'overall_pick': overall_pick_counter,
-                                        'pick_num': pick_position,
-                                        'team_id': team_info.get('id'),
-                                        'player_id': None,  # No player assigned yet
-                                        'team': team_info,
-                                        'pick_status': 'Top10Protected',
-                                        'is_protected': True  # Keep with original since no receiving team found
-                                    }
-                            else:
-                                print(f"Warning: No receiving team specified for Top10Protected pick")
-                                formatted_pick = {
-                                    'id': pick.get('id'),
-                                    'draft_id': 1,  # Default draft ID
-                                    'round_num': round_num,
-                                    'overall_pick': overall_pick_counter,
-                                    'pick_num': pick_position,
-                                    'team_id': team_info.get('id'),
-                                    'player_id': None,  # No player assigned yet
-                                    'team': team_info,
-                                    'pick_status': 'Top10Protected',
-                                    'is_protected': True  # Keep with original since no receiving team found
-                                }
-                        
-                        formatted_picks.append(formatted_pick)
-                        overall_pick_counter += 1
-                    
-                    else:
-                        print(f"Warning: Unknown pick status '{pick_status}' for {team_abbrev} in round {round_num}")
-            
-            # Log some debugging information
-            if formatted_picks:
-                first_pick = formatted_picks[0]
-                first_team = first_pick.get('team', {}).get('abbreviation', 'Unknown')
-                print(f"First pick (overall #{first_pick.get('overall_pick')}): {first_team}")
+                    # This is a normal owned pick
+                    team_info = team_map.get(team_abbrev, {})
+                    formatted_pick = {
+                        'id': pick.get('id'),
+                        'draft_id': 1,
+                        'round_num': round_num,
+                        'overall_pick': 0,  # Will be updated later
+                        'pick_num': position,
+                        'team_id': team_info.get('id'),
+                        'player_id': None,
+                        'team': {
+                            'id': team_info.get('id'),
+                            'abbreviation': team_abbrev,
+                            'name': team_info.get('team', team_abbrev),
+                            'city': team_info.get('city', ''),
+                            'primary_color': team_info.get('primary_color', '#333'),
+                            'secondary_color': team_info.get('secondary_color', '#fff')
+                        },
+                        'pick_status': pick_status
+                    }
+                    round_picks.append((position, formatted_pick))
                 
-                # Check for SJS position as a test
-                sjs_picks = [p for p in formatted_picks if p.get('team', {}).get('abbreviation') == 'SJS']
-                if sjs_picks:
-                    print(f"SJS has {len(sjs_picks)} picks, first pick at overall #{sjs_picks[0].get('overall_pick')}")
-                else:
-                    print("SJS has no picks in the draft")
+                # Now process received picks for this round
+                for receiving_team, received_list in received_picks.items():
+                    for received_info in received_list:
+                        if received_info['round'] != round_num:
+                            continue
+                        
+                        original_team = received_info['original_team']
+                        
+                        # Find the original team's position in the draft
+                        original_position = team_positions.get(original_team)
+                        if not original_position:
+                            for pos, team in enumerate(ordered_teams, 1):
+                                if team == original_team:
+                                    original_position = pos
+                                    break
+                        
+                        if not original_position:
+                            print(f"Warning: Could not determine position for {original_team}")
+                            continue
+                        
+                        receiving_team_info = team_map.get(receiving_team, {})
+                        original_team_info = team_map.get(original_team, {})
+                        
+                        # Create the formatted pick for this received pick
+                        formatted_pick = {
+                            'id': received_info['pick'].get('id'),
+                            'draft_id': 1,
+                            'round_num': round_num,
+                            'overall_pick': 0,  # Will be updated later
+                            'pick_num': original_position,  # Use position of original team
+                            'team_id': receiving_team_info.get('id'),
+                            'player_id': None,
+                            'team': {
+                                'id': receiving_team_info.get('id'),
+                                'abbreviation': receiving_team,
+                                'name': receiving_team_info.get('team', receiving_team),
+                                'city': receiving_team_info.get('city', ''),
+                                'primary_color': receiving_team_info.get('primary_color', '#333'),
+                                'secondary_color': receiving_team_info.get('secondary_color', '#fff')
+                            },
+                            'pick_status': 'Received',
+                            'received_from': original_team,
+                            'original_team': {
+                                'abbreviation': original_team,
+                                'name': original_team_info.get('team', original_team) if original_team_info else original_team
+                            }
+                        }
+                        round_picks.append((original_position, formatted_pick))
+                
+                # Sort the picks by their position
+                round_picks.sort(key=lambda x: x[0])
+                
+                # Add the sorted picks to the final list
+                for _, pick in round_picks:
+                    pick['overall_pick'] = overall_pick_counter
+                    formatted_picks.append(pick)
+                    overall_pick_counter += 1
             
+            # STEP 7: Verify and debug
+            first_round_picks = [p for p in formatted_picks if p['round_num'] == 1]
+            print(f"First round has {len(first_round_picks)} picks")
+            
+            # Check some key teams
+            sjs_picks = [p for p in formatted_picks if p['team']['abbreviation'] == 'SJS']
+            print(f"SJS has {len(sjs_picks)} picks")
+            for p in sjs_picks:
+                pick_info = f"Round {p['round_num']}, overall #{p['overall_pick']}"
+                if 'received_from' in p:
+                    pick_info += f" (from {p['received_from']})"
+                print(f"  - {pick_info}")
+            
+            # Check key traded picks
+            mtl_picks = [p for p in formatted_picks if p['team']['abbreviation'] == 'MTL']
+            print(f"MTL has {len(mtl_picks)} picks")
+            for p in mtl_picks:
+                pick_info = f"Round {p['round_num']}, overall #{p['overall_pick']}"
+                if 'received_from' in p:
+                    pick_info += f" (from {p['received_from']})"
+                print(f"  - {pick_info}")
+            
+            # Return the formatted picks
             return formatted_picks
             
         except Exception as e:

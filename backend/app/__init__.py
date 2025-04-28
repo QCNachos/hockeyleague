@@ -2,7 +2,7 @@ import os
 from flask import Flask
 from .extensions import db, migrate, jwt, bcrypt, cors
 from .config.config import config_by_name
-
+from .services.draft.draft_order import draft_order_bp
 
 def create_app(config_name='development'):
     app = Flask(__name__)
@@ -23,6 +23,9 @@ def create_app(config_name='development'):
     
     from .auth import auth_bp
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    
+    # Register draft_order_bp with a unique URL prefix
+    app.register_blueprint(draft_order_bp, url_prefix='/api/draft-order-service')
     
     @app.route('/')
     def index():

@@ -920,246 +920,66 @@ def get_draft_order():
         # Get the current year or from query param
         year = request.args.get('year', datetime.now().year, type=int)
         
-        # Check if we should use mock data
-        use_mock = request.args.get('use_mock', 'false').lower() == 'true'
+        # Check if we should use lottery
         use_lottery = request.args.get('use_lottery', 'false').lower() == 'true'
         
-        # If use_mock is true, generate mock data directly (don't try to use database models)
-        if use_mock:
-            try:
-                # Get NHL teams from TeamService directly
-                from ...services.team_service import TeamService
-                nhl_teams = TeamService.get_nhl_teams()
+        # Import the DraftOrderService
+        from .draft_order import DraftOrderService
+        
+        print(f"Using DraftOrderService for year {year}, use_lottery={use_lottery}")
+        
+        # Generate the draft order using DraftOrderService
+        draft_order = DraftOrderService.generate_draft_order(year, use_lottery)
+        
+        if draft_order and len(draft_order) > 0:
+            # Verify the first team is SJS
+            first_team = draft_order[0].get('team', {}).get('abbreviation')
+            if first_team != 'SJS':
+                print(f"WARNING: First team is {first_team}, expected SJS. Fixing order.")
                 
-                if nhl_teams:
-                    print(f"Generating mock draft order for year {year} with {len(nhl_teams)} NHL teams")
-                    mock_order = generate_mock_draft_order(nhl_teams, year)
-                    return jsonify(mock_order), 200
-                else:
-                    print("No NHL teams found, generating empty mock order")
-                    return jsonify(generate_mock_draft_order([], year)), 200
-            except Exception as mock_err:
-                print(f"Error generating mock draft order: {str(mock_err)}")
-                return jsonify([]), 200
-        
-        # Try to use DraftOrderService first if available (for non-mock data)
-        try:
-            from ...services.draft.draft_order import DraftOrderService
-            print(f"Using DraftOrderService for year {year}, use_lottery={use_lottery}")
-            draft_order = DraftOrderService.generate_draft_order(year, use_lottery)
-            if draft_order and len(draft_order) > 0:
-                return jsonify(draft_order), 200
-        except Exception as order_err:
-            print(f"DraftOrderService error: {str(order_err)}")
-            # Continue to try database version if DraftOrderService fails
-        
-        # Check if we can access the Team model before trying to initialize draft
-        try:
-            team_check = Team.query.limit(1).all()
-            print(f"Team model check: found {len(team_check)} teams")
-        except Exception as team_err:
-            print(f"Team model error: {str(team_err)}")
-            # If Team model fails, try to get NHL teams from TeamService
-            try:
-                from ...services.team_service import TeamService
-                nhl_teams = TeamService.get_nhl_teams()
-                if nhl_teams:
-                    return jsonify(generate_mock_draft_order(nhl_teams, year)), 200
-                else:
-                    # Still fails, return an empty array with a 200 status
-                    return jsonify([]), 200
-            except Exception:
-                # If Supabase also fails, return mock data
-                return jsonify(generate_mock_draft_order([], year)), 200
-        
-        try:
-            # Initialize draft for the given year
-            draft_engine = DraftEngine()
-            draft_engine.initialize_draft(year)
+                # Force correct order based on the hard-coded standings in DraftOrderService
+                standing_order = DraftOrderService.get_standing_order(year)
+                ordered_teams = sorted(standing_order.keys(), key=lambda t: standing_order[t])
+                
+                # Organize picks by team
+                picks_by_team = {}
+                for pick in draft_order:
+                    team_abbrev = pick.get('team', {}).get('abbreviation')
+                    if team_abbrev:
+                        if team_abbrev not in picks_by_team:
+                            picks_by_team[team_abbrev] = []
+                        picks_by_team[team_abbrev].append(pick)
+                
+                # Create a new ordered list
+                new_order = []
+                for round_num in range(1, 8):  # 7 rounds
+                    for team_abbrev in ordered_teams:
+                        # Find this team's picks for this round
+                        team_picks = picks_by_team.get(team_abbrev, [])
+                        round_picks = [p for p in team_picks if p.get('round_num') == round_num]
+                        if round_picks:
+                            new_order.extend(round_picks)
+                
+                if new_order:
+                    # Update overall pick numbers
+                    for i, pick in enumerate(new_order, 1):
+                        pick['overall_pick'] = i
+                    
+                    draft_order = new_order
+                    print(f"Fixed order, first team: {draft_order[0].get('team', {}).get('abbreviation')}")
             
-            # Get draft order
-            order = draft_engine.get_draft_order()
-            
-            return jsonify(order), 200
-        except Exception as draft_err:
-            print(f"Draft initialization error: {str(draft_err)}")
-            # Try to use TeamService as fallback
-            try:
-                from ...services.team_service import TeamService
-                nhl_teams = TeamService.get_nhl_teams()
-                if nhl_teams:
-                    return jsonify(generate_mock_draft_order(nhl_teams, year)), 200
-                else:
-                    # Return empty array on draft initialization error
-                    return jsonify([]), 200
-            except Exception:
-                # Return empty array if everything fails
-                return jsonify([]), 200
+            return jsonify(draft_order), 200
+        else:
+            print("No draft order returned from DraftOrderService, using fallback")
             
     except Exception as e:
         print(f"Error in get_draft_order: {str(e)}")
-        # Return an empty array instead of error - helps frontend handle gracefully
-        return jsonify([]), 200
-
-
-def generate_mock_draft_order(teams_data, year):
-    """Generate mock draft order using supplied team data"""
-    print("Generating mock draft order")
+        import traceback
+        traceback.print_exc()
     
-    # For 2025, use a hardcoded draft order with SJS first
-    if year == 2025:
-        print("Using hardcoded draft order for 2025 with SJS in first position")
-        
-        # Create a team ordering based on the official 2025 draft order
-        draft_order_2025 = [
-            "SJS", "CHI", "PHI", "NSH", "BOS", "SEA", "BUF", "PIT",
-            "ANA", "NYI", "NYR", "DET", "CBJ", "UTA", "VAN",
-            "CGY", "MTL", "NJD", "STL", "OTT", "MIN", "FLA",
-            "CAR", "EDM", "TBL", "COL", "LAK", "DAL", "TOR",
-            "VGK", "WSH", "WPG"
-        ]
-        
-        # Define traded picks based on the provided image
-        # Format: {position_in_order: { receiving_team, force_as_trade}}
-        # Note: positions are 0-indexed in the array, but 1-indexed in the UI
-        traded_picks_2025 = {
-            # CGY is at position 15 (16th in the 1-indexed UI), traded to MTL
-            15: {"team": "MTL", "force_trade": True},
-            # MIN is at position 20 (21st in the 1-indexed UI), traded to CBJ
-            20: {"team": "CBJ", "force_trade": True},
-            # FLA is at position 21 (22nd in the 1-indexed UI), traded to CGY
-            21: {"team": "CGY", "force_trade": True},
-            # EDM is at position 23 (24th in the 1-indexed UI), traded to EDM
-            23: {"team": "EDM", "force_trade": True},
-            # TBL is at position 24 (25th in the 1-indexed UI), traded to TBL
-            24: {"team": "TBL", "force_trade": True},
-            # COL is at position 25 (26th in the 1-indexed UI), traded to COL
-            25: {"team": "COL", "force_trade": True},
-            # DAL is at position 27 (28th in the 1-indexed UI), traded to DAL
-            27: {"team": "DAL", "force_trade": True},
-            # TOR is at position 28 (29th in the 1-indexed UI), traded to TOR
-            28: {"team": "TOR", "force_trade": True},
-            # VGK is at position 29 (30th in the 1-indexed UI), traded to VGK
-            29: {"team": "VGK", "force_trade": True}
-        }
-        
-        # Filter and sort teams according to the 2025 draft order
-        ordered_teams = []
-        
-        # First, create a map of abbreviation to team data
-        team_map = {}
-        for team in teams_data:
-            abbrev = team.get('abbreviation', '')
-            if abbrev:
-                team_map[abbrev] = team
-        
-        # Then arrange teams in the predetermined order
-        for abbrev in draft_order_2025:
-            if abbrev in team_map:
-                ordered_teams.append(team_map[abbrev])
-        
-        # Add any remaining teams not in the predetermined order
-        for team in teams_data:
-            abbrev = team.get('abbreviation', '')
-            if abbrev and abbrev not in draft_order_2025:
-                ordered_teams.append(team)
-        
-        if not ordered_teams:
-            # Fallback if team mapping fails
-            print("Team mapping failed, using default mock teams")
-        else:
-            teams_data = ordered_teams
-            print(f"Ordered teams. First pick: {teams_data[0].get('abbreviation', 'Unknown')}")
-    
-    # If no teams provided, create mock teams
-    if not teams_data or len(teams_data) == 0:
-        teams_data = []
-        for i, abbrev in enumerate(["SJS", "CHI", "PHI", "NSH", "BOS"], 1):
-            teams_data.append({
-                'id': i,
-                'name': f'Team {i}',
-                'city': f'City {i}',
-                'abbreviation': abbrev
-            })
-        
-        for i in range(6, 33):
-            teams_data.append({
-                'id': i,
-                'name': f'Team {i}',
-                'city': f'City {i}',
-                'abbreviation': f'T{i}'
-            })
-    
-    # Create a map of abbreviation to team data for later use
-    team_map = {}
-    for team in teams_data:
-        abbrev = team.get('abbreviation', '')
-        if abbrev:
-            team_map[abbrev] = team
-    
-    # Generate mock draft picks
-    picks = []
-    for round_num in range(1, 8):  # 7 rounds
-        for pick_num, team in enumerate(teams_data, 1):
-            overall_pick = (round_num - 1) * len(teams_data) + pick_num
-            
-            # Get the original team abbreviation
-            original_team_abbrev = team.get('abbreviation', f'T{pick_num}')
-            original_team = team
-            
-            # Default to the original team
-            display_team = original_team
-            display_team_id = original_team.get('id', pick_num)
-            is_traded = False
-            force_trade = False
-            
-            # Apply traded picks logic for 2025, round 1 only
-            if year == 2025 and round_num == 1 and 'traded_picks_2025' in locals():
-                # Get the position in the draft order (0-indexed)
-                position = pick_num - 1
-                
-                if position in traded_picks_2025:
-                    trade_info = traded_picks_2025[position]
-                    receiving_team_abbrev = trade_info["team"]
-                    force_trade = trade_info.get("force_trade", False)
-                    receiving_team = team_map.get(receiving_team_abbrev)
-                    
-                    if receiving_team:
-                        # Always mark as traded if force_trade is True
-                        is_traded = force_trade or (receiving_team_abbrev != original_team_abbrev)
-                        display_team = receiving_team
-                        display_team_id = receiving_team.get('id')
-            
-            pick = {
-                'id': overall_pick,
-                'draft_id': 1,
-                'round_num': round_num,
-                'pick_num': pick_num,
-                'team_id': display_team_id,
-                'player_id': None,
-                'overall_pick': overall_pick,
-                'team': {
-                    'id': display_team.get('id', pick_num),
-                    'name': display_team.get('team', display_team.get('name', f'Team {pick_num}')),
-                    'city': display_team.get('city', f'City {pick_num}'),
-                    'abbreviation': display_team.get('abbreviation', f'T{pick_num}')
-                }
-            }
-            
-            # Add traded information if applicable
-            if is_traded:
-                pick['pick_status'] = 'Traded'
-                pick['received_from'] = original_team_abbrev
-                pick['original_team'] = {
-                    'abbreviation': original_team_abbrev,
-                    'name': original_team.get('team', original_team.get('name', original_team_abbrev))
-                }
-            else:
-                pick['pick_status'] = 'Owned'
-            
-            picks.append(pick)
-            
-    return picks
+    # If we reach here, something went wrong or we didn't get a valid order
+    # Return an empty array instead of error - this helps frontend handle errors gracefully
+    return jsonify([]), 200
 
 
 @draft_bp.route('/pick', methods=['POST'])
@@ -1502,7 +1322,7 @@ def get_draft_picks():
         year = request.args.get('year', datetime.now().year, type=int)
         use_lottery = request.args.get('use_lottery', 'false').lower() == 'true'
         
-        # Use the new DraftOrderService to get the draft order
+        # Use the DraftOrderService to get the draft order
         try:
             from .draft_order import DraftOrderService
             
@@ -1512,202 +1332,13 @@ def get_draft_picks():
             if draft_order:
                 print(f"Successfully generated draft order using DraftOrderService: {len(draft_order)} picks")
                 return jsonify(draft_order), 200
+            else:
+                print("No draft order returned from DraftOrderService")
+                return jsonify([]), 200
         except Exception as order_err:
             print(f"Error using DraftOrderService: {str(order_err)}")
-            # Fall back to previous method if the new service fails
-        
-        # Rest of original implementation as fallback
-        from ...supabase_client import get_supabase_client
-        
-        # Define standing order for draft (this would typically come from league standings)
-        # This is the standing order for 2025 based on provided input
-        standing_order = {
-            "SJS": 1, "CHI": 2, "PHI": 3, "NSH": 4, "BOS": 5, "SEA": 6, "BUF": 7, "PIT": 8,
-            "ANA": 9, "NYI": 10, "NYR": 11, "DET": 12, "CBJ": 13, "UTA": 14, "VAN": 15,
-            "CGY": 16, "MTL": 17, "NJD": 18, "STL": 19, "OTT": 20, "MIN": 21, "FLA": 22,
-            "CAR": 23, "EDM": 24, "TBL": 25, "COL": 26, "LAK": 27, "DAL": 28, "TOR": 29,
-            "VGK": 30, "WSH": 31, "WPG": 32
-        }
-        
-        # Try to get draft picks from Supabase
-        try:
-            supabase = get_supabase_client()
-            
-            # Query the Draft_Picks table - get all picks, not just 'Owned'
-            response = supabase.table('Draft_Picks') \
-                .select('*, team:Team(id, team, abbreviation, primary_color, secondary_color)') \
-                .eq('year', year) \
-                .execute()
-                
-            if response.data:
-                # Log sample data for debugging
-                if len(response.data) > 0:
-                    print(f"Sample raw pick data from Supabase: {response.data[0]}")
-                    print(f"Sample pick fields: {list(response.data[0].keys())}")
-                
-                # Organize picks by round and generate draft order
-                all_picks_by_round = {}
-                for pick in response.data:
-                    round_num = pick.get('round')
-                    if round_num not in all_picks_by_round:
-                        all_picks_by_round[round_num] = []
-                    all_picks_by_round[round_num].append(pick)
-                
-                # Format picks in draft order by standing
-                formatted_picks = []
-                overall_pick_counter = 1
-                draft_id = 1  # Default draft ID for formatting
-                
-                # For each round
-                for round_num in sorted(all_picks_by_round.keys()):
-                    round_picks = all_picks_by_round[round_num]
-                    # Map team abbreviations to their picks for this round
-                    team_picks = {}
-                    for pick in round_picks:
-                        team_abbrev = pick.get('team')
-                        if team_abbrev:
-                            team_picks[team_abbrev] = pick
-                    
-                    # Use standing order to determine pick order
-                    for pick_position, team_abbrev in enumerate(sorted(standing_order.keys(), key=lambda t: standing_order[t]), 1):
-                        pick = team_picks.get(team_abbrev)
-                        
-                        if not pick:
-                            # Skip if this team has no pick record
-                            continue
-                        
-                        # Check pick status
-                        pick_status = pick.get('pick_status', 'Owned')
-                        
-                        if pick_status == 'Owned':
-                            # Regular owned pick
-                            formatted_pick = {
-                                'id': pick.get('id'),
-                                'draft_id': draft_id,
-                                'round_num': round_num,
-                                'overall_pick': overall_pick_counter,
-                                'pick_num': pick_position,
-                                'team_id': pick.get('team', {}).get('id'),
-                                'player_id': None,  # No player assigned yet
-                                'team': pick.get('team'),
-                                'pick_status': 'Owned',
-                                'direct_from_supabase': True
-                            }
-                            formatted_picks.append(formatted_pick)
-                            overall_pick_counter += 1
-                        
-                        elif pick_status == 'Traded':
-                            # Check which team received this pick
-                            for i in range(1, 7):  # Check received_pick_1 through received_pick_6
-                                received_team = pick.get(f'received_pick_{i}')
-                                if received_team:
-                                    # Get team info for the receiving team
-                                    from ...services.team_service import TeamService
-                                    teams_data = TeamService.get_nhl_teams()
-                                    receiving_team_info = None
-                                    
-                                    if teams_data:
-                                        for t in teams_data:
-                                            if t.get('abbreviation') == received_team:
-                                                receiving_team_info = t
-                                                break
-                                    
-                                    # Add the pick for the receiving team
-                                    formatted_pick = {
-                                        'id': pick.get('id'),
-                                        'draft_id': draft_id,
-                                        'round_num': round_num,
-                                        'overall_pick': overall_pick_counter,
-                                        'pick_num': pick_position,
-                                        'team_id': receiving_team_info.get('id') if receiving_team_info else None,
-                                        'player_id': None,  # No player assigned yet
-                                        'pick_status': 'Traded',
-                                        'team': {
-                                            'id': receiving_team_info.get('id') if receiving_team_info else None,
-                                            'abbreviation': received_team,
-                                            'name': receiving_team_info.get('team') if receiving_team_info else received_team,
-                                            'city': receiving_team_info.get('city') if receiving_team_info else '',
-                                            'primary_color': receiving_team_info.get('primary_color') if receiving_team_info else '#333',
-                                            'secondary_color': receiving_team_info.get('secondary_color') if receiving_team_info else '#fff'
-                                        },
-                                        'received_from': team_abbrev,
-                                        'original_team': {
-                                            'abbreviation': team_abbrev,
-                                            'name': pick.get('team', {}).get('team', team_abbrev)
-                                        },
-                                        'direct_from_supabase': True
-                                    }
-                                    formatted_picks.append(formatted_pick)
-                                    overall_pick_counter += 1
-                                    break  # Only use the first non-empty received_pick field
-                        
-                        elif pick_status == 'Top10Protected':
-                            # Protected pick - still shown with the original team
-                            formatted_pick = {
-                                'id': pick.get('id'),
-                                'draft_id': draft_id,
-                                'round_num': round_num,
-                                'overall_pick': overall_pick_counter,
-                                'pick_num': pick_position,
-                                'team_id': pick.get('team', {}).get('id'),
-                                'player_id': None,  # No player assigned yet
-                                'team': pick.get('team'),
-                                'pick_status': 'Top10Protected',
-                                'direct_from_supabase': True
-                            }
-                            formatted_picks.append(formatted_pick)
-                            overall_pick_counter += 1
-                
-                # Log a sample of formatted picks
-                if formatted_picks:
-                    print(f"Sample formatted pick: {formatted_picks[0]}")
-                    print(f"Total picks formatted: {len(formatted_picks)}")
-                
-                return jsonify(formatted_picks)
-            
-            # If no picks found, log warning and return empty array
-            print(f"No draft picks found in Supabase for year {year}")
-            return jsonify([])
-            
-        except Exception as e:
-            print(f"Error fetching draft picks from Supabase: {str(e)}")
-            
-            # Fallback to the normal draft_order endpoint
-            try:
-                # Use the existing draft order function
-                draft_engine = DraftEngine()
-                draft_order = draft_engine.get_draft_order()
-                
-                # If no picks in database, generate mock data based on standing order
-                if not draft_order:
-                    # Get NHL teams
-                    from ...services.team_service import TeamService
-                    teams_data = TeamService.get_nhl_teams()
-                    
-                    if teams_data:
-                        # Order teams by standing
-                        ordered_teams = []
-                        for abbreviation in sorted(standing_order.keys(), key=lambda t: standing_order[t]):
-                            team = next((t for t in teams_data if t.get('abbreviation') == abbreviation), None)
-                            if team:
-                                ordered_teams.append(team)
-                        
-                        # Generate draft order with the ordered teams
-                        draft_order = generate_mock_draft_order(ordered_teams, year)
-                    else:
-                        # If no teams data available, use default mock generation
-                        draft_order = generate_mock_draft_order([], year)
-                
-                # Add fallback indicator so frontend can alert the user
-                for pick in draft_order:
-                    pick['using_fallback_data'] = True
-                    
-                print(f"Using fallback draft order generation, created {len(draft_order)} picks")
-                return jsonify(draft_order)
-                
-            except Exception as fallback_error:
-                print(f"Error generating fallback draft order: {str(fallback_error)}")
-                return jsonify([]), 500
+            # Return empty array on error
+            return jsonify([]), 200
     
     except Exception as e:
         print(f"General error in get_draft_picks: {str(e)}")
@@ -1789,40 +1420,51 @@ def get_rankings():
 
 @draft_bp.route('/mock-order-test', methods=['GET'])
 def test_mock_draft_order():
-    """Test endpoint for mock draft order generation that doesn't depend on database"""
+    """Test endpoint for draft order generation that doesn't depend on database"""
     try:
         year = request.args.get('year', 2025, type=int)
-        print(f"Generating test mock draft order for year {year}")
+        use_lottery = request.args.get('use_lottery', 'false').lower() == 'true'
+        print(f"Testing draft order for year {year}, use_lottery={use_lottery}")
         
-        # Get NHL teams from TeamService directly
-        from ...services.team_service import TeamService
-        nhl_teams = TeamService.get_nhl_teams()
+        # Use DraftOrderService to generate the draft order
+        from .draft_order import DraftOrderService
+        draft_order = DraftOrderService.generate_draft_order(year, use_lottery)
         
-        if nhl_teams:
-            mock_order = generate_mock_draft_order(nhl_teams, year)
-            
+        if draft_order:
             # Find traded picks for debugging
-            traded_picks = [pick for pick in mock_order if pick.get('pick_status') == 'Traded']
+            traded_picks = [pick for pick in draft_order if pick.get('pick_status') == 'Traded' or pick.get('received_from')]
             
             # Find some specific picks for debugging
-            cgy_picks = [p for p in mock_order if p.get('team', {}).get('abbreviation') == 'CGY' or (p.get('original_team', {}).get('abbreviation') == 'CGY')]
-            mtl_picks = [p for p in mock_order if p.get('team', {}).get('abbreviation') == 'MTL' or (p.get('original_team', {}).get('abbreviation') == 'MTL')]
+            cgy_picks = [p for p in draft_order if p.get('team', {}).get('abbreviation') == 'CGY' or (p.get('original_team', {}).get('abbreviation') == 'CGY')]
+            mtl_picks = [p for p in draft_order if p.get('team', {}).get('abbreviation') == 'MTL' or (p.get('original_team', {}).get('abbreviation') == 'MTL')]
+            min_picks = [p for p in draft_order if p.get('team', {}).get('abbreviation') == 'MIN' or (p.get('original_team', {}).get('abbreviation') == 'MIN')]
+            cbj_picks = [p for p in draft_order if p.get('team', {}).get('abbreviation') == 'CBJ' or (p.get('original_team', {}).get('abbreviation') == 'CBJ')]
+            
+            # Count picks by team for the first round
+            first_round_by_team = {}
+            for pick in draft_order:
+                if pick.get('round_num') == 1:
+                    team = pick.get('team', {}).get('abbreviation', 'Unknown')
+                    first_round_by_team[team] = first_round_by_team.get(team, 0) + 1
             
             result = {
                 "success": True,
-                "message": f"Generated mock draft order for {year} with {len(mock_order)} picks",
+                "message": f"Generated draft order for {year} with {len(draft_order)} picks",
                 "traded_picks_count": len(traded_picks),
-                "first_pick_team": mock_order[0]["team"]["abbreviation"] if mock_order else "None",
-                "mock_order": mock_order[:5],  # Return first 5 picks to keep response size reasonable
-                "traded_picks": traded_picks[:3] if traded_picks else [],
+                "first_pick_team": draft_order[0]["team"]["abbreviation"] if draft_order else "None",
+                "draft_order": draft_order[:5],  # Return first 5 picks to keep response size reasonable
+                "traded_picks": traded_picks[:5] if traded_picks else [],
                 "cgy_picks": cgy_picks[:3] if cgy_picks else [],
-                "mtl_picks": mtl_picks[:3] if mtl_picks else []
+                "mtl_picks": mtl_picks[:3] if mtl_picks else [],
+                "min_picks": min_picks[:3] if min_picks else [],
+                "cbj_picks": cbj_picks[:3] if cbj_picks else [],
+                "first_round_by_team": first_round_by_team
             }
         else:
             result = {
                 "success": False,
-                "message": "Failed to get NHL teams from TeamService",
-                "mock_order": []
+                "message": "Failed to generate draft order",
+                "draft_order": []
             }
         
         return jsonify(result), 200

@@ -14,6 +14,7 @@ import Statistics from './pages/Statistics';
 import Standings from './pages/Standings';
 import Contracts from './pages/Contracts';
 import Draft from './pages/Draft';
+import SimulateDraft from './pages/SimulateDraft';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import LineCombinations from './pages/LineCombinations';
@@ -89,6 +90,7 @@ function App() {
             <Route path="stats" element={<Statistics />} />
             <Route path="standings" element={<Standings />} />
             <Route path="draft" element={<Draft />} />
+            <Route path="simulate-draft" element={<SimulateDraft />} />
             
             {/* Protected routes */}
             <Route 

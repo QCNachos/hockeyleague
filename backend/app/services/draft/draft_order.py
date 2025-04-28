@@ -33,7 +33,6 @@ class DraftOrderService:
                 "CAR": 23, "EDM": 24, "TBL": 25, "COL": 26, "LAK": 27, "DAL": 28, "TOR": 29,
                 "VGK": 30, "WSH": 31, "WPG": 32
             }
-            print(f"Using hardcoded 2025 standing order: SJS={standing_order['SJS']}, CHI={standing_order['CHI']}")
             return standing_order
         
         # TODO: For other years, fetch from league standings in the database
@@ -152,8 +151,6 @@ class DraftOrderService:
         Returns:
             List of draft picks in order with team information
         """
-        print(f"Generating draft order for year {year}, use_lottery={use_lottery}")
-        
         # STEP 1: Get the standing order from standings
         standing_order = DraftOrderService.get_standing_order(year)
         if not standing_order:
@@ -164,11 +161,9 @@ class DraftOrderService:
         draft_positions = {}
         if use_lottery:
             draft_positions = DraftOrderService.run_draft_lottery(standing_order)
-            print("Applied lottery simulation to draft positions")
         else:
             # Use standing order directly - position in standings = draft position
             draft_positions = {team: pos for team, pos in standing_order.items()}
-            print("Using direct standing order for draft positions")
         
         # STEP 3: Get all teams data for proper team information
         teams_data = TeamService.get_nhl_teams()
@@ -251,21 +246,8 @@ class DraftOrderService:
                             'pick': pick
                         })
             
-            # STEP 5: Verify and correct team order based on standings
+            # STEP 5: Verify and sort teams by draft positions
             ordered_teams = sorted(draft_positions.keys(), key=lambda t: draft_positions[t])
-            
-            # Verify expected order
-            if ordered_teams and ordered_teams[0] != 'SJS':
-                print(f"WARNING: First team is {ordered_teams[0]}, expected SJS. Fixing order...")
-                
-                # Force the hardcoded order for consistency
-                ordered_teams = [
-                    "SJS", "CHI", "PHI", "NSH", "BOS", "SEA", "BUF", "PIT",
-                    "ANA", "NYI", "NYR", "DET", "CBJ", "UTA", "VAN",
-                    "CGY", "MTL", "NJD", "STL", "OTT", "MIN", "FLA", 
-                    "CAR", "EDM", "TBL", "COL", "LAK", "DAL", "TOR",
-                    "VGK", "WSH", "WPG"
-                ]
             
             # STEP 6: Generate draft order by round
             formatted_picks = []
@@ -289,7 +271,6 @@ class DraftOrderService:
                     
                     # Skip traded picks - we'll handle them when processing received picks
                     if pick_status == 'Traded' or has_traded_pick:
-                        print(f"Skipping {team_abbrev}'s round {round_num} pick (traded)")
                         continue
                     
                     # This is a normal owned pick
@@ -372,27 +353,12 @@ class DraftOrderService:
                     formatted_picks.append(pick)
                     overall_pick_counter += 1
             
-            # STEP 7: Verify and debug
+            # Verify first round pick count for basic validation
             first_round_picks = [p for p in formatted_picks if p['round_num'] == 1]
-            print(f"First round has {len(first_round_picks)} picks")
-            
-            # Check some key teams
-            sjs_picks = [p for p in formatted_picks if p['team']['abbreviation'] == 'SJS']
-            print(f"SJS has {len(sjs_picks)} picks")
-            for p in sjs_picks:
-                pick_info = f"Round {p['round_num']}, overall #{p['overall_pick']}"
-                if 'received_from' in p:
-                    pick_info += f" (from {p['received_from']})"
-                print(f"  - {pick_info}")
-            
-            # Check key traded picks
-            mtl_picks = [p for p in formatted_picks if p['team']['abbreviation'] == 'MTL']
-            print(f"MTL has {len(mtl_picks)} picks")
-            for p in mtl_picks:
-                pick_info = f"Round {p['round_num']}, overall #{p['overall_pick']}"
-                if 'received_from' in p:
-                    pick_info += f" (from {p['received_from']})"
-                print(f"  - {pick_info}")
+            if len(first_round_picks) > 0:
+                print(f"First round has {len(first_round_picks)} picks, first pick: {first_round_picks[0]['team']['abbreviation']}")
+            else:
+                print("Warning: No first round picks found")
             
             # Return the formatted picks
             return formatted_picks
@@ -422,12 +388,9 @@ def get_draft_order():
         year = request.args.get('year', 2025, type=int)
         use_lottery = request.args.get('use_lottery', 'false').lower() == 'true'
         
-        print(f"Draft order requested for year {year}, use_lottery={use_lottery}")
-        
         # Generate the draft order
         draft_order = DraftOrderService.generate_draft_order(year, use_lottery)
         
-        print(f"Returning {len(draft_order)} picks")
         return jsonify(draft_order), 200
     except Exception as e:
         print(f"Error in get_draft_order endpoint: {str(e)}")

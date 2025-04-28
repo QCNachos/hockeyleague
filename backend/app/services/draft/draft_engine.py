@@ -673,28 +673,6 @@ class DraftEngine:
 def get_draft_info():
     """Get current draft information"""
     try:
-        # Try to check Draft model accessibility first
-        try:
-            draft_check = Draft.query.limit(1).all()
-            print(f"Draft model check: found {len(draft_check)} drafts")
-        except Exception as draft_model_err:
-            print(f"Draft model error: {str(draft_model_err)}")
-            # If Draft model fails, return mock data
-            year = request.args.get('year', datetime.now().year, type=int)
-            mock_data = {
-                "id": 1,
-                "year": year,
-                "round_count": 7,
-                "status": "pending",
-                "current_round": 1,
-                "current_pick": 1,
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat(),
-                "mock_data": True,
-                "message": "This is mock data - database connectivity issue detected"
-            }
-            return jsonify(mock_data), 200
-            
         # Create a draft engine instance
         draft_engine = DraftEngine()
         
@@ -703,51 +681,24 @@ def get_draft_info():
         
         print(f"Initializing draft for year {year}")
     
-        try:
-            # Initialize draft for the given year
-            draft_info = draft_engine.initialize_draft(year)
-            
-            print(f"Successfully retrieved draft info for year {year}")
-    
-            return jsonify(draft_info), 200
-        except Exception as draft_err:
-            print(f"Draft initialization error: {str(draft_err)}")
-            # Return mock data on draft initialization error
-            mock_data = {
-                "id": 1,
-                "year": year,
-                "round_count": 7,
-                "status": "pending",
-                "current_round": 1,
-                "current_pick": 1,
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat(),
-                "mock_data": True,
-                "message": f"This is mock data - draft initialization failed: {str(draft_err)}"
-            }
-            return jsonify(mock_data), 200
+        # Initialize draft for the given year
+        draft_info = draft_engine.initialize_draft(year)
+        
+        print(f"Successfully retrieved draft info for year {year}")
+
+        return jsonify(draft_info), 200
             
     except Exception as e:
         # Log the error
         error_message = f"Error in get_draft_info: {str(e)}"
         print(error_message)
+        import traceback
+        traceback.print_exc()
         
-        # Provide a fallback response with error details
-        year = request.args.get('year', datetime.now().year, type=int)
-        mock_data = {
-            "id": 1,
-            "year": year,
-            "round_count": 7,
-            "status": "pending",
-            "current_round": 1,
-            "current_pick": 1,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
-            "mock_data": True,
-            "message": "This is mock data - database may not be initialized properly"
-        }
-        
-        return jsonify(mock_data), 200  # Return 200 even for fallback to let the frontend handle it gracefully
+        return jsonify({
+            'error': str(e),
+            'message': 'Failed to retrieve draft information'
+        }), 500  # Return 500 for server errors
 
 
 @draft_bp.route('/prospects', methods=['GET'])
@@ -926,51 +877,13 @@ def get_draft_order():
         # Import the DraftOrderService
         from .draft_order import DraftOrderService
         
-        print(f"Using DraftOrderService for year {year}, use_lottery={use_lottery}")
-        
         # Generate the draft order using DraftOrderService
         draft_order = DraftOrderService.generate_draft_order(year, use_lottery)
         
         if draft_order and len(draft_order) > 0:
-            # Verify the first team is SJS
-            first_team = draft_order[0].get('team', {}).get('abbreviation')
-            if first_team != 'SJS':
-                print(f"WARNING: First team is {first_team}, expected SJS. Fixing order.")
-                
-                # Force correct order based on the hard-coded standings in DraftOrderService
-                standing_order = DraftOrderService.get_standing_order(year)
-                ordered_teams = sorted(standing_order.keys(), key=lambda t: standing_order[t])
-                
-                # Organize picks by team
-                picks_by_team = {}
-                for pick in draft_order:
-                    team_abbrev = pick.get('team', {}).get('abbreviation')
-                    if team_abbrev:
-                        if team_abbrev not in picks_by_team:
-                            picks_by_team[team_abbrev] = []
-                        picks_by_team[team_abbrev].append(pick)
-                
-                # Create a new ordered list
-                new_order = []
-                for round_num in range(1, 8):  # 7 rounds
-                    for team_abbrev in ordered_teams:
-                        # Find this team's picks for this round
-                        team_picks = picks_by_team.get(team_abbrev, [])
-                        round_picks = [p for p in team_picks if p.get('round_num') == round_num]
-                        if round_picks:
-                            new_order.extend(round_picks)
-                
-                if new_order:
-                    # Update overall pick numbers
-                    for i, pick in enumerate(new_order, 1):
-                        pick['overall_pick'] = i
-                    
-                    draft_order = new_order
-                    print(f"Fixed order, first team: {draft_order[0].get('team', {}).get('abbreviation')}")
-            
             return jsonify(draft_order), 200
         else:
-            print("No draft order returned from DraftOrderService, using fallback")
+            print("No draft order returned from DraftOrderService")
             
     except Exception as e:
         print(f"Error in get_draft_order: {str(e)}")
@@ -1201,18 +1114,6 @@ def simulate_draft():
         }), 200
 
 
-# Add a test endpoint that doesn't use database
-@draft_bp.route('/test', methods=['GET'])
-def test_draft_endpoint():
-    """Test endpoint that doesn't depend on database"""
-    response = {
-        "status": "ok",
-        "message": "Draft endpoint is working",
-        "cors_enabled": True
-    }
-    return jsonify(response), 200
-
-
 # Add a OPTIONS handler to support CORS preflight requests
 @draft_bp.route('/<path:path>', methods=['OPTIONS'])
 @draft_bp.route('/', methods=['OPTIONS'])
@@ -1225,171 +1126,6 @@ def handle_draft_options(path=None):
     return response, 200
 
 
-# Update the debug_draft_database function to better handle errors and CORS
-@draft_bp.route('/debug', methods=['GET'])
-def debug_draft_database():
-    """Debug endpoint to check database state"""
-    try:
-        # Create a simplified response with basic database information
-        response = {
-            "status": "ok",
-            "database_info": {
-                "player_table": {
-                    "exists": True,
-                    "record_count": 0,
-                    "draft_eligible_count": 0
-                },
-                "team_table": {
-                    "exists": True,
-                    "record_count": 0
-                },
-                "draft_table": {
-                    "exists": True,
-                    "record_count": 0
-                },
-                "draftpick_table": {
-                    "exists": True,
-                    "record_count": 0
-                }
-            }
-        }
-        
-        # Try to get player count
-        try:
-            player_count = Player.query.count()
-            response["database_info"]["player_table"]["record_count"] = player_count
-            
-            # Try to get draft-eligible player count
-            draft_eligible_count = Player.query.filter(
-                Player.age == 17,
-                Player.draft_year.is_(None)
-            ).count()
-            response["database_info"]["player_table"]["draft_eligible_count"] = draft_eligible_count
-        except Exception as player_err:
-            print(f"Error getting player data: {str(player_err)}")
-            response["database_info"]["player_table"]["exists"] = False
-            response["database_info"]["player_table"]["error"] = str(player_err)
-        
-        # Try to get team count
-        try:
-            team_count = Team.query.count()
-            response["database_info"]["team_table"]["record_count"] = team_count
-        except Exception as team_err:
-            print(f"Error getting team data: {str(team_err)}")
-            response["database_info"]["team_table"]["exists"] = False
-            response["database_info"]["team_table"]["error"] = str(team_err)
-        
-        # Try to get draft count
-        try:
-            draft_count = Draft.query.count()
-            response["database_info"]["draft_table"]["record_count"] = draft_count
-        except Exception as draft_err:
-            print(f"Error getting draft data: {str(draft_err)}")
-            response["database_info"]["draft_table"]["exists"] = False
-            response["database_info"]["draft_table"]["error"] = str(draft_err)
-        
-        # Try to get draft pick count
-        try:
-            draftpick_count = DraftPick.query.count()
-            response["database_info"]["draftpick_table"]["record_count"] = draftpick_count
-        except Exception as pick_err:
-            print(f"Error getting draft pick data: {str(pick_err)}")
-            response["database_info"]["draftpick_table"]["exists"] = False
-            response["database_info"]["draftpick_table"]["error"] = str(pick_err)
-        
-        return jsonify(response), 200
-    except Exception as e:
-        print(f"DEBUG: Error in debug endpoint: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-
-@draft_bp.route('/picks', methods=['GET'])
-def get_draft_picks():
-    """
-    Get all draft picks from the Draft_Picks table for a specific year.
-    Based on standings to determine draft order, and handling traded picks.
-    
-    Returns:
-        JSON array of draft picks
-    """
-    try:
-        year = request.args.get('year', datetime.now().year, type=int)
-        use_lottery = request.args.get('use_lottery', 'false').lower() == 'true'
-        
-        # Use the DraftOrderService to get the draft order
-        try:
-            from .draft_order import DraftOrderService
-            
-            # Generate the draft order based on standings and traded picks
-            draft_order = DraftOrderService.generate_draft_order(year, use_lottery)
-            
-            if draft_order:
-                print(f"Successfully generated draft order using DraftOrderService: {len(draft_order)} picks")
-                return jsonify(draft_order), 200
-            else:
-                print("No draft order returned from DraftOrderService")
-                return jsonify([]), 200
-        except Exception as order_err:
-            print(f"Error using DraftOrderService: {str(order_err)}")
-            # Return empty array on error
-            return jsonify([]), 200
-    
-    except Exception as e:
-        print(f"General error in get_draft_picks: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
-@draft_bp.route('/picks-debug', methods=['GET'])
-def get_draft_picks_debug():
-    """
-    Debug endpoint to get raw draft picks data from Supabase.
-    Returns unfiltered data directly from the Draft_Picks table.
-    
-    Returns:
-        JSON array of raw draft picks data
-    """
-    try:
-        year = request.args.get('year', datetime.now().year, type=int)
-        
-        from ...supabase_client import get_supabase_client
-        
-        # Try to get draft picks from Supabase
-        try:
-            supabase = get_supabase_client()
-            
-            # Query the Draft_Picks table - completely raw, no filtering
-            response = supabase.table('Draft_Picks') \
-                .select('*') \
-                .eq('year', year) \
-                .execute()
-                
-            if response.data:
-                # Return raw data with minimal processing
-                return jsonify({
-                    'raw_data': response.data,
-                    'count': len(response.data),
-                    'status_counts': count_statuses(response.data),
-                    'non_owned_picks': [p for p in response.data if p.get('pick_status') != 'Owned']
-                })
-            
-            # If no picks found, log warning and return empty array
-            print(f"No draft picks found in Supabase for year {year}")
-            return jsonify({'error': 'No picks found', 'count': 0})
-            
-        except Exception as e:
-            print(f"Error fetching draft picks from Supabase: {str(e)}")
-            return jsonify({'error': str(e)})
-    
-    except Exception as e:
-        print(f"General error in get_draft_picks_debug: {str(e)}")
-        return jsonify({'error': str(e)})
-
 def count_statuses(picks):
     """Helper function to count pick statuses"""
     counts = {}
@@ -1400,6 +1136,7 @@ def count_statuses(picks):
         else:
             counts['null'] = counts.get('null', 0) + 1
     return counts
+
 
 # Add a new endpoint for draft rankings
 @draft_bp.route('/rankings', methods=['GET'])
@@ -1417,63 +1154,6 @@ def get_rankings():
     except Exception as e:
         print(f"Error in get_rankings: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
-@draft_bp.route('/mock-order-test', methods=['GET'])
-def test_mock_draft_order():
-    """Test endpoint for draft order generation that doesn't depend on database"""
-    try:
-        year = request.args.get('year', 2025, type=int)
-        use_lottery = request.args.get('use_lottery', 'false').lower() == 'true'
-        print(f"Testing draft order for year {year}, use_lottery={use_lottery}")
-        
-        # Use DraftOrderService to generate the draft order
-        from .draft_order import DraftOrderService
-        draft_order = DraftOrderService.generate_draft_order(year, use_lottery)
-        
-        if draft_order:
-            # Find traded picks for debugging
-            traded_picks = [pick for pick in draft_order if pick.get('pick_status') == 'Traded' or pick.get('received_from')]
-            
-            # Find some specific picks for debugging
-            cgy_picks = [p for p in draft_order if p.get('team', {}).get('abbreviation') == 'CGY' or (p.get('original_team', {}).get('abbreviation') == 'CGY')]
-            mtl_picks = [p for p in draft_order if p.get('team', {}).get('abbreviation') == 'MTL' or (p.get('original_team', {}).get('abbreviation') == 'MTL')]
-            min_picks = [p for p in draft_order if p.get('team', {}).get('abbreviation') == 'MIN' or (p.get('original_team', {}).get('abbreviation') == 'MIN')]
-            cbj_picks = [p for p in draft_order if p.get('team', {}).get('abbreviation') == 'CBJ' or (p.get('original_team', {}).get('abbreviation') == 'CBJ')]
-            
-            # Count picks by team for the first round
-            first_round_by_team = {}
-            for pick in draft_order:
-                if pick.get('round_num') == 1:
-                    team = pick.get('team', {}).get('abbreviation', 'Unknown')
-                    first_round_by_team[team] = first_round_by_team.get(team, 0) + 1
-            
-            result = {
-                "success": True,
-                "message": f"Generated draft order for {year} with {len(draft_order)} picks",
-                "traded_picks_count": len(traded_picks),
-                "first_pick_team": draft_order[0]["team"]["abbreviation"] if draft_order else "None",
-                "draft_order": draft_order[:5],  # Return first 5 picks to keep response size reasonable
-                "traded_picks": traded_picks[:5] if traded_picks else [],
-                "cgy_picks": cgy_picks[:3] if cgy_picks else [],
-                "mtl_picks": mtl_picks[:3] if mtl_picks else [],
-                "min_picks": min_picks[:3] if min_picks else [],
-                "cbj_picks": cbj_picks[:3] if cbj_picks else [],
-                "first_round_by_team": first_round_by_team
-            }
-        else:
-            result = {
-                "success": False,
-                "message": "Failed to generate draft order",
-                "draft_order": []
-            }
-        
-        return jsonify(result), 200
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "message": f"Error: {str(e)}",
-            "error_type": str(type(e).__name__)
-        }), 200
 
 
 

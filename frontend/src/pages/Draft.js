@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
+import { useNavigate } from 'react-router-dom';
 
 // Import all flag images
 import flagCanada from '../assets/Flag_Canada.png';
@@ -12,6 +13,20 @@ import flagCzechia from '../assets/Flag_Czechia.png';
 import flagRussia from '../assets/Flag_Russia.png';
 import flagSlovakia from '../assets/Flag_Slovakia.png';
 import flagSwitzerland from '../assets/Flag_Switzerland.png';
+
+// Import team logos dynamically
+function importAll(r) {
+  let images = {};
+  r.keys().forEach(item => {
+    // Extract team abbreviation from filename (Logo_XXX.png -> XXX)
+    const abbr = item.replace('./Logo_', '').replace('.png', '');
+    images[abbr] = r(item);
+  });
+  return images;
+}
+
+// Import all logos from assets folder
+const teamLogos = importAll(require.context('../assets', false, /Logo_.*\.png$/));
 
 // Initialize Supabase client
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -561,12 +576,92 @@ const getAccuracyBars = (volatility) => {
   }
 };
 
+// Add a styled component for team logo
+const TeamLogo = styled.img`
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  margin-right: 10px;
+`;
+
+// Add styled component for the two-column layout
+const TwoColumnPicksContainer = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 30px;
+`;
+
+const RoundHeader = styled.div`
+  background: linear-gradient(to right, #B30E16, #333);
+  color: white;
+  font-weight: bold;
+  padding: 15px;
+  font-size: 20px;
+  margin: 25px 0 15px 0;
+  border-radius: 6px;
+  box-shadow: 0 3px 5px rgba(0,0,0,0.2);
+`;
+
+const PickItem = styled.div`
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background-color: #2a2a2a;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  transition: transform 0.1s ease-in-out;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+  }
+  
+  .pick-number {
+    width: 40px;
+    font-weight: bold;
+    text-align: center;
+    color: #ddd;
+  }
+  
+  .team-info {
+    display: flex;
+    align-items: center;
+    flex: 1;
+  }
+  
+  .team-name {
+    margin-left: 5px;
+  }
+  
+  .received-indicator {
+    color: #4a90e2;
+    margin-left: 8px;
+    font-size: 12px;
+  }
+  
+  .traded-indicator {
+    color: #e74c3c;
+    margin-left: 8px;
+    font-size: 12px;
+  }
+  
+  .protected-indicator {
+    color: #f39c12;
+    margin-left: 8px;
+    font-size: 12px;
+  }
+`;
+
 const Draft = () => {
   const [activeTab, setActiveTab] = useState('prospects');
   const [searchQuery, setSearchQuery] = useState('');
   const [draftYear, setDraftYear] = useState(new Date().getFullYear());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  const navigate = useNavigate();
   
   // Data states
   const [draftInfo, setDraftInfo] = useState(null);
@@ -580,9 +675,15 @@ const Draft = () => {
   const [nationalityFilter, setNationalityFilter] = useState('all');
   const [teamFilter, setTeamFilter] = useState('all');
   const [leagueFilter, setLeagueFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('overall');
-  const [sortDirection, setSortDirection] = useState('desc');
+  const [sortBy, setSortBy] = useState('draft_ranking');
+  const [sortDirection, setSortDirection] = useState('asc');
   const [selectedPlayer, setSelectedPlayer] = useState(null);
+  
+  // Helper function to get team logo
+  const getTeamLogo = (teamAbbrev) => {
+    if (!teamAbbrev) return null;
+    return teamLogos[teamAbbrev] || null;
+  };
   
   // Fetch draft order
   const fetchDraftOrder = useCallback(async () => {
@@ -1429,10 +1530,9 @@ Check console for full details.`);
   
   // Add a placeholder function for starting a mock draft
   const startMockDraft = () => {
-    // This will be implemented in the future
-    alert('Mock Draft feature coming soon!');
-    // For now, just provide feedback to the user
-    console.log('Mock Draft button clicked - feature not yet implemented');
+    // Navigate to the SimulateDraft page with the current year
+    navigate(`/simulate-draft?year=${draftYear}`);
+    console.log(`Navigating to mock draft simulator for year ${draftYear}`);
   };
   
   if (loading) {
@@ -1452,58 +1552,56 @@ Check console for full details.`);
   return (
       <DraftContainer>
         <Header>
-        <h1>NHL Draft Central</h1>
-        </Header>
-        
-      {draftInfo && (
-        <>
-          {/* Replace simulation buttons with a single Start Mock Draft button */}
-          <div style={{ marginTop: '10px', marginBottom: '20px' }}>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-              <Button 
-                onClick={startMockDraft}
-                style={{ backgroundColor: '#4CAF50', fontWeight: 'bold' }}
+          <h1>NHL Draft Central</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            {/* Year selector */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <label style={{ color: '#C4CED4' }}>Year:</label>
+              <select
+                value={draftYear}
+                onChange={handleYearChange}
+                style={{
+                  padding: '5px 10px',
+                  backgroundColor: '#2a2a2a',
+                  color: '#fff',
+                  border: '1px solid #333',
+                  borderRadius: '4px'
+                }}
               >
-                Start Mock Draft
-              </Button>
-              
-              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <label style={{ color: '#C4CED4' }}>Year:</label>
-                <select
-                  value={draftYear}
-                  onChange={handleYearChange}
-                  style={{
-                    padding: '5px 10px',
-                    backgroundColor: '#2a2a2a',
-                    color: '#fff',
-                    border: '1px solid #333',
-                    borderRadius: '4px'
-                  }}
-                >
-                  <option value="2025">2025</option>
-                  <option value="2026">2026</option>
-                  <option value="2027">2027</option>
-                  <option value="2028">2028</option>
-                  <option value="2029">2029</option>
-                </select>
-              </div>
+                <option value="2025">2025</option>
+                <option value="2026">2026</option>
+                <option value="2027">2027</option>
+                <option value="2028">2028</option>
+                <option value="2029">2029</option>
+              </select>
             </div>
             
-            {/* Debug buttons - already hidden */}
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <Button onClick={checkSupabaseData} style={{ backgroundColor: '#3498db', display: 'none' }}>
+            {/* Start Mock Draft button */}
+            <Button 
+              onClick={startMockDraft}
+              style={{ backgroundColor: '#4CAF50', fontWeight: 'bold' }}
+            >
+              Start Mock Draft
+            </Button>
+          </div>
+        </Header>
+        
+        {draftInfo && (
+          <>
+            {/* Debug buttons - hidden */}
+            <div style={{ display: 'none', gap: '10px' }}>
+              <Button onClick={checkSupabaseData} style={{ backgroundColor: '#3498db' }}>
                 Check Raw Supabase Data
               </Button>
-              <Button onClick={checkDebugEndpoints} style={{ backgroundColor: '#e74c3c', display: 'none' }}>
+              <Button onClick={checkDebugEndpoints} style={{ backgroundColor: '#e74c3c' }}>
                 Check Debug Endpoints
               </Button>
-              <Button onClick={highlightNonOwnedPicks} style={{ backgroundColor: '#2ecc71', display: 'none' }}>
+              <Button onClick={highlightNonOwnedPicks} style={{ backgroundColor: '#2ecc71' }}>
                 Highlight Non-Owned Picks
               </Button>
             </div>
-          </div>
-        </>
-      )}
+          </>
+        )}
       
       <TabContainer>
         <TabButton 
@@ -1564,63 +1662,107 @@ Check console for full details.`);
               Loading draft order...
             </div>
           ) : (
-          <DraftPicksTable>
-            <tbody>
+            <>
               {Object.keys(picksByRound).sort((a, b) => Number(a) - Number(b)).map(roundNum => (
-                <React.Fragment key={`round-${roundNum}`}>
-                  <tr className="round-header">
-                    <td colSpan="3">{roundNum === '1' ? '1st Round' : roundNum === '2' ? '2nd Round' : roundNum === '3' ? '3rd Round' : `${roundNum}th Round`}</td>
-                  </tr>
-                  {picksByRound[roundNum]
-                    // Important: Always sort by overall_pick to ensure proper draft order
-                    .sort((a, b) => a.overall_pick - b.overall_pick)
-                    .map(pick => {
-                      // Get team abbreviation and received from info
-                      const teamAbbrev = pick.team?.abbreviation || pick.team_abbreviation || 'Unknown';
-                      const receivedFrom = pick.received_from || '';
-                      
-                      // Determine pick status
-                      const pickStatus = pick.pick_status || 'Owned';
-                      
-                      return (
-                <tr key={pick.id}>
-                          <td style={{ width: '50px', textAlign: 'center' }}>{pick.overall_pick}</td>
-                          <td style={{ width: '50px', textAlign: 'center' }}>
-                            {teamAbbrev}
-                          </td>
-                          <td>
-                            {receivedFrom || pick.received_from ? (
-                              <span>
-                                {pick.team?.name || teamAbbrev}
-                                <ReceivedIndicator>
-                                  ← {receivedFrom || pick.received_from}
-                                </ReceivedIndicator>
-                              </span>
-                            ) : pickStatus === 'Traded' ? (
-                              <span>
-                                {pick.team?.name || teamAbbrev}
-                                <span style={{ color: '#e74c3c', marginLeft: '8px' }}>
-                                  (Traded)
-                                </span>
-                              </span>
-                            ) : pickStatus === 'Top10Protected' ? (
-                              <span>
-                                {pick.team?.name || teamAbbrev}
-                                <span style={{ color: '#f39c12', marginLeft: '8px' }}>
-                                  (Protected)
-                                </span>
-                              </span>
-                            ) : (
-                              <span>{pick.team?.name || teamAbbrev}</span>
-                            )}
-                          </td>
-                </tr>
-                      );
-                    })}
-                </React.Fragment>
+                <div key={`round-${roundNum}`}>
+                  <RoundHeader>
+                    {roundNum === '1' ? '1st Round' : roundNum === '2' ? '2nd Round' : roundNum === '3' ? '3rd Round' : `${roundNum}th Round`}
+                  </RoundHeader>
+                  
+                  <TwoColumnPicksContainer>
+                    <div> {/* Left column - first half of picks in this round */}
+                      {picksByRound[roundNum]
+                        .sort((a, b) => a.pick_num - b.pick_num)
+                        .filter((_, index, array) => index < array.length / 2) // First half of picks in this round
+                        .map(pick => {
+                          const teamAbbrev = pick.team?.abbreviation || pick.team_abbreviation || 'Unknown';
+                          const receivedFrom = pick.received_from || '';
+                          const pickStatus = pick.pick_status || 'Owned';
+                          const teamName = pick.team?.name || 'Team';
+                          
+                          return (
+                            <PickItem key={pick.id}>
+                              <div className="pick-number">#{pick.overall_pick}</div>
+                              <div className="team-info">
+                                {getTeamLogo(teamAbbrev) ? (
+                                  <TeamLogo 
+                                    src={getTeamLogo(teamAbbrev)} 
+                                    alt={teamAbbrev} 
+                                  />
+                                ) : (
+                                  <div style={{ width: '30px', height: '30px', marginRight: '10px' }} />
+                                )}
+                                <div className="team-name">
+                                  {teamName} ({teamAbbrev})
+                                  
+                                  {receivedFrom || pick.received_from ? (
+                                    <span className="received-indicator">
+                                      ← {receivedFrom || pick.received_from}
+                                    </span>
+                                  ) : pickStatus === 'Traded' ? (
+                                    <span className="traded-indicator">
+                                      (Traded)
+                                    </span>
+                                  ) : pickStatus === 'Top10Protected' ? (
+                                    <span className="protected-indicator">
+                                      (Protected)
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </PickItem>
+                          );
+                        })}
+                    </div>
+                    
+                    <div> {/* Right column - second half of picks in this round */}
+                      {picksByRound[roundNum]
+                        .sort((a, b) => a.pick_num - b.pick_num)
+                        .filter((_, index, array) => index >= array.length / 2) // Second half of picks in this round
+                        .map(pick => {
+                          const teamAbbrev = pick.team?.abbreviation || pick.team_abbreviation || 'Unknown';
+                          const receivedFrom = pick.received_from || '';
+                          const pickStatus = pick.pick_status || 'Owned';
+                          const teamName = pick.team?.name || 'Team';
+                          
+                          return (
+                            <PickItem key={pick.id}>
+                              <div className="pick-number">#{pick.overall_pick}</div>
+                              <div className="team-info">
+                                {getTeamLogo(teamAbbrev) ? (
+                                  <TeamLogo 
+                                    src={getTeamLogo(teamAbbrev)} 
+                                    alt={teamAbbrev} 
+                                  />
+                                ) : (
+                                  <div style={{ width: '30px', height: '30px', marginRight: '10px' }} />
+                                )}
+                                <div className="team-name">
+                                  {teamName} ({teamAbbrev})
+                                  
+                                  {receivedFrom || pick.received_from ? (
+                                    <span className="received-indicator">
+                                      ← {receivedFrom || pick.received_from}
+                                    </span>
+                                  ) : pickStatus === 'Traded' ? (
+                                    <span className="traded-indicator">
+                                      (Traded)
+                                    </span>
+                                  ) : pickStatus === 'Top10Protected' ? (
+                                    <span className="protected-indicator">
+                                      (Protected)
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </PickItem>
+                          );
+                        })}
+                    </div>
+                  </TwoColumnPicksContainer>
+                </div>
               ))}
-            </tbody>
-          </DraftPicksTable>
+            </>
           )}
           
           {/* Add legend */}
@@ -1763,7 +1905,7 @@ Check console for full details.`);
                     <option value="league">League</option>
                     <option value="player_type">Type</option>
                     <option value="certainty">Certainty</option>
-                    <option value="draft_ranking">Ranking</option>
+                    <option value="draft_ranking">Central Ranking</option>
                   </select>
                   
                   <button 
@@ -1829,7 +1971,7 @@ Check console for full details.`);
                   
                   {/* Section 5: Ranking */}
                   <th onClick={() => handleSortChange('draft_ranking')} className="csr-column section-header section-border-left" style={{cursor: 'pointer'}}>
-                    Ranking {sortBy === 'draft_ranking' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    Central Ranking {sortBy === 'draft_ranking' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
                 </tr>
               </thead>

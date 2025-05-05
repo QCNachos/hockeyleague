@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from unittest.mock import MagicMock
 import traceback
 from sqlalchemy import text, inspect
+from datetime import datetime
 
 # Create a blueprint for health check endpoint
 supabase_bp = Blueprint('supabase', __name__)
@@ -252,24 +253,36 @@ def get_player_by_id(player_id):
     """
     return get_item_by_id('Player', player_id)
 
-def get_draft_eligible_players(limit=None):
+def get_draft_eligible_players(limit=None, year=None):
     """
-    Get draft-eligible players (17-year-olds not yet drafted)
+    Get draft-eligible players based on draft year
     
     Args:
         limit: Optional limit on number of players to return
+        year: The draft year (defaults to current year)
     
     Returns:
         List of player dictionaries
     """
     try:
-        supabase = get_supabase()
-        print(f"Fetching draft-eligible players from Supabase with limit={limit}")
+        # Determine correct draft year
+        current_year = datetime.now().year
+        draft_year = year or current_year
         
-        # Try first approach: age=17 and draft_year is null
+        # Calculate eligible age based on draft year
+        # For current year (2025): players age 17
+        # For 2026: players age 16
+        # For 2027: players age 15, etc.
+        eligible_age = 17 - (draft_year - current_year)
+        
+        supabase = get_supabase()
+        print(f"Fetching draft-eligible players from Supabase with limit={limit} for draft year {draft_year}")
+        print(f"Looking for players with age={eligible_age}")
+        
+        # Try first approach: filtering by calculated age and draft_year is null
         query = supabase.table('Player')\
             .select('*')\
-            .eq('age', 17)\
+            .eq('age', eligible_age)\
             .is_('draft_year', 'null')\
             .order('overall_rating', desc=True)
         
@@ -301,20 +314,20 @@ def get_draft_eligible_players(limit=None):
             
             return players
             
-        print("No players found using age=17 + draft_year is null, trying alternatives...")
+        print(f"No players found using age={eligible_age} + draft_year is null, trying alternatives...")
         
-        # Try second approach: Just age=17
+        # Try second approach: Just filter by eligible age
         try:
             alt_query = supabase.table('Player')\
                 .select('*')\
-                .eq('age', 17)\
+                .eq('age', eligible_age)\
                 .order('overall_rating', desc=True)
                 
             if limit:
                 alt_query = alt_query.limit(limit)
                 
             alt_response = alt_query.execute()
-            print(f"Second query found {len(alt_response.data)} players with just age=17")
+            print(f"Second query found {len(alt_response.data)} players with just age={eligible_age}")
             
             if alt_response.data and len(alt_response.data) > 0:
                 return alt_response.data
@@ -341,7 +354,7 @@ def get_draft_eligible_players(limit=None):
                         print(f"Found field {field} in Player table, trying to filter with it")
                         field_query = supabase.table('Player')\
                             .select('*')\
-                            .eq('age', 17)\
+                            .eq('age', eligible_age)\
                             .is_(field, 'null')\
                             .order('overall_rating', desc=True)
                             
@@ -356,10 +369,11 @@ def get_draft_eligible_players(limit=None):
         except Exception as fields_err:
             print(f"Error in fields exploration: {str(fields_err)}")
         
-        # Final approach: Just return all players and filter on client side
-        print("All previous approaches failed, retrieving all players...")
+        # Final approach: Just return all players of the eligible age
+        print("All previous approaches failed, retrieving all players of eligible age...")
         all_players_query = supabase.table('Player')\
             .select('*')\
+            .eq('age', eligible_age)\
             .order('overall_rating', desc=True)
             
         if limit:
@@ -367,10 +381,10 @@ def get_draft_eligible_players(limit=None):
             
         all_players_response = all_players_query.execute()
         
-        # Client-side filter for players who appear to be 17-year-olds without draft info
+        # Client-side filter for players who appear to be eligible
         filtered_players = []
         for player in all_players_response.data:
-            if player.get('age') == 17:
+            if player.get('age') == eligible_age:
                 # Check various draft fields to ensure they don't have draft information
                 has_draft_info = False
                 for field in ['draft_year', 'draft_round', 'draft_pick', 'draft_overall', 'draft_team_id']:

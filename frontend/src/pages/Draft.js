@@ -180,7 +180,7 @@ const ProspectTable = styled.table`
     text-align: center;
   }
   
-  .age-column, .overall-column, .csr-column, .height-column {
+  .age-column, .overall-column, .csr-column, .height-column, .laterality-column {
     text-align: center;
   }
   
@@ -190,7 +190,7 @@ const ProspectTable = styled.table`
     max-width: 180px;
   }
   
-  .position-column, .age-column, .height-column {
+  .position-column, .age-column, .height-column, .laterality-column {
     width: 8%;
   }
   
@@ -1552,28 +1552,36 @@ Check console for full details.`);
   return (
       <DraftContainer>
         <Header>
-          <h1>NHL Draft Central</h1>
+        <h1>NHL Draft Central</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             {/* Year selector */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <label style={{ color: '#C4CED4' }}>Year:</label>
-              <select
-                value={draftYear}
-                onChange={handleYearChange}
-                style={{
-                  padding: '5px 10px',
-                  backgroundColor: '#2a2a2a',
-                  color: '#fff',
-                  border: '1px solid #333',
-                  borderRadius: '4px'
-                }}
-              >
-                <option value="2025">2025</option>
-                <option value="2026">2026</option>
-                <option value="2027">2027</option>
-                <option value="2028">2028</option>
-                <option value="2029">2029</option>
-              </select>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <label style={{ color: '#C4CED4' }}>Year:</label>
+                    <select
+                      value={draftYear}
+                      onChange={handleYearChange}
+                      style={{
+                        padding: '5px 10px',
+                        backgroundColor: '#2a2a2a',
+                        color: '#fff',
+                        border: '1px solid #333',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      <option value="2025">2025</option>
+                      <option value="2026">2026</option>
+                      <option value="2027">2027</option>
+                      <option value="2028">2028</option>
+                      <option value="2029">2029</option>
+                      <option value="2030">2030</option>
+                    </select>
+                </div>
+                <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                    {draftYear > new Date().getFullYear() ? 
+                    `Showing ${17 - (draftYear - new Date().getFullYear())}-year-old prospects` : 
+                    `Showing 17-year-old prospects`}
+                </span>
             </div>
             
             {/* Start Mock Draft button */}
@@ -1583,7 +1591,7 @@ Check console for full details.`);
             >
               Start Mock Draft
             </Button>
-          </div>
+            </div>
         </Header>
         
         {draftInfo && (
@@ -1599,9 +1607,9 @@ Check console for full details.`);
               <Button onClick={highlightNonOwnedPicks} style={{ backgroundColor: '#2ecc71' }}>
                 Highlight Non-Owned Picks
               </Button>
-            </div>
-          </>
-        )}
+          </div>
+        </>
+      )}
       
       <TabContainer>
         <TabButton 
@@ -1671,16 +1679,16 @@ Check console for full details.`);
                   
                   <TwoColumnPicksContainer>
                     <div> {/* Left column - first half of picks in this round */}
-                      {picksByRound[roundNum]
+                  {picksByRound[roundNum]
                         .sort((a, b) => a.pick_num - b.pick_num)
                         .filter((_, index, array) => index < array.length / 2) // First half of picks in this round
-                        .map(pick => {
-                          const teamAbbrev = pick.team?.abbreviation || pick.team_abbreviation || 'Unknown';
-                          const receivedFrom = pick.received_from || '';
-                          const pickStatus = pick.pick_status || 'Owned';
+                    .map(pick => {
+                      const teamAbbrev = pick.team?.abbreviation || pick.team_abbreviation || 'Unknown';
+                      const receivedFrom = pick.received_from || '';
+                      const pickStatus = pick.pick_status || 'Owned';
                           const teamName = pick.team?.name || 'Team';
-                          
-                          return (
+                      
+                      return (
                             <PickItem key={pick.id}>
                               <div className="pick-number">#{pick.overall_pick}</div>
                               <div className="team-info">
@@ -1695,18 +1703,18 @@ Check console for full details.`);
                                 <div className="team-name">
                                   {teamName} ({teamAbbrev})
                                   
-                                  {receivedFrom || pick.received_from ? (
+                            {receivedFrom || pick.received_from ? (
                                     <span className="received-indicator">
-                                      ← {receivedFrom || pick.received_from}
-                                    </span>
-                                  ) : pickStatus === 'Traded' ? (
+                                  ← {receivedFrom || pick.received_from}
+                              </span>
+                            ) : pickStatus === 'Traded' ? (
                                     <span className="traded-indicator">
-                                      (Traded)
-                                    </span>
-                                  ) : pickStatus === 'Top10Protected' ? (
+                                  (Traded)
+                              </span>
+                            ) : pickStatus === 'Top10Protected' ? (
                                     <span className="protected-indicator">
-                                      (Protected)
-                                    </span>
+                                  (Protected)
+                                </span>
                                   ) : null}
                                 </div>
                               </div>
@@ -1736,7 +1744,7 @@ Check console for full details.`);
                                   />
                                 ) : (
                                   <div style={{ width: '30px', height: '30px', marginRight: '10px' }} />
-                                )}
+                            )}
                                 <div className="team-name">
                                   {teamName} ({teamAbbrev})
                                   
@@ -1756,8 +1764,8 @@ Check console for full details.`);
                                 </div>
                               </div>
                             </PickItem>
-                          );
-                        })}
+                      );
+                    })}
                     </div>
                   </TwoColumnPicksContainer>
                 </div>
@@ -1927,7 +1935,13 @@ Check console for full details.`);
           
           <p style={{ color: '#bbb', marginBottom: '20px' }}>
                 Displaying {filteredAndSortedPlayers.length} draft-eligible players out of {draftablePlayers.length} total prospects.
-                These players are automatically eligible for the {draftYear} draft.
+                {draftYear === new Date().getFullYear() ? (
+                  `These 17-year-old players are automatically eligible for the ${draftYear} draft.`
+                ) : draftYear > new Date().getFullYear() ? (
+                  `These ${17 - (draftYear - new Date().getFullYear())}-year-old players will be eligible for the ${draftYear} draft.`
+                ) : (
+                  `These players are automatically eligible for the ${draftYear} draft.`
+                )}
           </p>
           
               {filteredAndSortedPlayers.length === 0 ? (
@@ -1947,6 +1961,7 @@ Check console for full details.`);
                   <th onClick={() => handleSortChange('position')} className="position-column section-header section-border-left" style={{cursor: 'pointer'}}>
                     Pos {sortBy === 'position' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </th>
+                  <th className="laterality-column section-header">Literality</th>
                   <th className="height-column section-header">Height</th>
                   <th className="age-column section-header section-border-right">Age</th>
                   
@@ -2002,6 +2017,7 @@ Check console for full details.`);
                           </td>
                           
                           <td className="position-column section-border-left">{player.position_primary || player.position || 'N/A'}</td>
+                          <td className="laterality-column">{player.shooting || 'N/A'}</td>
                           <td className="height-column">{heightDisplay}</td>
                           <td className="age-column section-border-right">{player.age || 'N/A'}</td>
                           

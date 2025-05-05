@@ -19,6 +19,9 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import LineCombinations from './pages/LineCombinations';
 import AssetMovement from './pages/AssetMovement';
+import Awards from './pages/Awards';
+import AwardsCeremony from './pages/AwardsCeremony';
+import Settings from './pages/Settings';
 
 // Game Modes
 import FranchiseMode from './pages/gameModes/FranchiseMode';
@@ -89,8 +92,13 @@ function App() {
             {/* Analytics */}
             <Route path="stats" element={<Statistics />} />
             <Route path="standings" element={<Standings />} />
+            <Route path="awards" element={<Awards />} />
+            <Route path="awards-ceremony" element={<AwardsCeremony />} />
             <Route path="draft" element={<Draft />} />
             <Route path="simulate-draft" element={<SimulateDraft />} />
+            
+            {/* App Settings */}
+            <Route path="settings" element={<Settings />} />
             
             {/* Protected routes */}
             <Route 

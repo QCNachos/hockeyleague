@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import styled from 'styled-components';
-import { FaChevronDown, FaChevronRight } from 'react-icons/fa';
+import { FaChevronDown, FaChevronRight, FaCog } from 'react-icons/fa';
 
 const SidebarContainer = styled.nav`
   display: flex;
@@ -84,6 +84,36 @@ const NavContent = styled.div`
   transition: max-height 0.3s ease-in-out;
 `;
 
+const FooterSection = styled.div`
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid #333;
+`;
+
+const SettingsLink = styled(NavLink)`
+  display: flex;
+  align-items: center;
+  padding: 15px 20px;
+  color: #C4CED4;
+  text-decoration: none;
+  transition: background-color 0.2s, color 0.2s;
+  
+  &:hover {
+    background-color: #2a2a2a;
+    color: #fff;
+  }
+  
+  &.active {
+    background-color: #2a2a2a;
+    color: #B30E16;
+    border-left: 3px solid #B30E16;
+  }
+  
+  svg {
+    margin-right: 10px;
+  }
+`;
+
 const Sidebar = () => {
   const { isAuthenticated } = useAuth();
   const [sections, setSections] = useState({
@@ -150,6 +180,7 @@ const Sidebar = () => {
         <NavContent isOpen={sections.analytics}>
           <StyledNavLink to="/stats">Statistics</StyledNavLink>
           <StyledNavLink to="/standings">Standings</StyledNavLink>
+          <StyledNavLink to="/awards">Awards</StyledNavLink>
           <StyledNavLink to="/draft">Draft Center</StyledNavLink>
         </NavContent>
       </NavSection>
@@ -168,6 +199,12 @@ const Sidebar = () => {
           </NavSection>
         </>
       )}
+      
+      <FooterSection>
+        <SettingsLink to="/settings">
+          <FaCog /> Application Settings
+        </SettingsLink>
+      </FooterSection>
     </SidebarContainer>
   );
 };

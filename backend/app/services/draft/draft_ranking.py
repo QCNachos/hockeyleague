@@ -26,8 +26,8 @@ class DraftRankingService:
     
     # Define weight constants for the ranking formula
     WEIGHTS = {
-        'overall': 0.35,       # w1
-        'potential': 0.3,     # w2
+        'overall': 0.325,       # w1
+        'potential': 0.325,     # w2
         'height': 0.125,        # w3
         'league': 0.05,        # w4
         'position': 0.125,      # w5
@@ -55,48 +55,48 @@ class DraftRankingService:
     }
     
     # Default value for countries not in the list
-    DEFAULT_COUNTRY_VALUE = 85
+    DEFAULT_COUNTRY_VALUE = 80
     
     # Define potential mapping to numeric values
     POTENTIAL_VALUES = {
         'Generational': 100,
-        'Generational Goalie': 100,
+        'Generational Goalie': 98,
         'Generational Def': 100,
-        'Franchise': 90,
+        'Franchise': 92.5,
         'Franchise Goalie': 90,
-        'Franchise Def': 90,
-        'Game Breaker': 82,
-        'Game Breaker Goalie': 82,
-        'Game Breaker Def': 82,
-        'Elite': 70,
-        'Elite Goalie': 70,
-        'Elite Def': 70,
-        'Lead Starter': 55,
+        'Franchise Def': 92.5,
+        'Game Breaker': 85,
+        'Game Breaker Goalie': 80,
+        'Game Breaker Def': 85,
+        'Elite': 75,
+        'Elite Goalie': 67.5,
+        'Elite Def': 75,
+        'Lead Starter': 52.5,
         'Top Pair': 55,
         'Top Line': 55,
-        'Starter': 40,
-        'Top 3': 40,
-        'Top 6 F': 40,
-        'Occasional Starter': 33,
-        'Top 4': 33,
-        'Middle 6': 33,
-        'Backup': 27,
-        'Top 6': 27,
-        'Bottom 6': 27,
-        'Fringe NHLer Goalie': 20,
-        'Fringe NHLer Def': 20,
-        'Fringe NHLer': 20
+        'Starter': 42.5,
+        'Top 3': 45,
+        'Top 6 F': 42.5,
+        'Occasional Starter': 25,
+        'Top 4': 32.5,
+        'Middle 6': 27.5,
+        'Backup': 20,
+        'Top 6': 20,
+        'Bottom 6': 20,
+        'Fringe NHLer Goalie': 15,
+        'Fringe NHLer Def': 15,
+        'Fringe NHLer': 15
     }
     
     # Default value for potential not in the list
-    DEFAULT_POTENTIAL_VALUE = 15
+    DEFAULT_POTENTIAL_VALUE = 10
     
     # Define volatility mapping to numeric values (higher means less volatile)
     VOLATILITY_VALUES = {
         'minimal': 100,
         'low': 90,
         'medium': 82,
-        'high': 60,
+        'high': 62,
         'very high': 50
     }
     
@@ -670,11 +670,15 @@ class DraftRankingService:
         if not year:
             year = datetime.now().year
             
+        # Calculate the eligible age based on draft year
+        current_year = datetime.now().year
+        eligible_age = 17 - (year - current_year)
+            
         try:
             # First try to get draft-eligible players from Supabase
             try:
                 from ...supabase_client import get_draft_eligible_players
-                eligible_players = get_draft_eligible_players()
+                eligible_players = get_draft_eligible_players(year=year)
                 
                 if eligible_players and len(eligible_players) > 0:
                     # Calculate ranking value for each player
@@ -693,9 +697,9 @@ class DraftRankingService:
                 print(f"Error fetching players from Supabase: {str(e)}")
             
             # Fallback to using SQLAlchemy
-            # Get all draft-eligible players (17-year-olds without a draft year)
+            # Get all draft-eligible players based on the eligible age without a draft year
             players = Player.query.filter(
-                Player.age == 17,
+                Player.age == eligible_age,
                 Player.draft_year.is_(None)
             ).all()
             

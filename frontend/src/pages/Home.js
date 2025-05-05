@@ -221,6 +221,7 @@ const Home = () => {
       </FeaturesGrid>
       
       <SectionTitle>Analytics</SectionTitle>
+      
       <FeaturesGrid>
         <FeatureCard>
           <h3>Standings</h3>
@@ -238,6 +239,15 @@ const Home = () => {
             Analyze performance with detailed stats and visualizations.
           </p>
           <ActionButton to="/stats">View Stats</ActionButton>
+        </FeatureCard>
+        
+        <FeatureCard>
+          <h3>Awards & Trophies</h3>
+          <p>
+            View historical winners of major hockey awards and trophies.
+            Browse by league, award type, or year to see the legends of the game.
+          </p>
+          <ActionButton to="/awards">View Awards</ActionButton>
         </FeatureCard>
         
         <FeatureCard>

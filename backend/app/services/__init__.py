@@ -17,10 +17,10 @@ def register_service_blueprints(app):
     # Import all services with blueprints
     from . import contract_manager, lines, statistics
     from . import team_formation, chemistry, coach, game_simulation, team_service
-    from . import league
+    from . import league, awards
     from ..supabase_client import supabase_bp
     
-    # Print all available routes before registration to help debug
+    # Print all available blueprints before registration to help debug
     print("Available blueprints to register:")
     if hasattr(lines, 'lines_bp'):
         print(f"- lines_bp blueprint available")
@@ -69,6 +69,11 @@ def register_service_blueprints(app):
     if hasattr(league, 'league_bp'):
         app.register_blueprint(league.league_bp, url_prefix='/api/leagues')
         print("Registered league blueprint with prefix /api/leagues")
+    
+    # Register awards blueprint
+    if hasattr(awards, 'awards_bp'):
+        app.register_blueprint(awards.awards_bp, url_prefix='/api/awards')
+        print("Registered awards blueprint with prefix /api/awards")
 
     # Print all routes after registration to help debug
     print("All registered routes:")

@@ -358,27 +358,32 @@ class DraftEngine:
     
     def _ensure_draft_eligible_players(self) -> None:
         """
-        Check for existing draft-eligible players.
-        No longer generates new players as we'll use existing 17-year-olds.
+        Check for existing draft-eligible players based on draft year.
+        No longer generates new players as we'll use existing players of appropriate age.
         """
         try:
+            # Calculate eligible age based on draft year
+            current_year = datetime.now().year
+            draft_year = getattr(self, 'year', current_year)
+            eligible_age = 17 - (draft_year - current_year)
+            
             # Count existing draft-eligible players
             try:
                 draft_eligible_count = Player.query.filter(
-                    Player.age == 17,
+                    Player.age == eligible_age,
                     Player.draft_year.is_(None)
                 ).count()
-                print(f"Found {draft_eligible_count} draft-eligible players")
+                print(f"Found {draft_eligible_count} draft-eligible players (age {eligible_age}) for year {draft_year}")
             except Exception as e:
                 print(f"Error counting draft-eligible players: {str(e)}")
                 draft_eligible_count = 0
             
             # Log the number of eligible players but don't generate new ones
             if draft_eligible_count == 0:
-                print("WARNING: No draft-eligible players found in the database.")
-                print("Please ensure 17-year-old players exist before using the draft system.")
+                print(f"WARNING: No draft-eligible players found in the database for age {eligible_age}.")
+                print(f"Please ensure {eligible_age}-year-old players exist before using the draft system for year {draft_year}.")
             else:
-                print(f"Draft system ready with {draft_eligible_count} eligible players.")
+                print(f"Draft system ready with {draft_eligible_count} eligible players for year {draft_year}.")
             
         except Exception as e:
             print(f"Error in _ensure_draft_eligible_players: {str(e)}")
@@ -435,9 +440,16 @@ class DraftEngine:
         try:
             from ...services.team_service import TeamService
             
-            # First, get all draft-eligible players
+            # Determine eligible age based on draft year
+            current_year = datetime.now().year
+            draft_year = getattr(self, 'year', current_year)
+            eligible_age = 17 - (draft_year - current_year)
+            
+            print(f"Fetching draft-eligible players for year {draft_year} (age: {eligible_age})")
+            
+            # Get all draft-eligible players
             query = Player.query.filter(
-                Player.age == 17,
+                Player.age == eligible_age,
                 Player.draft_year.is_(None)
             ).order_by(Player.overall_rating.desc())
             
@@ -465,29 +477,22 @@ class DraftEngine:
                 
                 enhanced_players.append(player_dict)
             
-            # Get draft rankings for these players using the new service
-            try:
-                # Calculate ranking value for each player
-                for player in enhanced_players:
-                    player['ranking_value'] = DraftRankingService.calculate_draft_ranking_value(player)
-                
-                # Sort by ranking value in descending order
-                enhanced_players.sort(key=lambda p: p.get('ranking_value', 0), reverse=True)
-                
-                # Add ranking position
-                for i, player in enumerate(enhanced_players):
-                    player['draft_ranking'] = i + 1
-                    # Format the ranking value to 2 decimal places for display
-                    player['ranking_display'] = f"{int(player.get('draft_ranking', 0))}"
-            except Exception as rank_err:
-                print(f"Error calculating draft rankings: {str(rank_err)}")
-                # Continue without rankings if there's an error
+            # If no players were found in the database, try to get them from Supabase
+            if not enhanced_players:
+                try:
+                    from ...supabase_client import get_draft_eligible_players
+                    supabase_players = get_draft_eligible_players(limit, draft_year)
+                    if supabase_players:
+                        return supabase_players
+                except Exception as e:
+                    print(f"Error fetching from Supabase in get_draft_eligible_players: {str(e)}")
             
             return enhanced_players
             
         except Exception as e:
-            print(f"Error getting draft-eligible players: {str(e)}")
-            return []  # Return empty list on error
+            print(f"Error in get_draft_eligible_players: {str(e)}")
+            traceback.print_exc()
+            return []
     
     def make_pick(self, draft_pick_id: int, player_id: int) -> Dict[str, Any]:
         """
@@ -716,7 +721,7 @@ def get_draft_prospects():
             
             # Try to fetch directly with Supabase
             print("Trying to fetch draft eligible players directly from Supabase first")
-            prospects = get_draft_eligible_players(limit)
+            prospects = get_draft_eligible_players(limit, year)
             
             if prospects and len(prospects) > 0:
                 # Enhance prospects with league information
@@ -774,7 +779,7 @@ def get_draft_prospects():
                 
                 # Try to fetch directly with Supabase
                 print("Trying to fetch draft eligible players directly from Supabase as fallback")
-                prospects = get_draft_eligible_players(limit)
+                prospects = get_draft_eligible_players(limit, year)
                 
                 if prospects and len(prospects) > 0:
                     # Calculate draft rankings
@@ -828,7 +833,7 @@ def get_draft_prospects():
                 
                 # Try to fetch directly with Supabase
                 print("Falling back to Supabase after draft engine error")
-                prospects = get_draft_eligible_players(limit)
+                prospects = get_draft_eligible_players(limit, year)
                 
                 if prospects and len(prospects) > 0:
                     # Calculate draft rankings

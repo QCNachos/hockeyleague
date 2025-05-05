@@ -143,6 +143,14 @@ const GameModeButton = styled.button`
   }
 `;
 
+const GameModeDescription = styled.div`
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #2a2a2a;
+  border-radius: 5px;
+  color: #C4CED4;
+`;
+
 const StartGameButton = styled.button`
   padding: 15px 30px;
   border: none;
@@ -166,13 +174,33 @@ const StartGameButton = styled.button`
   }
 `;
 
+// Game simulation modes with descriptions
+const SIMULATION_MODES = {
+  play_by_play: {
+    label: 'Play-by-Play',
+    description: 'Full play-by-play simulation with 20 minute periods. Watch the game unfold on the rink with realistic player movements.'
+  },
+  fast_play_by_play: {
+    label: 'Fast Play-by-Play',
+    description: 'Condensed play-by-play simulation with 3 minute periods. Visually see the game on the rink but at a faster pace.'
+  },
+  simulation: {
+    label: 'Simulation',
+    description: 'Simple simulation with key game events. No rink visual, but includes a game feed with approximately 30 seconds per period.'
+  },
+  fast_simulation: {
+    label: 'Fast Simulation',
+    description: 'Instant simulation with no visual feedback. Just the final game results and statistics.'
+  }
+};
+
 const PreGame = () => {
   const navigate = useNavigate();
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [homeTeam, setHomeTeam] = useState(null);
   const [awayTeam, setAwayTeam] = useState(null);
-  const [gameMode, setGameMode] = useState(null);
+  const [gameMode, setGameMode] = useState('fast_play_by_play');
   
   // Mock team data - in a real app, this would come from an API
   useEffect(() => {
@@ -280,10 +308,21 @@ const PreGame = () => {
   };
 
   const handleStartGame = () => {
-    // In a real application, you would save the game configuration and navigate to the game screen
-    console.log('Starting game with:', { homeTeam, awayTeam, gameMode });
-    // navigate('/game/play');
-    alert('Game functionality coming soon!');
+    if (!homeTeam || !awayTeam || !gameMode) return;
+    
+    // Create a game object to pass to the simulation screen
+    const gameData = {
+      id: Date.now(), // Temporary ID for demo
+      homeTeam: homeTeam,
+      awayTeam: awayTeam,
+      simulationMode: gameMode
+    };
+    
+    // Store game data in session storage for the simulation screen
+    sessionStorage.setItem('currentGame', JSON.stringify(gameData));
+    
+    // Navigate to the simulation screen
+    navigate('/game/simulation');
   };
 
   if (loading) {
@@ -303,49 +342,43 @@ const PreGame = () => {
           <h2>Home Team</h2>
           <TeamSelectContainer>
             <StyledSelect 
-              value={homeTeam?.id || ''}
+              value={homeTeam ? homeTeam.id : ''}
               onChange={handleHomeTeamChange}
             >
-              <option value="">Select Home Team</option>
+              <option value="" disabled>Select Home Team</option>
               {teams.map(team => (
-                <option key={team.id} value={team.id}>{team.name}</option>
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
               ))}
             </StyledSelect>
           </TeamSelectContainer>
           
           {homeTeam && (
             <>
-              <TeamLogo>{homeTeam.abbreviation}</TeamLogo>
+              <TeamLogo>
+                {homeTeam.abbreviation}
+              </TeamLogo>
               <TeamRatings>
                 <RatingItem>
                   <RatingLabel>Overall</RatingLabel>
-                  <RatingValue value={homeTeam.ratings.overall}>
-                    {homeTeam.ratings.overall}
-                  </RatingValue>
+                  <RatingValue value={homeTeam.ratings.overall}>{homeTeam.ratings.overall}</RatingValue>
                 </RatingItem>
                 <RatingItem>
                   <RatingLabel>Offense</RatingLabel>
-                  <RatingValue value={homeTeam.ratings.offense}>
-                    {homeTeam.ratings.offense}
-                  </RatingValue>
+                  <RatingValue value={homeTeam.ratings.offense}>{homeTeam.ratings.offense}</RatingValue>
                 </RatingItem>
                 <RatingItem>
                   <RatingLabel>Defense</RatingLabel>
-                  <RatingValue value={homeTeam.ratings.defense}>
-                    {homeTeam.ratings.defense}
-                  </RatingValue>
+                  <RatingValue value={homeTeam.ratings.defense}>{homeTeam.ratings.defense}</RatingValue>
                 </RatingItem>
                 <RatingItem>
                   <RatingLabel>Special Teams</RatingLabel>
-                  <RatingValue value={homeTeam.ratings.specialTeams}>
-                    {homeTeam.ratings.specialTeams}
-                  </RatingValue>
+                  <RatingValue value={homeTeam.ratings.specialTeams}>{homeTeam.ratings.specialTeams}</RatingValue>
                 </RatingItem>
                 <RatingItem>
                   <RatingLabel>Goaltending</RatingLabel>
-                  <RatingValue value={homeTeam.ratings.goaltending}>
-                    {homeTeam.ratings.goaltending}
-                  </RatingValue>
+                  <RatingValue value={homeTeam.ratings.goaltending}>{homeTeam.ratings.goaltending}</RatingValue>
                 </RatingItem>
               </TeamRatings>
             </>
@@ -358,49 +391,43 @@ const PreGame = () => {
           <h2>Away Team</h2>
           <TeamSelectContainer>
             <StyledSelect 
-              value={awayTeam?.id || ''}
+              value={awayTeam ? awayTeam.id : ''}
               onChange={handleAwayTeamChange}
             >
-              <option value="">Select Away Team</option>
+              <option value="" disabled>Select Away Team</option>
               {teams.map(team => (
-                <option key={team.id} value={team.id}>{team.name}</option>
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
               ))}
             </StyledSelect>
           </TeamSelectContainer>
           
           {awayTeam && (
             <>
-              <TeamLogo>{awayTeam.abbreviation}</TeamLogo>
+              <TeamLogo>
+                {awayTeam.abbreviation}
+              </TeamLogo>
               <TeamRatings>
                 <RatingItem>
                   <RatingLabel>Overall</RatingLabel>
-                  <RatingValue value={awayTeam.ratings.overall}>
-                    {awayTeam.ratings.overall}
-                  </RatingValue>
+                  <RatingValue value={awayTeam.ratings.overall}>{awayTeam.ratings.overall}</RatingValue>
                 </RatingItem>
                 <RatingItem>
                   <RatingLabel>Offense</RatingLabel>
-                  <RatingValue value={awayTeam.ratings.offense}>
-                    {awayTeam.ratings.offense}
-                  </RatingValue>
+                  <RatingValue value={awayTeam.ratings.offense}>{awayTeam.ratings.offense}</RatingValue>
                 </RatingItem>
                 <RatingItem>
                   <RatingLabel>Defense</RatingLabel>
-                  <RatingValue value={awayTeam.ratings.defense}>
-                    {awayTeam.ratings.defense}
-                  </RatingValue>
+                  <RatingValue value={awayTeam.ratings.defense}>{awayTeam.ratings.defense}</RatingValue>
                 </RatingItem>
                 <RatingItem>
                   <RatingLabel>Special Teams</RatingLabel>
-                  <RatingValue value={awayTeam.ratings.specialTeams}>
-                    {awayTeam.ratings.specialTeams}
-                  </RatingValue>
+                  <RatingValue value={awayTeam.ratings.specialTeams}>{awayTeam.ratings.specialTeams}</RatingValue>
                 </RatingItem>
                 <RatingItem>
                   <RatingLabel>Goaltending</RatingLabel>
-                  <RatingValue value={awayTeam.ratings.goaltending}>
-                    {awayTeam.ratings.goaltending}
-                  </RatingValue>
+                  <RatingValue value={awayTeam.ratings.goaltending}>{awayTeam.ratings.goaltending}</RatingValue>
                 </RatingItem>
               </TeamRatings>
             </>
@@ -409,44 +436,29 @@ const PreGame = () => {
       </TeamsContainer>
       
       <GameOptionsContainer>
-        <h2>Select Game Mode</h2>
+        <h2>Simulation Mode</h2>
         <GameModeGrid>
-          <GameModeButton 
-            selected={gameMode === 'play'}
-            onClick={() => handleGameModeSelect('play')}
-          >
-            Play
-          </GameModeButton>
-          <GameModeButton 
-            selected={gameMode === 'play-by-play'}
-            onClick={() => handleGameModeSelect('play-by-play')}
-          >
-            Play-by-Play
-          </GameModeButton>
-          <GameModeButton 
-            selected={gameMode === 'fast-play-by-play'}
-            onClick={() => handleGameModeSelect('fast-play-by-play')}
-          >
-            Fast Play-by-Play
-          </GameModeButton>
-          <GameModeButton 
-            selected={gameMode === 'simulation'}
-            onClick={() => handleGameModeSelect('simulation')}
-          >
-            Simulation
-          </GameModeButton>
-          <GameModeButton 
-            selected={gameMode === 'fast-simulation'}
-            onClick={() => handleGameModeSelect('fast-simulation')}
-          >
-            Fast Simulation
-          </GameModeButton>
+          {Object.entries(SIMULATION_MODES).map(([key, { label }]) => (
+            <GameModeButton
+              key={key}
+              selected={gameMode === key}
+              onClick={() => handleGameModeSelect(key)}
+            >
+              {label}
+            </GameModeButton>
+          ))}
         </GameModeGrid>
+        
+        {gameMode && (
+          <GameModeDescription>
+            {SIMULATION_MODES[gameMode].description}
+          </GameModeDescription>
+        )}
       </GameOptionsContainer>
       
       <StartGameButton 
-        disabled={!homeTeam || !awayTeam || !gameMode}
         onClick={handleStartGame}
+        disabled={!homeTeam || !awayTeam || !gameMode}
       >
         Start Game
       </StartGameButton>

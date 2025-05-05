@@ -726,8 +726,8 @@ const SimulateDraft = () => {
         from_team: p.from_team?.abbreviation || 'N/A',
       })));
 
-      // Create lottery odds matrix for 1st, 2nd, and 3rd overall picks based on NHL odds
-      const lotteryOdds = {
+      // Create lottery odds matrix - will be reused in the map function for each team
+      const lotteryOddsMatrix = {
         1: { first: 25.5, second: 18.8, third: 55.7 }, // Team in last place (worst record)
         2: { first: 13.5, second: 14.4, third: 33.1 },
         3: { first: 11.5, second: 12.1, third: 29.8 },
@@ -756,7 +756,7 @@ const SimulateDraft = () => {
           const position = team.position;
           // Use the provided odds from the matrix based on team position
           // Convert percentage to whole number for weighting (25.5% becomes 255)
-          const weight = Math.round(lotteryOdds[position][oddsType] * 10);
+          const weight = Math.round(lotteryOddsMatrix[position][oddsType] * 10);
           
           for (let i = 0; i < weight; i++) {
             weightedArray.push(position);
@@ -795,12 +795,18 @@ const SimulateDraft = () => {
         }, 30);
       };
       
+      // Start the animation sequence
+      startProgressAnimation();
+      
       // Take only the bottom 16 teams for the lottery
-      const lotteryTeams = draftOrder.slice(0, 16).map((team, index) => ({
-        ...team,
-        position: index + 1, // Position 1-16 (worst to best)
-        odds: lotteryOdds[index + 1].first // Store the odds for 1st pick
-      }));
+      const lotteryTeams = draftOrder.slice(0, 16).map((team, index) => {
+        // Use the shared lotteryOddsMatrix defined above
+        return {
+          ...team,
+          position: index + 1, // Position 1-16 (worst to best)
+          odds: lotteryOddsMatrix[index + 1]?.first // Store the odds for 1st pick
+        };
+      });
       
       // Copy the lottery teams for manipulation
       let draftOrderAfterLottery = [...lotteryTeams];
@@ -916,6 +922,221 @@ const SimulateDraft = () => {
         id: r.id
       })));
       
+      // Define all functions before using them
+      
+      // Function to finalize lottery process when animation is complete
+      const finalizeLottery = (results) => {
+        if (!results || !Array.isArray(results) || results.length === 0) {
+          console.error("Invalid results for lottery finalization");
+          setLoading(false);
+          setLotteryAnimationActive(false);
+          return;
+        }
+        
+        // Make sure all results have required properties
+        const validResults = results.filter(result => 
+          result && 
+          typeof result.final_position !== 'undefined' && 
+          result.team
+        );
+
+        if (validResults.length === 0) {
+          console.error("No valid lottery results found");
+          setLoading(false);
+          setLotteryAnimationActive(false);
+          return;
+        }
+        
+        // Process team data to ensure logos can be displayed
+        const processedResults = validResults.map(result => ({
+          ...result,
+          team: result.team || { city: 'Unknown', abbreviation: 'UNK', name: 'Team' },
+          // Calculate position change if not already present
+          position_change: result.position_change || 
+            (result.original_position - result.final_position)
+        }));
+        
+        // Ensure each pick from 1-3 has an assigned team
+        const top3Positions = [1, 2, 3];
+        const existingTopPositions = processedResults
+          .filter(r => top3Positions.includes(r.final_position))
+          .map(r => r.final_position);
+        
+        const missingPositions = top3Positions.filter(pos => !existingTopPositions.includes(pos));
+        
+        if (missingPositions.length > 0) {
+          console.error(`Missing teams for top positions: ${missingPositions.join(', ')}`);
+          // Fill in missing positions with placeholder data for UI integrity
+          missingPositions.forEach(pos => {
+            const originalPosition = pos === 1 ? 1 : pos === 2 ? 2 : 3;
+            processedResults.push({
+              final_position: pos,
+              original_position: originalPosition,
+              position_change: 0,
+              team: { city: 'Unknown', abbreviation: 'UNK', name: 'Team' },
+              odds: 0
+            });
+          });
+        }
+
+        setLotteryResults(processedResults);
+        setAnimationStep('completed');
+        setAnimationComplete(true);
+        setLotteryAnimationActive(false);
+        setLoading(false);
+        
+        // --- Build full draft order with new lottery results (handle traded picks, fix numbering) ---
+        // 1. Map: lotteryResults (1-16) to draft picks, matching by original_position (overall_pick)
+        const lotteryOriginalPositions = processedResults.map(t => t.original_position);
+        const originalFirstRound = draftOrder.filter(p => p.round_num === 1);
+
+        console.log("Original first round before lottery:", originalFirstRound.map(p => ({
+          id: p.id,
+          overall_pick: p.overall_pick,
+          team: p.team?.abbreviation,
+          from_team: p.from_team?.abbreviation || "N/A"
+        })));
+
+        // Picks 1-16: new lottery order
+        const newFirst16 = processedResults.map((lotteryResult, idx) => {
+          const origPick = originalFirstRound.find(p => p.overall_pick === lotteryResult.original_position);
+          if (!origPick) {
+            console.error(`Could not find original pick for position ${lotteryResult.original_position}`);
+            return null;
+          }
+          return {
+            ...origPick,
+            team: lotteryResult.team,
+            overall_pick: idx + 1,
+            round_num: 1,
+            lottery_result: lotteryResult,
+            uniqueId: `lottery-${idx+1}-${lotteryResult.team?.abbreviation || 'unknown'}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          };
+        }).filter(Boolean); // Remove any null entries
+
+        // Make sure we preserve any "from_team" information for traded picks
+        newFirst16.forEach(pick => {
+          if (!pick) return;
+          const originalPick = originalFirstRound.find(p => p.overall_pick === pick.lottery_result.original_position);
+          if (originalPick && originalPick.from_team) {
+            pick.from_team = originalPick.from_team;
+          }
+        });
+
+        // Picks 17-32: original picks not in the lottery
+        const picks17plus = originalFirstRound
+          .filter(p => !lotteryOriginalPositions.includes(p.overall_pick))
+          .sort((a, b) => a.overall_pick - b.overall_pick)
+          .map((pick, idx) => ({
+            ...pick,
+            overall_pick: 16 + idx + 1, // 17, 18, ...
+            round_num: 1,
+            uniqueId: `pick-${16+idx+1}-${pick.team?.abbreviation || 'unknown'}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          }));
+
+        console.log("Picks 17+ (picks not in lottery):", picks17plus.length, "entries");
+        
+        // Combine all picks for the first round
+        const combinedFirstRound = [...newFirst16, ...picks17plus]
+          .sort((a, b) => a.overall_pick - b.overall_pick)
+          .map((pick, idx) => ({
+            ...pick,
+            overall_pick: idx + 1,
+            round_num: 1,
+          }));
+
+        console.log("Combined first round (should be 32 picks):", combinedFirstRound.length, "entries");
+        console.log("Pick numbers in combined first round:", combinedFirstRound.map(p => p.overall_pick).sort((a, b) => a - b));
+        
+        // Check for missing pick numbers in the combined first round
+        const firstRoundNumbers = combinedFirstRound.map(p => p.overall_pick).sort((a, b) => a - b);
+        const expectedFirstRound = Array.from({length: 32}, (_, i) => i + 1);
+        const missingInFirstRound = expectedFirstRound.filter(num => !firstRoundNumbers.includes(num));
+        if (missingInFirstRound.length > 0) {
+          console.error("ERROR: Missing pick numbers in first round:", missingInFirstRound);
+        }
+
+        // Add the rest of the draft (rounds > 1)
+        const restOfDraftRounds = draftOrder.filter(p => p.round_num > 1)
+          .map(pick => ({
+            ...pick,
+            uniqueId: `rd${pick.round_num}-${pick.overall_pick}-${pick.team?.abbreviation || 'unknown'}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          }));
+          
+        const newFullDraftOrder = [...combinedFirstRound, ...restOfDraftRounds]
+          .sort((a, b) => a.round_num !== b.round_num ? a.round_num - b.round_num : a.overall_pick - b.overall_pick);
+
+        console.log('Draft order after lottery with uniqueIds:', newFullDraftOrder.slice(0, 20).map(p => ({
+          uniqueId: p.uniqueId,
+          id: p.id,
+          overall_pick: p.overall_pick,
+          team: p.team?.abbreviation
+        })));
+        
+        setDraftOrder(newFullDraftOrder);
+        console.log('===== END LOTTERY DIAGNOSTICS =====');
+      };
+      
+      // Function to handle revealing picks one by one
+      const revealNextPick = (index, sequence, topPicks) => {
+        if (index >= sequence.length) {
+          console.log("All picks revealed, finishing lottery");
+          finalizeLottery(draftOrderAfterLottery);
+          return;
+        }
+        
+        const currentPick = sequence[index];
+        if (!currentPick) {
+          console.error(`No pick found at index ${index}`);
+          // Skip to next index
+          setTimeout(() => revealNextPick(index + 1, sequence, topPicks), 1000);
+          return;
+        }
+        
+        const isTopPick = index >= sequence.length - topPicks.length;
+        
+        console.log(`Revealing pick #${currentPick.final_position}: ${currentPick.team?.abbreviation}, isTopPick: ${isTopPick}`);
+        
+        // Update current reveal index to trigger UI updates
+        setCurrentRevealIndex(index);
+        
+        // Update revealed picks
+        setRevealedPicks(prevPicks => {
+          return prevPicks.map(p => {
+            if (p.final_position === currentPick.final_position) {
+              return {
+                ...currentPick,
+                revealed: true,
+                placeholder: false
+              };
+            }
+            return p;
+          });
+        });
+        
+        // For top 3 picks, use spotlight effect
+        if (isTopPick) {
+          setIsTopPicksRevealing(true);
+          setSpotlightTeam(currentPick);
+          
+          // Longer delay for top picks (6 seconds)
+          setTimeout(() => {
+            setIsTopPicksRevealing(false);
+            setSpotlightTeam(null);
+            
+            // Move to next pick
+            setTimeout(() => {
+              revealNextPick(index + 1, sequence, topPicks);
+            }, 1000);
+          }, 6000);
+        } else {
+          // Regular pick - shorter delay (3 seconds)
+          setTimeout(() => {
+            revealNextPick(index + 1, sequence, topPicks);
+          }, 3000);
+        }
+      };
+      
       // Start revealing the lottery results from the 16th pick to the 1st
       const startRevealingTeams = () => {
         if (!draftOrderAfterLottery || !Array.isArray(draftOrderAfterLottery) || draftOrderAfterLottery.length === 0) {
@@ -1023,256 +1244,9 @@ const SimulateDraft = () => {
           }, 1500);
         }, 500);
       };
-
-      // New function to handle the pick-by-pick reveal
-      const revealNextPick = (index, sequence, topPicks) => {
-        if (index >= sequence.length) {
-          console.log("All picks revealed, finishing lottery");
-          finalizeLottery(draftOrderAfterLottery);
-          return;
-        }
-        
-        const currentPick = sequence[index];
-        const isTopPick = index >= sequence.length - topPicks.length;
-        
-        console.log(`Revealing pick #${currentPick.final_position}: ${currentPick.team?.abbreviation}, isTopPick: ${isTopPick}`);
-        
-        // Force-update the current reveal index to trigger UI updates
-        setCurrentRevealIndex(index);
-        
-        // Create a deep copy of the current state
-        // This is important to ensure React detects the state change
-        const updatedPicks = JSON.parse(JSON.stringify(revealedPicks));
-        
-        // Find the placeholder for this position
-        const posIndex = updatedPicks.findIndex(p => p.final_position === currentPick.final_position);
-        
-        if (posIndex !== -1) {
-          // Replace placeholder with the actual team
-          const positionChange = currentPick.position_change || 
-            (currentPick.original_position - currentPick.final_position);
-            
-          updatedPicks[posIndex] = {
-            ...currentPick,
-            revealed: true,
-            placeholder: false,
-            position_change: positionChange
-          };
-          
-          // Important: Use a callback to ensure we're working with the most current state
-          setRevealedPicks(updatedPicks);
-          
-          console.log(`Updated team at position ${currentPick.final_position}: ${currentPick.team?.abbreviation} (${posIndex})`);
-          
-          // Debug what's in the state after update
-          setTimeout(() => {
-            console.log(`Current picks after reveal:`, 
-              updatedPicks.map(p => ({
-                position: p.final_position,
-                revealed: p.revealed,
-                team: p.team?.abbreviation || 'unknown'
-              }))
-            );
-          }, 50);
-          
-          // For top 3 picks, set spotlight with dramatic effect
-          if (isTopPick) {
-            setIsTopPicksRevealing(true);
-            
-            // Add a small delay before showing spotlight for better visual effect
-            setTimeout(() => {
-              setSpotlightTeam({
-                ...currentPick,
-                position_change: positionChange
-              });
-              console.log(`Set spotlight for team ${currentPick.team?.abbreviation} at position ${currentPick.final_position}`);
-            }, 300);
-            
-            // Longer delay for top picks
-            setTimeout(() => {
-              if (index < sequence.length - 1) {
-                // Clear spotlight before next reveal (unless it's the final pick)
-                setSpotlightTeam(null);
-                
-                // Use longer delay between top picks for dramatic effect
-                setTimeout(() => revealNextPick(index + 1, sequence, topPicks), 1000);
-              } else {
-                // Final pick - keep spotlight and finalize after a delay
-                setTimeout(() => finalizeLottery(draftOrderAfterLottery), 3000);
-              }
-            }, 4000);
-          } else {
-            // Regular pick - add suitable delay so each reveal is visible
-            const delay = 1500; // Consistent delay for all regular picks
-            
-            // Move to the next pick after delay
-            setTimeout(() => {
-              revealNextPick(index + 1, sequence, topPicks);
-            }, delay);
-          }
-        } else {
-          console.error(`Cannot find placeholder for position ${currentPick.final_position}`);
-          // Skip to next pick after a short delay
-          setTimeout(() => revealNextPick(index + 1, sequence, topPicks), 500);
-        }
-      };
       
-      // Function to finalize the lottery after animation completes
-      const finalizeLottery = (results) => {
-        if (!results || !Array.isArray(results) || results.length === 0) {
-          console.error("Invalid lottery results:", results);
-          setLoading(false);
-          setLotteryAnimationActive(false);
-          return;
-        }
-
-        // Make sure all results have required properties
-        const validResults = results.filter(result => 
-          result && 
-          typeof result.final_position !== 'undefined' && 
-          result.team
-        );
-
-        if (validResults.length === 0) {
-          console.error("No valid lottery results found");
-          setLoading(false);
-          setLotteryAnimationActive(false);
-          return;
-        }
-        
-        // Process team data to ensure logos can be displayed
-        const processedResults = validResults.map(result => ({
-          ...result,
-          team: result.team || { city: 'Unknown', abbreviation: 'UNK', name: 'Team' },
-          // Calculate position change if not already present
-          position_change: result.position_change || 
-            (result.original_position - result.final_position)
-        }));
-        
-        // Ensure each pick from 1-3 has an assigned team
-        const top3Positions = [1, 2, 3];
-        const existingTopPositions = processedResults
-          .filter(r => top3Positions.includes(r.final_position))
-          .map(r => r.final_position);
-        
-        const missingPositions = top3Positions.filter(pos => !existingTopPositions.includes(pos));
-        
-        if (missingPositions.length > 0) {
-          console.error(`Missing teams for top positions: ${missingPositions.join(', ')}`);
-          // Fill in missing positions with placeholder data for UI integrity
-          missingPositions.forEach(pos => {
-            const originalPosition = pos === 1 ? 1 : pos === 2 ? 2 : 3;
-            processedResults.push({
-              final_position: pos,
-              original_position: originalPosition,
-              position_change: 0,
-              team: { city: 'Unknown', abbreviation: 'UNK', name: 'Team' },
-              odds: 0
-            });
-          });
-        }
-
-        setLotteryResults(processedResults);
-        setAnimationStep('completed');
-        setAnimationComplete(true);
-        setLoading(false);
-        
-        // --- Existing lottery finalization code ---
-      // --- NEW CODE: Build full draft order with new lottery results (handle traded picks, fix numbering) ---
-      // 1. Map: lotteryResults (1-16) to draft picks, matching by original_position (overall_pick)
-        const lotteryOriginalPositions = processedResults.map(t => t.original_position);
-      const originalFirstRound = draftOrder.filter(p => p.round_num === 1);
-
-      console.log("Original first round before lottery:", originalFirstRound.map(p => ({
-        id: p.id,
-        overall_pick: p.overall_pick,
-        team: p.team?.abbreviation,
-        from_team: p.from_team?.abbreviation || "N/A"
-      })));
-
-      // Picks 1-16: new lottery order
-        const newFirst16 = processedResults.map((lotteryResult, idx) => {
-        const origPick = originalFirstRound.find(p => p.overall_pick === lotteryResult.original_position);
-          if (!origPick) {
-            console.error(`Could not find original pick for position ${lotteryResult.original_position}`);
-            return null;
-          }
-        return {
-          ...origPick,
-          team: lotteryResult.team,
-          overall_pick: idx + 1,
-          round_num: 1,
-          lottery_result: lotteryResult,
-          uniqueId: `lottery-${idx+1}-${lotteryResult.team?.abbreviation || 'unknown'}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        };
-        }).filter(Boolean); // Remove any null entries
-
-      // Make sure we preserve any "from_team" information for traded picks
-      newFirst16.forEach(pick => {
-          if (!pick) return;
-        const originalPick = originalFirstRound.find(p => p.overall_pick === pick.lottery_result.original_position);
-        if (originalPick && originalPick.from_team) {
-          pick.from_team = originalPick.from_team;
-        }
-      });
-
-      // Picks 17-32: original picks not in the lottery
-      const picks17plus = originalFirstRound
-        .filter(p => !lotteryOriginalPositions.includes(p.overall_pick))
-        .sort((a, b) => a.overall_pick - b.overall_pick)
-        .map((pick, idx) => ({
-          ...pick,
-          overall_pick: 16 + idx + 1, // 17, 18, ...
-          round_num: 1,
-          uniqueId: `pick-${16+idx+1}-${pick.team?.abbreviation || 'unknown'}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        }));
-
-      console.log("Picks 17+ (picks not in lottery):", picks17plus.length, "entries");
-      
-      // Combine all picks for the first round
-      const combinedFirstRound = [...newFirst16, ...picks17plus]
-        .sort((a, b) => a.overall_pick - b.overall_pick)
-        .map((pick, idx) => ({
-          ...pick,
-          overall_pick: idx + 1,
-          round_num: 1,
-        }));
-
-      console.log("Combined first round (should be 32 picks):", combinedFirstRound.length, "entries");
-      console.log("Pick numbers in combined first round:", combinedFirstRound.map(p => p.overall_pick).sort((a, b) => a - b));
-      
-      // Check for missing pick numbers in the combined first round
-      const firstRoundNumbers = combinedFirstRound.map(p => p.overall_pick).sort((a, b) => a - b);
-      const expectedFirstRound = Array.from({length: 32}, (_, i) => i + 1);
-      const missingInFirstRound = expectedFirstRound.filter(num => !firstRoundNumbers.includes(num));
-      if (missingInFirstRound.length > 0) {
-        console.error("ERROR: Missing pick numbers in first round:", missingInFirstRound);
-      }
-
-      // Add the rest of the draft (rounds > 1)
-      const restOfDraftRounds = draftOrder.filter(p => p.round_num > 1)
-        .map(pick => ({
-          ...pick,
-          uniqueId: `rd${pick.round_num}-${pick.overall_pick}-${pick.team?.abbreviation || 'unknown'}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        }));
-        
-      const newFullDraftOrder = [...combinedFirstRound, ...restOfDraftRounds]
-        .sort((a, b) => a.round_num !== b.round_num ? a.round_num - b.round_num : a.overall_pick - b.overall_pick);
-
-      console.log('Draft order after lottery with uniqueIds:', newFullDraftOrder.slice(0, 20).map(p => ({
-        uniqueId: p.uniqueId,
-        id: p.id,
-        overall_pick: p.overall_pick,
-        team: p.team?.abbreviation
-      })));
-      
-      setDraftOrder(newFullDraftOrder);
-      console.log('===== END LOTTERY DIAGNOSTICS =====');
-      // --- END NEW CODE ---
-      };
-      
-      // Start the animation sequence
-      startProgressAnimation();
+      // Now that all functions are defined, start the process
+      // startRevealingTeams(); - no longer needed, called from startProgressAnimation
       
     } catch (error) {
       console.error("Error in lottery simulation:", error);

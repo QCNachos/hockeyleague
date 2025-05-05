@@ -29,6 +29,7 @@ import BeAProMode from './pages/gameModes/BeAProMode';
 import BeAProCreate from './pages/gameModes/BeAProCreate';
 import GameMode from './pages/gameModes/GameMode';
 import PreGame from './pages/gameModes/PreGame';
+import GameSimulationPage from './pages/gameModes/GameSimulationPage';
 import Tournaments from './pages/gameModes/Tournaments';
 import OwnerMode from './pages/gameModes/OwnerMode';
 import SeasonMode from './pages/gameModes/SeasonMode';
@@ -69,6 +70,7 @@ function App() {
             <Route path="be-a-pro/create/:startType" element={<BeAProCreate />} />
             <Route path="game" element={<GameMode />} />
             <Route path="game/pre-game" element={<PreGame />} />
+            <Route path="game/simulation" element={<GameSimulationPage />} />
             <Route path="season" element={<SeasonMode />} />
             <Route path="tournaments" element={<Tournaments />} />
             <Route path="tournaments/stanley-cup/setup" element={<StanleyCupSetup />} />

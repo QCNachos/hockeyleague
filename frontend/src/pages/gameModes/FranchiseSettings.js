@@ -162,6 +162,8 @@ const FranchiseSettings = () => {
     franchiseLength: '25',
     salary_cap: 'on',
     cap_amount: '82500000',
+    starting_year: '2025',
+    starting_time: 'pre_draft',
     controlledTeams: '1',
     
     // Difficulty Settings
@@ -319,6 +321,49 @@ const FranchiseSettings = () => {
               />
               <SettingDescription>
                 Set the amount for the salary cap in your franchise.
+              </SettingDescription>
+            </SettingItem>
+          </SettingsRow>
+          
+          <SettingsRow>
+            <SettingItem>
+              <SettingLabel htmlFor="starting_year">Starting Year</SettingLabel>
+              <Select 
+                id="starting_year" 
+                value={settings.starting_year}
+                onChange={(e) => handleSettingChange('starting_year', e.target.value)}
+              >
+                <option value="2025">2025</option>
+                <option value="2026">2026</option>
+                <option value="2027">2027</option>
+                <option value="2028">2028</option>
+                <option value="2029">2029</option>
+                <option value="2030">2030</option>
+              </Select>
+              <SettingDescription>
+                The year in which your franchise will begin.
+              </SettingDescription>
+            </SettingItem>
+            
+            <SettingItem>
+              <SettingLabel htmlFor="starting_time">Starting Time</SettingLabel>
+              <Select 
+                id="starting_time" 
+                value={settings.starting_time}
+                onChange={(e) => handleSettingChange('starting_time', e.target.value)}
+              >
+                <option value="pre_draft">Pre-Entry Draft</option>
+                <option value="pre_season">Pre-Season</option>
+                <option value="july_1" disabled>July 1st (Coming Soon)</option>
+                <option value="season_opener" disabled>Season Opener (Coming Soon)</option>
+                <option value="christmas_break" disabled>Christmas Break (Coming Soon)</option>
+                <option value="trade_deadline" disabled>Trade Deadline (Coming Soon)</option>
+                <option value="post_trade_deadline" disabled>Post Trade Deadline (Coming Soon)</option>
+                <option value="playoff_race" disabled>Playoff Race (12 games) (Coming Soon)</option>
+                <option value="playoff_start" disabled>Playoff Start (Coming Soon)</option>
+              </Select>
+              <SettingDescription>
+                The point in the season at which your franchise will begin.
               </SettingDescription>
             </SettingItem>
           </SettingsRow>

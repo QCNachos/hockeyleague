@@ -31,6 +31,32 @@ const Title = styled.h1`
   margin-bottom: 20px;
 `;
 
+const TitleContainer = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+`;
+
+const ButtonsContainer = styled.div`
+  display: flex;
+  gap: 10px;
+`;
+
+const ActionButton = styled.button`
+  padding: 10px 15px;
+  background-color: #B30E16;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  
+  &:hover {
+    background-color: #950b12;
+  }
+`;
+
 const FiltersContainer = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -89,6 +115,31 @@ const PlayersTable = styled.table`
   background-color: #1e1e1e;
   border-radius: 8px;
   overflow: hidden;
+`;
+
+const TableContainer = styled.div`
+  max-height: 800px;
+  overflow-y: auto;
+  border-radius: 8px;
+  
+  /* Scrollbar styling */
+  &::-webkit-scrollbar {
+    width: 10px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: #2a2a2a;
+    border-radius: 8px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 8px;
+  }
+  
+  &::-webkit-scrollbar-thumb:hover {
+    background: #555;
+  }
 `;
 
 const TableHeader = styled.th`
@@ -434,6 +485,77 @@ const StatsTableCell = styled.td`
   border-bottom: 1px solid #333;
 `;
 
+// Add these new styled components for the error analysis modal
+const ErrorAnalysisModal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+`;
+
+const ErrorAnalysisContent = styled.div`
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 600px;
+  position: relative;
+  color: white;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+`;
+
+const ErrorAnalysisHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  background-color: #1a3042;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 1px solid #333;
+`;
+
+const ErrorAnalysisTitle = styled.h2`
+  margin: 0;
+  font-size: 1.5rem;
+`;
+
+const ErrorAnalysisClose = styled.button`
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  
+  &:hover {
+    color: #B30E16;
+  }
+`;
+
+const ErrorAnalysisBody = styled.div`
+  padding: 20px;
+`;
+
+const ErrorAnalysisButton = styled.button`
+  padding: 12px 20px;
+  background-color: #B30E16;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  width: 100%;
+  margin-top: 10px;
+  
+  &:hover {
+    background-color: #950b12;
+  }
+`;
+
 const PlayerEditor = () => {
   // Add a utility function for normalizing strings for comparison
   const normalizeString = (str) => {
@@ -479,7 +601,7 @@ const PlayerEditor = () => {
   const [sortDirection, setSortDirection] = useState('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [playersPerPage] = useState(15);
+  const [playersPerPage, setPlayersPerPage] = useState(100);
   const [totalPlayerCount, setTotalPlayerCount] = useState(0);
 
   // Maps for lookup
@@ -489,6 +611,11 @@ const PlayerEditor = () => {
   // Add these new state variables
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [showPlayerModal, setShowPlayerModal] = useState(false);
+
+  // Add these new state variables for the error analysis modal
+  const [showErrorAnalysisModal, setShowErrorAnalysisModal] = useState(false);
+  const [isRunningAnalysis, setIsRunningAnalysis] = useState(false);
+  const [analysisResults, setAnalysisResults] = useState([]);
 
   // Single initialization effect
   useEffect(() => {
@@ -1386,9 +1513,160 @@ const PlayerEditor = () => {
   // *** Add specific log for league types before render ***
   console.log(`[DEBUG] Pre-render check: allLeagueTypesData length = ${allLeagueTypesData.length}`);
 
+  // Handler for Create Player button - navigate to player creation page
+  const handleCreatePlayer = () => {
+    console.log('Create Player button clicked');
+    // Navigate to player creation page
+    window.location.href = '/create-player';
+  };
+
+  // Handler for Run Player Error Analysis button
+  const handleRunErrorAnalysis = () => {
+    console.log('Run Player Error Analysis button clicked');
+    setShowErrorAnalysisModal(true);
+  };
+
+  // Handler for closing error analysis modal
+  const closeErrorAnalysisModal = () => {
+    setShowErrorAnalysisModal(false);
+    setAnalysisResults([]);
+  };
+
+  // Handler for running similar name analysis
+  const runSimilarNameAnalysis = async () => {
+    setIsRunningAnalysis(true);
+    
+    try {
+      console.log('Running similar name analysis');
+      
+      // Example mock implementation - in a real app, this would be a backend call
+      // that returns players with similar names
+      const { data, error } = await supabase
+        .from('Player')
+        .select('id, first_name, last_name, team, position_primary')
+        .order('last_name', { ascending: true });
+        
+      if (error) {
+        throw new Error(`Error fetching players: ${error.message}`);
+      }
+      
+      // Find players with similar names
+      const nameMap = {};
+      const similarNames = [];
+      
+      // Group players by normalized name
+      data.forEach(player => {
+        const normalizedName = `${player.first_name.toLowerCase()} ${player.last_name.toLowerCase()}`;
+        if (!nameMap[normalizedName]) {
+          nameMap[normalizedName] = [];
+        }
+        nameMap[normalizedName].push(player);
+      });
+      
+      // Find names with multiple players
+      Object.values(nameMap).forEach(playerGroup => {
+        if (playerGroup.length > 1) {
+          similarNames.push(...playerGroup);
+        }
+      });
+      
+      console.log('Similar name analysis complete', similarNames);
+      setAnalysisResults(similarNames);
+      
+    } catch (err) {
+      console.error('Error running similar name analysis:', err);
+      setAnalysisResults([]);
+    } finally {
+      setIsRunningAnalysis(false);
+    }
+  };
+
+  // Handler for players per page change
+  const handlePlayersPerPageChange = (e) => {
+    const value = parseInt(e.target.value, 10);
+    setPlayersPerPage(value);
+    setCurrentPage(1); // Reset to first page when changing page size
+  };
+
+  // Render error analysis modal
+  const renderErrorAnalysisModal = () => {
+    if (!showErrorAnalysisModal) return null;
+    
+    return (
+      <ErrorAnalysisModal onClick={closeErrorAnalysisModal}>
+        <ErrorAnalysisContent onClick={(e) => e.stopPropagation()}>
+          <ErrorAnalysisHeader>
+            <ErrorAnalysisTitle>Player Error Analysis</ErrorAnalysisTitle>
+            <ErrorAnalysisClose onClick={closeErrorAnalysisModal}>×</ErrorAnalysisClose>
+          </ErrorAnalysisHeader>
+          <ErrorAnalysisBody>
+            <p>Select an analysis to run on the player database to identify potential errors:</p>
+            
+            <ErrorAnalysisButton 
+              onClick={runSimilarNameAnalysis}
+              disabled={isRunningAnalysis}
+            >
+              {isRunningAnalysis ? 'Running Analysis...' : 'Run Similar Name Analysis'}
+            </ErrorAnalysisButton>
+            
+            {isRunningAnalysis && (
+              <div style={{ marginTop: '20px', textAlign: 'center' }}>
+                <LoadingSpinner style={{ height: '50px' }} />
+              </div>
+            )}
+            
+            {analysisResults.length > 0 && (
+              <div style={{ marginTop: '20px' }}>
+                <h3 style={{ borderBottom: '1px solid #333', paddingBottom: '10px' }}>Results</h3>
+                <p>Found {analysisResults.length} players with similar names:</p>
+                
+                <div style={{ maxHeight: '300px', overflowY: 'auto', marginTop: '10px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #333' }}>Name</th>
+                        <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #333' }}>Team</th>
+                        <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #333' }}>Position</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analysisResults.map(player => (
+                        <tr key={player.id} style={{ cursor: 'pointer' }} onClick={() => handlePlayerClick(player)}>
+                          <td style={{ padding: '8px', borderBottom: '1px solid #333' }}>
+                            {player.first_name} {player.last_name}
+                          </td>
+                          <td style={{ padding: '8px', borderBottom: '1px solid #333' }}>
+                            {player.team || 'N/A'}
+                          </td>
+                          <td style={{ padding: '8px', borderBottom: '1px solid #333' }}>
+                            {player.position_primary || 'N/A'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </ErrorAnalysisBody>
+        </ErrorAnalysisContent>
+      </ErrorAnalysisModal>
+    );
+  };
+
   return (
     <Container>
-      <Title>Player Management</Title>
+      <TitleContainer>
+        <Title>Player Management</Title>
+        <ButtonsContainer>
+          <ActionButton onClick={handleCreatePlayer}>
+            Create Player
+          </ActionButton>
+          <ActionButton onClick={handleRunErrorAnalysis}>
+            Run Player Error Analysis
+          </ActionButton>
+        </ButtonsContainer>
+      </TitleContainer>
       
       {/* Filters Section */}
       <FiltersContainer>
@@ -1509,7 +1787,7 @@ const PlayerEditor = () => {
             {searchQuery && <> matching "<span>{searchQuery}</span>"</>}
           </>
         ) : (
-          <>Use the filters above to find players</>
+          <>&nbsp;</>
         )}
       </FilterSummary>
       
@@ -1533,55 +1811,77 @@ const PlayerEditor = () => {
            )}
            {!loadingData && !error && players.length > 0 && (
              <>
-               <PlayersTable>
-                 <thead>
-                    {/* Table Headers - No Changes Needed */}
-                   <tr>
-                      <TableHeader onClick={() => handleSort('last_name')} sorted={sortColumn === 'last_name' ? sortDirection : null}>Name</TableHeader>
-                      <TableHeader onClick={() => handleSort('position_primary')} sorted={sortColumn === 'position_primary' ? sortDirection : null}>Position</TableHeader>
-                      <TableHeader onClick={() => handleSort('age')} sorted={sortColumn === 'age' ? sortDirection : null}>Age</TableHeader>
-                      <TableHeader onClick={() => handleSort('height')} sorted={sortColumn === 'height' ? sortDirection : null}>Height</TableHeader>
-                      <TableHeader onClick={() => handleSort('weight')} sorted={sortColumn === 'weight' ? sortDirection : null}>Weight</TableHeader>
-                      <TableHeader onClick={() => handleSort('overall')} sorted={sortColumn === 'overall' ? sortDirection : null}>OVR</TableHeader>
-                      <TableHeader onClick={() => handleSort('salary')} sorted={sortColumn === 'salary' ? sortDirection : null}>Salary</TableHeader>
-                      <TableHeader>League</TableHeader>
-                      <TableHeader>League Type</TableHeader>
-                      <TableHeader onClick={() => handleSort('team')} sorted={sortColumn === 'team' ? sortDirection : null}>Team</TableHeader>
-                   </tr>
-                 </thead>
-                 <tbody>
-                   {players.map(player => (
-                     <TableRow 
-                       key={player.id} 
-                       onClick={() => handlePlayerClick(player)}
-                       style={{ cursor: 'pointer' }}
-                     >
-                       <TableCell>{player.first_name} {player.last_name}</TableCell>
-                       <TableCell>{player.position_primary || 'N/A'}</TableCell>
-                       <TableCell>{player.age || 'N/A'}</TableCell>
-                       <TableCell>{player.height || 'N/A'}</TableCell>
-                       <TableCell>{player.weight || 'N/A'}</TableCell>
-                       <TableCell>{player.overall || 'N/A'}</TableCell>
-                       <TableCell>{formatSalary(player.salary)}</TableCell>
-                       <TableCell>{player.league ? getLeagueFullName(player.league) : 'N/A'}</TableCell>
-                       <TableCell>{player.league_type || 'N/A'}</TableCell>
-                       <TableCell>{player.teamObj ? `${player.teamObj.team} (${player.team})` : (player.team || 'N/A')}</TableCell>
-                     </TableRow>
-                   ))}
-                 </tbody>
-               </PlayersTable>
+               <TableContainer>
+                 <PlayersTable>
+                   <thead>
+                      {/* Table Headers - No Changes Needed */}
+                     <tr>
+                        <TableHeader onClick={() => handleSort('last_name')} sorted={sortColumn === 'last_name' ? sortDirection : null}>Name</TableHeader>
+                        <TableHeader onClick={() => handleSort('position_primary')} sorted={sortColumn === 'position_primary' ? sortDirection : null}>Position</TableHeader>
+                        <TableHeader onClick={() => handleSort('age')} sorted={sortColumn === 'age' ? sortDirection : null}>Age</TableHeader>
+                        <TableHeader onClick={() => handleSort('height')} sorted={sortColumn === 'height' ? sortDirection : null}>Height</TableHeader>
+                        <TableHeader onClick={() => handleSort('weight')} sorted={sortColumn === 'weight' ? sortDirection : null}>Weight</TableHeader>
+                        <TableHeader onClick={() => handleSort('overall')} sorted={sortColumn === 'overall' ? sortDirection : null}>OVR</TableHeader>
+                        <TableHeader onClick={() => handleSort('salary')} sorted={sortColumn === 'salary' ? sortDirection : null}>Salary</TableHeader>
+                        <TableHeader>League</TableHeader>
+                        <TableHeader>League Type</TableHeader>
+                        <TableHeader onClick={() => handleSort('team')} sorted={sortColumn === 'team' ? sortDirection : null}>Team</TableHeader>
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {players.map(player => (
+                       <TableRow 
+                         key={player.id} 
+                         onClick={() => handlePlayerClick(player)}
+                         style={{ cursor: 'pointer' }}
+                       >
+                         <TableCell>{player.first_name} {player.last_name}</TableCell>
+                         <TableCell>{player.position_primary || 'N/A'}</TableCell>
+                         <TableCell>{player.age || 'N/A'}</TableCell>
+                         <TableCell>{player.height || 'N/A'}</TableCell>
+                         <TableCell>{player.weight || 'N/A'}</TableCell>
+                         <TableCell>{player.overall || 'N/A'}</TableCell>
+                         <TableCell>{formatSalary(player.salary)}</TableCell>
+                         <TableCell>{player.league ? getLeagueFullName(player.league) : 'N/A'}</TableCell>
+                         <TableCell>{player.league_type || 'N/A'}</TableCell>
+                         <TableCell>{player.teamObj ? `${player.teamObj.team} (${player.team})` : (player.team || 'N/A')}</TableCell>
+                       </TableRow>
+                     ))}
+                   </tbody>
+                 </PlayersTable>
+               </TableContainer>
 
                {/* Pagination Controls */}
                <PaginationContainer>
                  <PageInfo>
                    Page {currentPage} of {totalPages} ({totalPlayerCount} total players)
                  </PageInfo>
-                 <PageButtons>
-                   <PageButton onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>First</PageButton>
-                   <PageButton onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</PageButton>
-                   <PageButton onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>Next</PageButton>
-                   <PageButton onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>Last</PageButton>
-                 </PageButtons>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                   <div>
+                     <label style={{ color: '#C4CED4', marginRight: '8px' }}>Show:</label>
+                     <select 
+                       value={playersPerPage} 
+                       onChange={handlePlayersPerPageChange}
+                       style={{
+                         padding: '5px 10px',
+                         borderRadius: '4px',
+                         backgroundColor: '#2a2a2a',
+                         border: '1px solid #444',
+                         color: '#fff'
+                       }}
+                     >
+                       <option value={100}>100</option>
+                       <option value={200}>200</option>
+                       <option value={500}>500</option>
+                     </select>
+                   </div>
+                   <PageButtons>
+                     <PageButton onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>First</PageButton>
+                     <PageButton onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</PageButton>
+                     <PageButton onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>Next</PageButton>
+                     <PageButton onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>Last</PageButton>
+                   </PageButtons>
+                 </div>
                </PaginationContainer>
              </>
            )}
@@ -1590,6 +1890,9 @@ const PlayerEditor = () => {
       
       {/* Render the player modal */}
       {renderPlayerModal()}
+      
+      {/* Render the error analysis modal */}
+      {renderErrorAnalysisModal()}
     </Container>
   );
 };

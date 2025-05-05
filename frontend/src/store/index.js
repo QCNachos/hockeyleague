@@ -5,20 +5,18 @@ import authReducer from './slices/authSlice';
 import gameReducer from './slices/gameSlice';
 import playerReducer from './slices/playerSlice';
 import teamReducer from './slices/teamSlice';
-import settingsReducer from './slices/settingsSlice';
+import settingsReducer, { initializeState } from './slices/settingsSlice';
 
-// Default state for initialization
-const defaultState = {
-  settings: {
-    visualSettings: {
-      communityPack: 1, // 0=disabled, 1=enabled (for team logos, etc.)
-    },
-    gameMode: {
-      currentMode: 'MENU', // MENU, FRANCHISE, SEASON, PLAYOFF
-      currentYear: 2024,
-      seasonComplete: false,
-      playoffComplete: false
-    }
+// Define default settings for initialization
+const defaultSettings = {
+  visualSettings: {
+    communityPack: 1, // 0=disabled, 1=enabled (for team logos, etc.)
+  },
+  gameMode: {
+    currentMode: 'MENU', // MENU, FRANCHISE, SEASON, PLAYOFF
+    currentYear: 2024,
+    seasonComplete: false,
+    playoffComplete: false
   }
 };
 
@@ -41,10 +39,9 @@ const rootReducer = combineReducers({
 // Create persisted reducer
 const persistedReducer = persistReducer(persistConfig, rootReducer);
 
-// Create store with preloaded state
+// Create store
 export const store = configureStore({
   reducer: persistedReducer,
-  preloadedState: defaultState,
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
@@ -57,11 +54,24 @@ export const store = configureStore({
 // Create persistor
 export const persistor = persistStore(store);
 
-// Initialize store with default settings if empty
-// This ensures we always have valid data even if persistence fails
-if (!store.getState().settings?.visualSettings) {
-  store.dispatch({ 
-    type: 'settings/initializeState', 
-    payload: defaultState.settings 
-  });
+// Initialize store with default settings immediately
+try {
+  // Check if settings state exists
+  const state = store.getState();
+  const settingsExist = state && 
+                        state.settings && 
+                        state.settings.visualSettings && 
+                        state.settings.visualSettings.communityPack !== undefined;
+  
+  // Initialize if not found or if communityPack is undefined
+  if (!settingsExist) {
+    console.log('[REDUX] Initializing settings with defaults');
+    store.dispatch(initializeState(defaultSettings));
+  } else {
+    console.log('[REDUX] Settings already exist in store:', state.settings);
+  }
+} catch (error) {
+  console.error('[REDUX] Error checking/initializing settings:', error);
+  // Attempt to initialize settings anyway
+  store.dispatch(initializeState(defaultSettings));
 } 

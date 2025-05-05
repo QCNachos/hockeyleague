@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 // Pages
 import Home from './pages/Home';
 import PlayerEditor from './pages/PlayerEditor';
+import PlayerCreation from './pages/PlayerCreation';
 import TeamManager from './pages/TeamManager';
 import TeamEditor from './pages/TeamEditor';
 import GameSimulation from './pages/GameSimulation';
@@ -81,6 +82,7 @@ function App() {
             
             {/* Management */}
             <Route path="players" element={<PlayerEditor />} />
+            <Route path="create-player" element={<PlayerCreation />} />
             <Route path="teams" element={<TeamManager />} />
             <Route path="team-manager" element={<TeamManager />} />
             <Route path="team-editor/:teamId" element={<TeamEditor />} />

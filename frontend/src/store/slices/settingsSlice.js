@@ -65,7 +65,21 @@ export const {
 } = settingsSlice.actions;
 
 // Selectors with safe fallbacks
-export const selectCommunityPack = (state) => state.settings?.visualSettings?.communityPack || 0;
+export const selectCommunityPack = (state) => {
+  // Check if state exists and has the expected structure
+  if (state === undefined || state.settings === undefined) {
+    return 1; // Default to enabled if state is malformed
+  }
+  
+  // Check if visualSettings exists
+  if (state.settings.visualSettings === undefined) {
+    return 1; // Default to enabled if visualSettings is missing
+  }
+  
+  // Return communityPack value or default to enabled
+  return state.settings.visualSettings.communityPack ?? 1;
+};
+
 export const selectGameMode = (state) => state.settings?.gameMode?.currentMode || 'MENU';
 export const selectGameYear = (state) => state.settings?.gameMode?.currentYear || 2024;
 export const selectSeasonStatus = (state) => state.settings?.gameMode?.seasonComplete || false;

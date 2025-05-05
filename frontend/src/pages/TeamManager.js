@@ -3,6 +3,42 @@ import styled from 'styled-components';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 import { useAuth } from '../context/AuthContext';
+import { useSelector, useDispatch } from 'react-redux';
+import { selectCommunityPack, setCommunityPack } from '../store/slices/settingsSlice';
+
+// Import team logos
+import ANA from '../assets/Logo_ANA.png';
+import BOS from '../assets/Logo_BOS.png';
+import BUF from '../assets/Logo_BUF.png';
+import CAR from '../assets/Logo_CAR.png';
+import CBJ from '../assets/Logo_CBJ.png';
+import CGY from '../assets/Logo_CGY.png';
+import CHI from '../assets/Logo_CHI.png';
+import COL from '../assets/Logo_COL.png';
+import DAL from '../assets/Logo_DAL.png';
+import DET from '../assets/Logo_DET.png';
+import EDM from '../assets/Logo_EDM.png';
+import FLA from '../assets/Logo_FLA.png';
+import LAK from '../assets/Logo_LAK.png';
+import MIN from '../assets/Logo_MIN.png';
+import MTL from '../assets/Logo_MTL.png';
+import NJD from '../assets/Logo_NJD.png';
+import NSH from '../assets/Logo_NSH.png';
+import NYI from '../assets/Logo_NYI.png';
+import NYR from '../assets/Logo_NYR.png';
+import OTT from '../assets/Logo_OTT.png';
+import PHI from '../assets/Logo_PHI.png';
+import PIT from '../assets/Logo_PIT.png';
+import SEA from '../assets/Logo_SEA.png';
+import SJS from '../assets/Logo_SJS.png';
+import STL from '../assets/Logo_STL.png';
+import TBL from '../assets/Logo_TBL.png';
+import TOR from '../assets/Logo_TOR.png';
+import VAN from '../assets/Logo_VAN.png';
+import VGK from '../assets/Logo_VGK.png';
+import WPG from '../assets/Logo_WPG.png';
+import WSH from '../assets/Logo_WSH.png';
+import UTA from '../assets/Logo_UTA.png';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -22,12 +58,40 @@ const supabase = createClient(
   supabaseKey || 'your-supabase-anon-key'
 );
 
+// Create a mapping of team abbreviations to logo images
+const teamLogos = {
+  ANA, BOS, BUF, CAR, CBJ, CGY, CHI, COL, DAL, DET, 
+  EDM, FLA, LAK, MIN, MTL, NJD, NSH, NYI, NYR, OTT, 
+  PHI, PIT, SEA, SJS, STL, TBL, TOR, VAN, VGK, WPG, WSH, UTA
+};
+
 const Container = styled.div`
   padding: 20px;
 `;
 
 const Title = styled.h1`
   margin-bottom: 20px;
+`;
+
+const TitleContainer = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+`;
+
+const CreateTeamButton = styled.button`
+  padding: 10px 15px;
+  background-color: #B30E16;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  
+  &:hover {
+    background-color: #950b12;
+  }
 `;
 
 // New styled components for filter system
@@ -121,7 +185,23 @@ const TeamHeader = styled.div`
   background-color: rgba(0, 0, 0, 0.2);
 `;
 
-const TeamLogo = styled.div`
+const TeamLogoContainer = styled.div`
+  width: 50px;
+  height: 50px;
+  margin-right: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+`;
+
+const TeamLogoImage = styled.img`
+  max-width: 50px;
+  max-height: 50px;
+  object-fit: contain;
+`;
+
+const TeamLogoPlaceholder = styled.div`
   width: 50px;
   height: 50px;
   background-color: #fff;
@@ -129,7 +209,6 @@ const TeamLogo = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 15px;
   font-weight: bold;
   color: ${props => props.primaryColor || '#1e1e1e'};
 `;
@@ -162,6 +241,23 @@ const TeamDetail = styled.p`
   span:first-child {
     opacity: 0.7;
   }
+`;
+
+// New styled component for the best player section
+const BestPlayerSection = styled.div`
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+`;
+
+const BestPlayerName = styled.div`
+  font-weight: bold;
+  margin-bottom: 5px;
+`;
+
+const BestPlayerDetail = styled.div`
+  font-size: 14px;
+  opacity: 0.8;
 `;
 
 const TabContainer = styled.div`
@@ -307,6 +403,32 @@ const TeamManager = () => {
   const [initializing, setInitializing] = useState(false);
   const [initMessage, setInitMessage] = useState(null);
   const [supabaseError, setSupabaseError] = useState(null);
+  
+  // Get Redux dispatch
+  const dispatch = useDispatch();
+  
+  // Get community pack setting from Redux store
+  const communityPack = useSelector(selectCommunityPack);
+  
+  // Initialize communityPack to 1 when component mounts
+  useEffect(() => {
+    try {
+      // Force enable Community Pack
+      if (communityPack !== 1) {
+        console.log('[SETTING DEBUG] Forcing Community Pack to be enabled (1)');
+        dispatch(setCommunityPack(1));
+      }
+    } catch (error) {
+      console.error('[SETTING DEBUG] Error setting communityPack:', error);
+      // Continue without crashing if there's an error
+    }
+  }, [dispatch]);
+  
+  // Add debugging for communityPack value - separate from the initialization logic
+  useEffect(() => {
+    console.log('[SETTING DEBUG] Community Pack setting:', communityPack);
+    console.log('[SETTING DEBUG] Community Pack enabled:', communityPack === 1);
+  }, [communityPack]);
   
   // New filter state
   // eslint-disable-next-line no-unused-vars
@@ -651,6 +773,19 @@ const TeamManager = () => {
       console.log('Unique league types from teams:', uniqueLeagueTypes);
       setLeagueTypes(uniqueLeagueTypes);
       setAvailableLeagueTypes(uniqueLeagueTypes);
+    }
+  }, [teams]);
+  
+  // Add debugging in the component to log all team abbreviations
+  useEffect(() => {
+    if (teams.length > 0) {
+      console.log('[TEAM DEBUG] Logging all team abbreviations:');
+      teams.forEach(team => {
+        const normalizedAbbr = normalizeAbbreviation(team.abbreviation);
+        console.log(`[TEAM DEBUG] Team: ${team.name}, Abbreviation: ${team.abbreviation}, Normalized: ${normalizedAbbr}`);
+      });
+      
+      console.log('[LOGO DEBUG] Available team logos:', Object.keys(teamLogos).join(', '));
     }
   }, [teams]);
   
@@ -1008,9 +1143,52 @@ const TeamManager = () => {
     }
   };
   
+  // Handler for Create Team button
+  const handleCreateTeam = () => {
+    setActiveTab('create');
+  };
+  
+  // Add a function to normalize abbreviations consistently
+  const normalizeAbbreviation = (abbr) => {
+    if (!abbr) return '';
+    return abbr.trim().toUpperCase();
+  };
+
+  // Try to get team logo
+  const getTeamLogo = (teamAbbr) => {
+    if (!teamAbbr) {
+      return null;
+    }
+    
+    try {
+      // Normalize the team abbreviation to uppercase
+      const normalizedAbbr = normalizeAbbreviation(teamAbbr);
+      console.log(`[LOGO DEBUG] Attempting to get logo for team: ${teamAbbr} (normalized: ${normalizedAbbr})`);
+      
+      // Check if we have the logo in our imported collection - always allow logo display regardless of communityPack setting
+      if (teamLogos[normalizedAbbr]) {
+        console.log(`[LOGO DEBUG] Found logo for ${normalizedAbbr}`);
+        return teamLogos[normalizedAbbr];
+      } else {
+        console.log(`[LOGO DEBUG] No logo found for ${normalizedAbbr} in teamLogos collection`);
+        return null;
+      }
+    } catch (error) {
+      console.log(`[LOGO DEBUG] Error getting logo for team ${teamAbbr}:`, error);
+      return null;
+    }
+  };
+  
   return (
     <Container>
-      <Title>Team Management</Title>
+      <TitleContainer>
+        <Title>Team Management</Title>
+        {isAuthenticated() && (
+          <CreateTeamButton onClick={handleCreateTeam}>
+            Create Team
+          </CreateTeamButton>
+        )}
+      </TitleContainer>
       
       {isAuthenticated() && (
         <div style={{ marginBottom: '20px' }}>
@@ -1048,14 +1226,14 @@ const TeamManager = () => {
             active={activeTab === 'teams'} 
             onClick={() => setActiveTab('teams')}
           >
-            Current Teams
+            Teams
           </TabButton>
           {isAuthenticated() && (
             <TabButton 
               active={activeTab === 'create'} 
               onClick={() => setActiveTab('create')}
             >
-              Create New Team
+              Create Team
             </TabButton>
           )}
         </TabButtons>
@@ -1315,9 +1493,20 @@ const TeamManager = () => {
                   textColor={getTextColor(team.primary_color)}
                 >
                   <TeamHeader>
-                    <TeamLogo primaryColor={team.primary_color || '#1e1e1e'}>
-                      {team.abbreviation}
-                    </TeamLogo>
+                    {/* Add logging here to debug each team's logo attempt */}
+                    {console.log(`[RENDER DEBUG] Rendering team ${team.name} (${team.abbreviation})`)}
+                    <TeamLogoContainer>
+                      {(communityPack === 1 || communityPack === undefined) && getTeamLogo(normalizeAbbreviation(team.abbreviation)) ? (
+                        <TeamLogoImage 
+                          src={getTeamLogo(normalizeAbbreviation(team.abbreviation))} 
+                          alt={`${team.name} logo`} 
+                        />
+                      ) : (
+                        <TeamLogoPlaceholder primaryColor={team.primary_color || '#1e1e1e'}>
+                          {team.abbreviation}
+                        </TeamLogoPlaceholder>
+                      )}
+                    </TeamLogoContainer>
                     <TeamInfo>
                       <TeamName>{team.name}</TeamName>
                       <TeamCity>{team.city}</TeamCity>
@@ -1328,32 +1517,71 @@ const TeamManager = () => {
                             <span>League:</span>
                             <span>{team.league || 'NHL'}</span>
                           </TeamDetail>
+                          {/* Show conference only for Pro teams */}
+                          {(team.league_type === 'Pro') && (
+                            <TeamDetail>
+                              <span>Conference:</span>
+                              <span>{team.conference || (team.division_id <= 2 ? 'Eastern' : 'Western')}</span>
+                            </TeamDetail>
+                          )}
+                          {/* Show division only for Pro and Junior teams */}
+                          {(['Pro', 'Junior'].includes(team.league_type)) && (
+                            <TeamDetail>
+                              <span>Division:</span>
+                              <span>
+                                {divisions.find(d => d.id === team.division_id)?.name || team.divisionName || 'Unknown'}
+                              </span>
+                            </TeamDetail>
+                          )}
+                          {/* Add country for all teams */}
                           <TeamDetail>
-                            <span>Conference:</span>
-                            <span>{team.conference || (team.division_id <= 2 ? 'Eastern' : 'Western')}</span>
+                            <span>Country:</span>
+                            <span>{team.country || 'Canada'}</span>
                           </TeamDetail>
+                    {/* Only show arena name for Junior or Pro teams */}
+                    {(team.league_type === 'Pro' || team.league_type === 'Junior') && (
+                      <TeamDetail>
+                        <span>Arena:</span>
+                        <span>{team.arena_name}</span>
+                      </TeamDetail>
+                    )}
+                    {/* Only show arena capacity for Junior or Pro teams */}
+                    {(team.league_type === 'Pro' || team.league_type === 'Junior') && (
+                      <TeamDetail>
+                        <span>Arena Capacity:</span>
+                        <span>{team.arena_capacity?.toLocaleString() || 'Unknown'}</span>
+                      </TeamDetail>
+                    )}
+                    {/* Show In-League Prestige for all teams */}
                     <TeamDetail>
-                      <span>Division:</span>
-                      <span>
-                            {divisions.find(d => d.id === team.division_id)?.name || team.divisionName || 'Unknown'}
-                      </span>
-                    </TeamDetail>
-                    <TeamDetail>
-                      <span>Arena:</span>
-                      <span>{team.arena_name}</span>
-                    </TeamDetail>
-                    <TeamDetail>
-                      <span>Capacity:</span>
-                      <span>{team.arena_capacity?.toLocaleString() || 'Unknown'}</span>
-                    </TeamDetail>
-                    <TeamDetail>
-                      <span>Prestige:</span>
+                      <span>In-League Prestige:</span>
                       <span>{team.prestige}/100</span>
-                        </TeamDetail>
-                          <TeamDetail>
-                            <span>Salary Cap:</span>
-                            <span>${(team.salary_cap || 82500000).toLocaleString()}</span>
                     </TeamDetail>
+                    {/* Only show Salary Cap for NHL teams */}
+                    {team.league === 'NHL' && (
+                      <TeamDetail>
+                        <span>Salary Cap:</span>
+                        <span>${(team.salary_cap || 82500000).toLocaleString()}</span>
+                      </TeamDetail>
+                    )}
+                    {/* Add GM and Coach for NHL teams */}
+                    {team.league === 'NHL' && (
+                      <>
+                        <TeamDetail>
+                          <span>General Manager:</span>
+                          <span>{team.general_manager || 'Not assigned'}</span>
+                        </TeamDetail>
+                        <TeamDetail>
+                          <span>Coach:</span>
+                          <span>{team.coach || 'Not assigned'}</span>
+                        </TeamDetail>
+                      </>
+                    )}
+                    {/* Best Player section for all teams */}
+                    <BestPlayerSection>
+                      <BestPlayerName>Best Player</BestPlayerName>
+                      <BestPlayerDetail>Abcde Zyxz  81 Overall</BestPlayerDetail>
+                    </BestPlayerSection>
                   </TeamDetails>
                         <TeamActions>
                           <TeamButton 

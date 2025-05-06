@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import GameSimulation from '../../components/games/GameSimulation';
 import styled from 'styled-components';
+import { supabase } from '../../lib/supabase';
 
 const Container = styled.div`
   padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
 `;
 
 const BackButton = styled.button`
@@ -21,37 +24,116 @@ const BackButton = styled.button`
   }
 `;
 
+const LoadingIndicator = styled.div`
+  text-align: center;
+  color: #C4CED4;
+  font-size: 18px;
+  margin-top: 50px;
+`;
+
+const ErrorDisplay = styled.div`
+  text-align: center;
+  color: #F44336;
+  font-size: 18px;
+  margin-top: 50px;
+  padding: 20px;
+  background-color: rgba(244, 67, 54, 0.1);
+  border-radius: 8px;
+`;
+
 const GameSimulationPage = () => {
   const navigate = useNavigate();
+  const params = useParams();
   const [gameData, setGameData] = useState(null);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   
   useEffect(() => {
-    // Retrieve game data from session storage
-    const storedGameData = sessionStorage.getItem('currentGame');
-    
-    if (storedGameData) {
+    const fetchData = async () => {
+      setLoading(true);
+      setError('');
+      
       try {
-        const parsedData = JSON.parse(storedGameData);
-        setGameData(parsedData);
+        // Check for game data in session storage first
+        const storedGameData = sessionStorage.getItem('currentGame');
+        
+        if (storedGameData) {
+          const parsedData = JSON.parse(storedGameData);
+          setGameData(parsedData);
+          setLoading(false);
+          return;
+        }
+        
+        // If no session storage data, check URL parameters
+        const { homeTeamId, awayTeamId, mode } = params;
+        
+        if (homeTeamId && awayTeamId) {
+          // Fetch team data from Supabase
+          const [homeTeamResponse, awayTeamResponse] = await Promise.all([
+            supabase.from('Team').select('*').eq('id', homeTeamId).single(),
+            supabase.from('Team').select('*').eq('id', awayTeamId).single()
+          ]);
+          
+          if (homeTeamResponse.error) throw new Error(`Home team error: ${homeTeamResponse.error.message}`);
+          if (awayTeamResponse.error) throw new Error(`Away team error: ${awayTeamResponse.error.message}`);
+          
+          const homeTeam = homeTeamResponse.data;
+          const awayTeam = awayTeamResponse.data;
+          
+          // Create game data
+          const newGameData = {
+            id: `${Date.now()}`,
+            homeTeam: {
+              id: homeTeam.id,
+              name: homeTeam.team,
+              abbreviation: homeTeam.abbreviation
+            },
+            awayTeam: {
+              id: awayTeam.id,
+              name: awayTeam.team,
+              abbreviation: awayTeam.abbreviation
+            },
+            simulationMode: mode || 'fast_play_by_play'
+          };
+          
+          setGameData(newGameData);
+          
+          // Store the data in session storage for potential refreshes
+          sessionStorage.setItem('currentGame', JSON.stringify(newGameData));
+        } else {
+          throw new Error('Missing team information in URL');
+        }
       } catch (err) {
-        setError('Failed to load game data');
-        console.error('Error parsing game data:', err);
+        console.error('Error loading game data:', err);
+        setError(err.message || 'Failed to load game data');
+      } finally {
+        setLoading(false);
       }
-    } else {
-      setError('No game data found');
-    }
-  }, []);
+    };
+    
+    fetchData();
+  }, [params]);
   
   const handleBack = () => {
+    // Clear the stored game data when going back
+    sessionStorage.removeItem('currentGame');
     navigate('/game/pre-game');
   };
+  
+  if (loading) {
+    return (
+      <Container>
+        <BackButton onClick={handleBack}>Back to Game Setup</BackButton>
+        <LoadingIndicator>Loading game data...</LoadingIndicator>
+      </Container>
+    );
+  }
   
   if (error) {
     return (
       <Container>
         <BackButton onClick={handleBack}>Back to Game Setup</BackButton>
-        <div>{error}</div>
+        <ErrorDisplay>{error}</ErrorDisplay>
       </Container>
     );
   }
@@ -60,7 +142,7 @@ const GameSimulationPage = () => {
     return (
       <Container>
         <BackButton onClick={handleBack}>Back to Game Setup</BackButton>
-        <div>Loading game data...</div>
+        <ErrorDisplay>No game data available. Please set up a new game.</ErrorDisplay>
       </Container>
     );
   }
@@ -70,8 +152,8 @@ const GameSimulationPage = () => {
       <BackButton onClick={handleBack}>Back to Game Setup</BackButton>
       <GameSimulation 
         gameId={gameData.id}
-        homeTeam={gameData.homeTeam.name}
-        awayTeam={gameData.awayTeam.name}
+        homeTeam={gameData.homeTeam}
+        awayTeam={gameData.awayTeam}
         simulationMode={gameData.simulationMode}
       />
     </Container>

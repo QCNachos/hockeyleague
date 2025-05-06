@@ -1706,17 +1706,19 @@ const TeamManager = () => {
   };
   
   // Add function to handle navigation to Line Combinations
-  const handleEditLines = async (teamId) => {
+  const handleEditLines = (teamId) => {
     try {
-      // Get the full team data including league information from backend API
-      const { data: team } = await axios.get(`/api/teams/${teamId}`);
+      // Find the team in our local state instead of making an API call
+      const team = teams.find(t => t.id === teamId);
       
       if (!team) {
-        console.error('[DEBUG] Team not found');
+        console.error('[DEBUG] Team not found in local state');
         throw new Error('Team not found');
       }
       
-      // Navigate to line editor page with team ID
+      console.log(`Navigating to lines for team: ${team.name} (${team.abbreviation})`);
+      
+      // Navigate to lines page with proper URL format - uses path parameters
       window.location.href = `/line-combinations/${team.league}/${teamId}`;
       
     } catch (error) {
@@ -1726,22 +1728,24 @@ const TeamManager = () => {
   };
 
   // Add function to handle navigation to Player Editor
-  const handleEditPlayers = async (teamId) => {
+  const handleEditPlayers = (teamId) => {
     try {
-      console.log(`[DEBUG] handleEditPlayers called with teamId: ${teamId}`);
+      // Find the team in our local state
+      const team = teams.find(t => t.id === teamId);
       
-      // Get the team data from backend API
-      const { data: team } = await axios.get(`/api/teams/${teamId}`);
-      
-      if (!team || !team.abbreviation) {
-        console.error('[DEBUG] Team or team abbreviation not found');
+      if (!team) {
+        console.error('[DEBUG] Team not found in local state');
         throw new Error('Team not found');
       }
       
-      // Just pass team abbreviation to PlayerEditor
-      window.location.href = `/player-editor?team=${team.abbreviation}`;
+      console.log(`Navigating to player editor for team: ${team.name} (${team.abbreviation})`);
+      
+      // Navigate to players page with team abbreviation as 'teamId' parameter
+      // This matches what PlayerEditor.js expects (it looks for urlTeamId)
+      window.location.href = `/players?teamId=${team.abbreviation}`;
+      
     } catch (error) {
-      console.error(`[DEBUG] Error navigating to player editor: ${error}`);
+      console.error(`Error navigating to player editor: ${error}`);
       setSupabaseError(`Error: ${error.message}`);
     }
   };
@@ -1822,7 +1826,7 @@ const TeamManager = () => {
   return (
     <Container>
       <TitleContainer>
-        <Title>Team Management</Title>
+      <Title>Team Management</Title>
         <ButtonsContainer>
           <CreateTeamButton onClick={handleCreateTeam}>
             Create Team
@@ -1858,33 +1862,33 @@ const TeamManager = () => {
         <div><strong>Filtered Teams:</strong> {getFilteredTeams().length}</div>
       </div>
       
-      <div style={{ marginBottom: '20px' }}>
-        <SubmitButton 
-          onClick={initializeNHLTeams} 
-          disabled={initializing}
-          style={{ marginRight: '15px' }}
-        >
-          {initializing ? 'Initializing...' : 'Initialize NHL Teams'}
-        </SubmitButton>
-        
-        {initMessage && (
-          <span style={{ 
-            color: initMessage.type === 'success' ? '#4CAF50' : '#F44336',
-            marginLeft: '10px'
-          }}>
-            {initMessage.text}
-          </span>
-        )}
-        
-        {supabaseError && (
-          <span style={{ 
-            color: '#F44336',
-            marginLeft: '10px'
-          }}>
-            {supabaseError}
-          </span>
-        )}
-      </div>
+        <div style={{ marginBottom: '20px' }}>
+          <SubmitButton 
+            onClick={initializeNHLTeams} 
+            disabled={initializing}
+            style={{ marginRight: '15px' }}
+          >
+            {initializing ? 'Initializing...' : 'Initialize NHL Teams'}
+          </SubmitButton>
+          
+          {initMessage && (
+            <span style={{ 
+              color: initMessage.type === 'success' ? '#4CAF50' : '#F44336',
+              marginLeft: '10px'
+            }}>
+              {initMessage.text}
+            </span>
+          )}
+          
+          {supabaseError && (
+            <span style={{ 
+              color: '#F44336',
+              marginLeft: '10px'
+            }}>
+              {supabaseError}
+            </span>
+          )}
+        </div>
       
       <TabContainer>
         <TabButtons>
@@ -1894,12 +1898,12 @@ const TeamManager = () => {
           >
             Teams
           </TabButton>
-          <TabButton 
-            active={activeTab === 'create'} 
-            onClick={() => setActiveTab('create')}
-          >
+            <TabButton 
+              active={activeTab === 'create'} 
+              onClick={() => setActiveTab('create')}
+            >
             Create Team
-          </TabButton>
+            </TabButton>
         </TabButtons>
         
         {activeTab === 'create' && (

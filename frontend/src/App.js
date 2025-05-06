@@ -72,6 +72,7 @@ function App() {
             <Route path="game" element={<GameMode />} />
             <Route path="game/pre-game" element={<PreGame />} />
             <Route path="game/simulation" element={<GameSimulationPage />} />
+            <Route path="game/simulation/:homeTeamId/:awayTeamId/:mode" element={<GameSimulationPage />} />
             <Route path="season" element={<SeasonMode />} />
             <Route path="tournaments" element={<Tournaments />} />
             <Route path="tournaments/stanley-cup/setup" element={<StanleyCupSetup />} />

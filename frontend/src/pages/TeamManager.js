@@ -61,6 +61,11 @@ const TitleContainer = styled.div`
   margin-bottom: 20px;
 `;
 
+const ButtonsContainer = styled.div`
+  display: flex;
+  gap: 10px;
+`;
+
 const CreateTeamButton = styled.button`
   padding: 10px 15px;
   background-color: #B30E16;
@@ -69,9 +74,15 @@ const CreateTeamButton = styled.button`
   border-radius: 4px;
   cursor: pointer;
   font-weight: 500;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   
   &:hover {
     background-color: #950b12;
+    transform: translateY(-2px);
+  }
+  
+  &:active {
+    transform: translateY(1px);
   }
 `;
 
@@ -458,6 +469,11 @@ const TeamManager = () => {
   });
   
   const { isAuthenticated, getAuthHeaders } = useAuth();
+  
+  // Add console log to check authentication status
+  useEffect(() => {
+    console.log("Authentication status:", isAuthenticated());
+  }, [isAuthenticated]);
   
   // Set up leagueToTypeMap - will be populated from API
   // eslint-disable-next-line no-unused-vars
@@ -1547,7 +1563,14 @@ const TeamManager = () => {
     if (filteredTeams.length > 0) {
       console.log("First matching team:", filteredTeams[0]);
     }
-    return filteredTeams;
+    
+    // Sort teams by city alphabetically
+    return [...filteredTeams].sort((a, b) => {
+      if (!a.city && !b.city) return 0;
+      if (!a.city) return 1;
+      if (!b.city) return -1;
+      return a.city.localeCompare(b.city);
+    });
   }, [teams, selectedLeagueType, selectedLeague, selectedConference, selectedDivision, selectedCountry]);
   
   // Fetch league types directly from Supabase - call early in component lifecycle
@@ -1799,12 +1822,12 @@ const TeamManager = () => {
   return (
     <Container>
       <TitleContainer>
-      <Title>Team Management</Title>
-        {isAuthenticated() && (
+        <Title>Team Management</Title>
+        <ButtonsContainer>
           <CreateTeamButton onClick={handleCreateTeam}>
             Create Team
           </CreateTeamButton>
-        )}
+        </ButtonsContainer>
       </TitleContainer>
       
       {/* Debug info - show filter states */}
@@ -1835,35 +1858,33 @@ const TeamManager = () => {
         <div><strong>Filtered Teams:</strong> {getFilteredTeams().length}</div>
       </div>
       
-      {isAuthenticated() && (
-        <div style={{ marginBottom: '20px' }}>
-          <SubmitButton 
-            onClick={initializeNHLTeams} 
-            disabled={initializing}
-            style={{ marginRight: '15px' }}
-          >
-            {initializing ? 'Initializing...' : 'Initialize NHL Teams'}
-          </SubmitButton>
-          
-          {initMessage && (
-            <span style={{ 
-              color: initMessage.type === 'success' ? '#4CAF50' : '#F44336',
-              marginLeft: '10px'
-            }}>
-              {initMessage.text}
-            </span>
-          )}
-          
-          {supabaseError && (
-            <span style={{ 
-              color: '#F44336',
-              marginLeft: '10px'
-            }}>
-              {supabaseError}
-            </span>
-          )}
-        </div>
-      )}
+      <div style={{ marginBottom: '20px' }}>
+        <SubmitButton 
+          onClick={initializeNHLTeams} 
+          disabled={initializing}
+          style={{ marginRight: '15px' }}
+        >
+          {initializing ? 'Initializing...' : 'Initialize NHL Teams'}
+        </SubmitButton>
+        
+        {initMessage && (
+          <span style={{ 
+            color: initMessage.type === 'success' ? '#4CAF50' : '#F44336',
+            marginLeft: '10px'
+          }}>
+            {initMessage.text}
+          </span>
+        )}
+        
+        {supabaseError && (
+          <span style={{ 
+            color: '#F44336',
+            marginLeft: '10px'
+          }}>
+            {supabaseError}
+          </span>
+        )}
+      </div>
       
       <TabContainer>
         <TabButtons>
@@ -1873,17 +1894,15 @@ const TeamManager = () => {
           >
             Teams
           </TabButton>
-          {isAuthenticated() && (
-            <TabButton 
-              active={activeTab === 'create'} 
-              onClick={() => setActiveTab('create')}
-            >
-              Create Team
-            </TabButton>
-          )}
+          <TabButton 
+            active={activeTab === 'create'} 
+            onClick={() => setActiveTab('create')}
+          >
+            Create Team
+          </TabButton>
         </TabButtons>
         
-        {activeTab === 'create' && isAuthenticated() && (
+        {activeTab === 'create' && (
           <NewTeamForm onSubmit={handleNewTeamSubmit}>
             <h2>Create New Team</h2>
             
@@ -2026,8 +2045,6 @@ const TeamManager = () => {
       
       {activeTab === 'teams' && (
         <>
-          <p>Below are the teams in the league. Click on a team to view details and manage roster.</p>
-          
           {/* Filter bar */}
           <FilterContainer>
             {/* Filter Dropdown for League Type */}

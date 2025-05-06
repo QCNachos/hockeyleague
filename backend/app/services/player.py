@@ -312,6 +312,153 @@ def get_players():
     
     return jsonify(players), 200
 
+@player_bp.route('/best-by-team', methods=['GET'])
+def get_best_player_by_team():
+    """Get the best player for each team based on overall rating"""
+    from ..supabase_client import get_supabase
+    import logging
+    import traceback
+    
+    try:
+        logging.info("Fetching best players by team from Supabase")
+        supabase = get_supabase()
+        
+        # First, examine the Player table schema to know which columns exist
+        try:
+            logging.info("Inspecting Player table schema...")
+            # Use a generic select to get the first record and see its structure
+            schema_query = supabase.table('Player').select('*').limit(1).execute()
+            if schema_query.data and len(schema_query.data) > 0:
+                sample_player = schema_query.data[0]
+                available_columns = list(sample_player.keys())
+                logging.info(f"Available Player columns: {available_columns}")
+                
+                # Get the team identifier column (could be 'team' or 'team_id')
+                team_column = None
+                if 'team_id' in available_columns:
+                    team_column = 'team_id'
+                elif 'team' in available_columns:
+                    team_column = 'team'
+                
+                # Get column for player's overall rating 
+                rating_column = None
+                possible_rating_columns = ['overall', 'overall_rating', 'rating']
+                for col in possible_rating_columns:
+                    if col in available_columns:
+                        rating_column = col
+                        break
+                
+                # Get column for player's position
+                position_column = None
+                possible_position_columns = ['position', 'position_primary', 'player_position']
+                for col in possible_position_columns:
+                    if col in available_columns:
+                        position_column = col
+                        break
+                
+                logging.info(f"Using columns: team={team_column}, rating={rating_column}, position={position_column}")
+            else:
+                logging.warning("No data found in Player table schema query")
+                team_column = 'team'
+                rating_column = 'overall' 
+                position_column = 'position'
+        except Exception as schema_error:
+            logging.error(f"Error inspecting Player table schema: {schema_error}")
+            traceback.print_exc()
+            team_column = 'team'
+            rating_column = 'overall'
+            position_column = 'position'
+                
+        # Now fetch players for all positions
+        best_players = []
+        
+        # Only proceed with player query if we have a team column
+        if team_column:
+            try:
+                logging.info(f"Querying Player table for all positions using team column: {team_column}")
+                
+                # Build select statement based on available columns
+                select_statement = f"id, first_name, last_name, {team_column}"
+                if rating_column:
+                    select_statement += f", {rating_column}"
+                if position_column:
+                    select_statement += f", {position_column}"
+                
+                # Get all players with team assignment
+                player_query = supabase.table('Player').select(select_statement).execute()
+                
+                if player_query.data and len(player_query.data) > 0:
+                    logging.info(f"Found {len(player_query.data)} players")
+                    
+                    # Group players by team
+                    players_by_team = {}
+                    for player in player_query.data:
+                        team = player.get(team_column)
+                        if not team:
+                            continue
+                        
+                        # Get overall rating and ensure it's an integer
+                        overall = 0
+                        if rating_column:
+                            try:
+                                overall_value = player.get(rating_column)
+                                if isinstance(overall_value, str):
+                                    overall = int(float(overall_value))
+                                else:
+                                    overall = int(overall_value or 0)
+                            except (ValueError, TypeError):
+                                overall = 0
+                        
+                        # Initialize team entry if not exists
+                        if team not in players_by_team:
+                            players_by_team[team] = []
+                        
+                        # Add player to team's list with crucial data for sorting
+                        players_by_team[team].append({
+                            'player': player,
+                            'overall': overall
+                        })
+                    
+                    # For each team, find the player with the highest overall rating
+                    for team, players in players_by_team.items():
+                        if not players:
+                            continue
+                        
+                        # Sort players by overall in descending order (highest first)
+                        sorted_players = sorted(players, key=lambda x: x['overall'], reverse=True)
+                        
+                        # Get the player with highest overall rating
+                        best_player_data = sorted_players[0]
+                        player = best_player_data['player']
+                        
+                        formatted_player = {
+                            'id': player.get('id'),
+                            'first_name': player.get('first_name', ''),
+                            'last_name': player.get('last_name', ''),
+                            'team_id': team,
+                            'overall': best_player_data['overall']
+                        }
+                        
+                        # Add position if available
+                        if position_column:
+                            formatted_player['position'] = player.get(position_column, '')
+                        
+                        best_players.append(formatted_player)
+                        
+                else:
+                    logging.warning("No data returned from Player query")
+            except Exception as player_error:
+                logging.error(f"Error querying Player table: {player_error}")
+                traceback.print_exc()
+        else:
+            logging.error(f"Cannot query Player table due to missing team column")
+        
+        # Return the results
+        return jsonify(best_players), 200
+    except Exception as e:
+        logging.error(f"Error in get_best_player_by_team: {e}")
+        logging.exception("Traceback:")
+        return jsonify({"error": str(e)}), 500
 
 @player_bp.route('/<int:player_id>', methods=['GET'])
 def get_player(player_id):

@@ -2,6 +2,35 @@ from typing import Dict, List, Any, Optional
 import random
 from ..extensions import db
 from datetime import datetime
+from flask import Blueprint, jsonify, request
+import logging
+
+# Create the blueprint
+coach_bp = Blueprint('coach', __name__)
+
+# API endpoints for coaches
+@coach_bp.route('/coaches', methods=['GET'])
+def get_all_coaches():
+    """Get all coaches from Supabase"""
+    from ..supabase_client import get_supabase
+    
+    try:
+        logging.info("Fetching all coaches from Supabase")
+        supabase = get_supabase()
+        
+        # Query for coaches
+        response = supabase.table('Staff_Coach').select('*').execute()
+        
+        if response.data:
+            logging.info(f"Found {len(response.data)} coaches")
+            return jsonify(response.data), 200
+        else:
+            logging.warning("No coaches found in Supabase")
+            return jsonify([]), 200
+    except Exception as e:
+        logging.error(f"Error fetching coaches: {str(e)}")
+        logging.exception("Traceback:")
+        return jsonify({"error": str(e)}), 500
 
 # Coach Model
 class Coach(db.Model):

@@ -210,7 +210,10 @@ class TeamService:
                     'arena_name': team.get('arena_name'),
                     'arena_capacity': team.get('arena_capacity'),
                     'prestige': team.get('prestige'),
-                    'country': team.get('country')
+                    'country': team.get('country'),
+                    'gm_name': team.get('gm_name'),
+                    'general_manager': team.get('general_manager') or team.get('gm_name'),
+                    'coach': team.get('coach')
                 }
                 processed_teams.append(processed_team)
             
@@ -765,3 +768,120 @@ def get_team_conferences():
     from .league import ConferenceService
     conferences = ConferenceService.get_all_conferences()
     return jsonify(conferences), 200 
+
+@team_bp.route('/players/best-by-team', methods=['GET'])
+def get_best_players_by_team():
+    """
+    Get the best player (highest overall rating) for each team from Supabase.
+    
+    Returns:
+        JSON array of player objects with team association
+    """
+    try:
+        # Get Supabase client
+        supabase = get_supabase_client()
+        if not supabase:
+            return jsonify({"error": "Could not connect to Supabase"}), 500
+        
+        # Fetch all players with team information
+        try:
+            # Use RPC call to get the best player for each team
+            # Note: You may need to create this function in Supabase
+            response = supabase.rpc('get_best_players_by_team').execute()
+            if response.data:
+                logger.info(f"Fetched {len(response.data)} best players from Supabase")
+                return jsonify(response.data), 200
+        except Exception as e:
+            logger.error(f"Error fetching best players using RPC: {e}")
+            
+            # Fallback: Manually get players and find the best ones
+            try:
+                logger.info("Using fallback method to find best players")
+                # Get all players with team_id
+                response = supabase.table("Player").select("*").not_is("team_id", "null").execute()
+                
+                if not response.data:
+                    logger.warning("No players found in Supabase")
+                    return jsonify([]), 200
+                
+                # Group players by team
+                players_by_team = {}
+                for player in response.data:
+                    team_id = player.get('team_id')
+                    if team_id:
+                        if team_id not in players_by_team:
+                            players_by_team[team_id] = []
+                        players_by_team[team_id].append(player)
+                
+                # Find the best player for each team
+                best_players = []
+                for team_id, players in players_by_team.items():
+                    # Sort players by overall rating (descending)
+                    sorted_players = sorted(players, 
+                                           key=lambda p: int(p.get('overall', 0) or 0), 
+                                           reverse=True)
+                    if sorted_players:
+                        best_players.append(sorted_players[0])
+                
+                logger.info(f"Fallback method found {len(best_players)} best players")
+                return jsonify(best_players), 200
+            except Exception as fallback_error:
+                logger.error(f"Fallback method failed: {fallback_error}")
+                return jsonify({"error": str(fallback_error)}), 500
+    except Exception as e:
+        logger.error(f"Error in best players endpoint: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@team_bp.route('/staff/coaches', methods=['GET'])
+def get_coaches():
+    """
+    Get all coaches from Supabase with their team associations.
+    
+    Returns:
+        JSON array of coach objects
+    """
+    try:
+        # Get Supabase client
+        supabase = get_supabase_client()
+        if not supabase:
+            return jsonify({"error": "Could not connect to Supabase"}), 500
+        
+        # Fetch coaches from the Staff_Coach table or equivalent
+        response = supabase.table("Staff_Coach").select("*").execute()
+        
+        if response.data:
+            logger.info(f"Fetched {len(response.data)} coaches from Supabase")
+            return jsonify(response.data), 200
+        else:
+            logger.warning("No coaches found in Supabase")
+            return jsonify([]), 200
+    except Exception as e:
+        logger.error(f"Error fetching coaches: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@team_bp.route('/staff/gms', methods=['GET'])
+def get_general_managers():
+    """
+    Get all general managers from Supabase with their team associations.
+    
+    Returns:
+        JSON array of GM objects
+    """
+    try:
+        # Get Supabase client
+        supabase = get_supabase_client()
+        if not supabase:
+            return jsonify({"error": "Could not connect to Supabase"}), 500
+        
+        # Fetch GMs from the Staff_GM table or equivalent
+        response = supabase.table("Staff_GM").select("*").execute()
+        
+        if response.data:
+            logger.info(f"Fetched {len(response.data)} general managers from Supabase")
+            return jsonify(response.data), 200
+        else:
+            logger.warning("No general managers found in Supabase")
+            return jsonify([]), 200
+    except Exception as e:
+        logger.error(f"Error fetching general managers: {e}")
+        return jsonify({"error": str(e)}), 500 

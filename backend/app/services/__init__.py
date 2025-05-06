@@ -9,6 +9,7 @@ from . import calendar, player
 # from .team_formation import TeamFormation
 from .chemistry import ChemistryCalculator
 from .coach import CoachStrategy
+from . import gm  # Explicitly import gm to ensure it's loaded
 
 from flask import Blueprint, current_app
 
@@ -26,6 +27,8 @@ def register_service_blueprints(app):
         print(f"- lines_bp blueprint available")
     if hasattr(team_formation, 'team_rating_bp'):
         print(f"- team_rating_bp blueprint available")
+    if hasattr(gm, 'staff_bp'):
+        print(f"- staff_bp blueprint available")
     
     # Register individual service blueprints
     # These will be created or modified in each service file
@@ -74,6 +77,11 @@ def register_service_blueprints(app):
     if hasattr(awards, 'awards_bp'):
         app.register_blueprint(awards.awards_bp, url_prefix='/api/awards')
         print("Registered awards blueprint with prefix /api/awards")
+        
+    # Register staff blueprint
+    if hasattr(gm, 'staff_bp'):
+        app.register_blueprint(gm.staff_bp, url_prefix='/api/staff')
+        print("Registered staff blueprint with prefix /api/staff")
 
     # Print all routes after registration to help debug
     print("All registered routes:")

@@ -47,6 +47,12 @@ const teamLogos = {
   PHI, PIT, SEA, SJS, STL, TBL, TOR, VAN, VGK, WPG, WSH, UTA
 };
 
+// For debugging API calls
+const debugAPI = (message, data) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${message}`, data);
+};
+
 const Container = styled.div`
   padding: 20px;
   display: flex;
@@ -265,6 +271,12 @@ const PreGame = () => {
   
   // Game settings
   const [gameMode, setGameMode] = useState('fast_play_by_play');
+
+  // Team ratings loading states
+  const [homeTeamRatings, setHomeTeamRatings] = useState(null);
+  const [awayTeamRatings, setAwayTeamRatings] = useState(null);
+  const [loadingHomeRatings, setLoadingHomeRatings] = useState(false);
+  const [loadingAwayRatings, setLoadingAwayRatings] = useState(false);
   
   // Fetch all teams and leagues data
   useEffect(() => {
@@ -304,20 +316,13 @@ const PreGame = () => {
           throw teamsError;
         }
         
-        // Process teams with ratings
+        // Process teams but don't set mock ratings yet
         const enhancedTeams = teamsData.map(team => ({
           ...team,
           id: team.id,
           name: team.team,
           abbreviation: team.abbreviation,
-          logoUrl: '',
-          ratings: {
-            overall: Math.floor(Math.random() * 10) + 80, // Simulate ratings until we have real data
-            offense: Math.floor(Math.random() * 10) + 80,
-            defense: Math.floor(Math.random() * 10) + 80,
-            specialTeams: Math.floor(Math.random() * 10) + 80,
-            goaltending: Math.floor(Math.random() * 10) + 80
-          }
+          logoUrl: ''
         }));
         
         setTeams(enhancedTeams);
@@ -332,6 +337,10 @@ const PreGame = () => {
             setAwayTeam(sortedTeams[1]);
             setHomeTeamId(sortedTeams[0].id);
             setAwayTeamId(sortedTeams[1].id);
+            
+            // Fetch ratings for default teams
+            fetchTeamRatings(sortedTeams[0], 'home');
+            fetchTeamRatings(sortedTeams[1], 'away');
           }
         }
         
@@ -345,6 +354,177 @@ const PreGame = () => {
     
     fetchData();
   }, []);
+
+  // Function to fetch team ratings from backend API
+  const fetchTeamRatings = async (team, side) => {
+    if (!team || !team.abbreviation) return;
+    
+    // Set loading state for appropriate team
+    if (side === 'home') {
+      setLoadingHomeRatings(true);
+    } else {
+      setLoadingAwayRatings(true);
+    }
+    
+    try {
+      debugAPI(`Fetching ratings for ${side} team:`, team.abbreviation);
+      
+      // Try formation API first (most complete data)
+      let ratings = null;
+      
+      try {
+        // First try the formation API endpoint which includes team ratings
+        const formationUrl = `http://localhost:5001/api/lines/formation/${team.abbreviation}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        
+        const formationResponse = await fetch(formationUrl, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (formationResponse.ok) {
+          const formationData = await formationResponse.json();
+          
+          if (formationData && formationData.team_rating) {
+            debugAPI(`Got team ratings from formation API for ${side} team:`, formationData.team_rating);
+            ratings = {
+              overall: formationData.team_rating.overall || 0,
+              offense: formationData.team_rating.offense || 0,
+              defense: formationData.team_rating.defense || 0,
+              specialTeams: formationData.team_rating.special_teams || 0,
+              goaltending: formationData.team_rating.goaltending || 0
+            };
+          }
+        }
+      } catch (formationError) {
+        debugAPI(`Formation API error for ${side} team:`, formationError);
+      }
+      
+      // If formation API failed, try lines API
+      if (!ratings) {
+        try {
+          const linesUrl = `http://localhost:5001/api/lines/update-team-overall/${team.abbreviation}`;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+          
+          const linesResponse = await fetch(linesUrl, {
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          
+          if (linesResponse.ok) {
+            const linesData = await linesResponse.json();
+            
+            if (linesData && linesData.overall_rating) {
+              debugAPI(`Got team ratings from lines API for ${side} team:`, linesData);
+              ratings = {
+                overall: linesData.overall_rating || 0,
+                offense: linesData.offense || 0,
+                defense: linesData.defense || 0,
+                specialTeams: linesData.special_teams || 0,
+                goaltending: linesData.goaltending || 0
+              };
+            }
+          }
+        } catch (linesError) {
+          debugAPI(`Lines API error for ${side} team:`, linesError);
+        }
+      }
+      
+      // If lines API failed, try team rating API
+      if (!ratings) {
+        try {
+          const ratingUrl = `http://localhost:5001/api/team_rating/calculate/${team.abbreviation}`;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000);
+          
+          const ratingResponse = await fetch(ratingUrl, {
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          
+          if (ratingResponse.ok) {
+            const ratingData = await ratingResponse.json();
+            
+            if (ratingData) {
+              debugAPI(`Got team ratings from team_rating API for ${side} team:`, ratingData);
+              ratings = {
+                overall: ratingData.overall || 0,
+                offense: ratingData.offense || 0,
+                defense: ratingData.defense || 0,
+                specialTeams: ratingData.special_teams || 0,
+                goaltending: ratingData.goaltending || 0
+              };
+            }
+          }
+        } catch (ratingError) {
+          debugAPI(`Team rating API error for ${side} team:`, ratingError);
+        }
+      }
+      
+      // If all APIs failed, use fallback random ratings
+      if (!ratings) {
+        debugAPI(`Using fallback random ratings for ${side} team`, team.abbreviation);
+        ratings = {
+          overall: Math.floor(Math.random() * 10) + 80,
+          offense: Math.floor(Math.random() * 10) + 80,
+          defense: Math.floor(Math.random() * 10) + 80,
+          specialTeams: Math.floor(Math.random() * 10) + 80,
+          goaltending: Math.floor(Math.random() * 10) + 80
+        };
+      }
+      
+      // Round all ratings to whole numbers
+      Object.keys(ratings).forEach(key => {
+        ratings[key] = Math.round(ratings[key]);
+      });
+      
+      // Set ratings for appropriate team
+      if (side === 'home') {
+        setHomeTeamRatings(ratings);
+        setHomeTeam(prevTeam => ({
+          ...prevTeam,
+          ratings
+        }));
+        setLoadingHomeRatings(false);
+      } else {
+        setAwayTeamRatings(ratings);
+        setAwayTeam(prevTeam => ({
+          ...prevTeam,
+          ratings
+        }));
+        setLoadingAwayRatings(false);
+      }
+    } catch (error) {
+      console.error(`Error fetching ${side} team ratings:`, error);
+      
+      // Set fallback ratings
+      const fallbackRatings = {
+        overall: Math.floor(Math.random() * 10) + 80,
+        offense: Math.floor(Math.random() * 10) + 80,
+        defense: Math.floor(Math.random() * 10) + 80,
+        specialTeams: Math.floor(Math.random() * 10) + 80,
+        goaltending: Math.floor(Math.random() * 10) + 80
+      };
+      
+      if (side === 'home') {
+        setHomeTeamRatings(fallbackRatings);
+        setHomeTeam(prevTeam => ({
+          ...prevTeam,
+          ratings: fallbackRatings
+        }));
+        setLoadingHomeRatings(false);
+      } else {
+        setAwayTeamRatings(fallbackRatings);
+        setAwayTeam(prevTeam => ({
+          ...prevTeam,
+          ratings: fallbackRatings
+        }));
+        setLoadingAwayRatings(false);
+      }
+    }
+  };
   
   // Filter teams by league for selectors
   const getTeamsByLeague = (leagueAbbr) => {
@@ -372,13 +552,25 @@ const PreGame = () => {
     }
     
     try {
+      // Only proceed if communityPack is enabled
+      if (communityPack !== 1) {
+        return null;
+      }
+      
       // Normalize the team abbreviation to uppercase
       const normalizedAbbr = teamAbbr.toUpperCase();
       
-      // Check if we have the logo in our imported collection
-      if (teamLogos[normalizedAbbr] && (communityPack === 1)) {
+      // First try the static mapping for NHL teams (no spaces)
+      if (teamLogos[normalizedAbbr]) {
         return teamLogos[normalizedAbbr];
-      } else {
+      }
+      
+      // If not in static mapping, try dynamic import for teams with spaces
+      try {
+        // This approach handles filenames with spaces
+        return require(`../../assets/Logo_${normalizedAbbr}.png`);
+      } catch (error) {
+        // If dynamic import fails, return null
         return null;
       }
     } catch (error) {
@@ -393,6 +585,7 @@ const PreGame = () => {
     setSelectedHomeLeague(newLeague);
     setHomeTeamId('');
     setHomeTeam(null);
+    setHomeTeamRatings(null);
   };
   
   const handleAwayLeagueChange = (e) => {
@@ -400,6 +593,7 @@ const PreGame = () => {
     setSelectedAwayLeague(newLeague);
     setAwayTeamId('');
     setAwayTeam(null);
+    setAwayTeamRatings(null);
   };
   
   // Handle team selection
@@ -408,6 +602,7 @@ const PreGame = () => {
     setHomeTeamId(id);
     const team = teams.find(t => t.id === id);
     setHomeTeam(team);
+    fetchTeamRatings(team, 'home');
   };
   
   const handleAwayTeamChange = (e) => {
@@ -415,6 +610,7 @@ const PreGame = () => {
     setAwayTeamId(id);
     const team = teams.find(t => t.id === id);
     setAwayTeam(team);
+    fetchTeamRatings(team, 'away');
   };
   
   const handleGameModeSelect = (mode) => {
@@ -462,6 +658,46 @@ const PreGame = () => {
       </Container>
     );
   }
+  
+  // Render team ratings with loading state
+  const renderTeamRatings = (team, ratings, isLoading, side) => {
+    if (isLoading) {
+      return (
+        <TeamRatings>
+          <div style={{ textAlign: 'center', padding: '20px' }}>Loading ratings...</div>
+        </TeamRatings>
+      );
+    }
+    
+    if (!team || !ratings) {
+      return null;
+    }
+    
+    return (
+      <TeamRatings>
+        <RatingItem isOverall={true}>
+          <RatingLabel isOverall={true}>Overall</RatingLabel>
+          <RatingValue isOverall={true} value={ratings.overall}>{ratings.overall}</RatingValue>
+        </RatingItem>
+        <RatingItem>
+          <RatingLabel>Offense</RatingLabel>
+          <RatingValue value={ratings.offense}>{ratings.offense}</RatingValue>
+        </RatingItem>
+        <RatingItem>
+          <RatingLabel>Defense</RatingLabel>
+          <RatingValue value={ratings.defense}>{ratings.defense}</RatingValue>
+        </RatingItem>
+        <RatingItem>
+          <RatingLabel>Special Teams</RatingLabel>
+          <RatingValue value={ratings.specialTeams}>{ratings.specialTeams}</RatingValue>
+        </RatingItem>
+        <RatingItem>
+          <RatingLabel>Goaltending</RatingLabel>
+          <RatingValue value={ratings.goaltending}>{ratings.goaltending}</RatingValue>
+        </RatingItem>
+      </TeamRatings>
+    );
+  };
   
   return (
     <Container>
@@ -514,28 +750,7 @@ const PreGame = () => {
                   )}
                 </TeamLogo>
                 
-                <TeamRatings>
-                  <RatingItem isOverall={true}>
-                    <RatingLabel isOverall={true}>Overall</RatingLabel>
-                    <RatingValue isOverall={true} value={awayTeam.ratings.overall}>{awayTeam.ratings.overall}</RatingValue>
-                  </RatingItem>
-                  <RatingItem>
-                    <RatingLabel>Offense</RatingLabel>
-                    <RatingValue value={awayTeam.ratings.offense}>{awayTeam.ratings.offense}</RatingValue>
-                  </RatingItem>
-                  <RatingItem>
-                    <RatingLabel>Defense</RatingLabel>
-                    <RatingValue value={awayTeam.ratings.defense}>{awayTeam.ratings.defense}</RatingValue>
-                  </RatingItem>
-                  <RatingItem>
-                    <RatingLabel>Special Teams</RatingLabel>
-                    <RatingValue value={awayTeam.ratings.specialTeams}>{awayTeam.ratings.specialTeams}</RatingValue>
-                  </RatingItem>
-                  <RatingItem>
-                    <RatingLabel>Goaltending</RatingLabel>
-                    <RatingValue value={awayTeam.ratings.goaltending}>{awayTeam.ratings.goaltending}</RatingValue>
-                  </RatingItem>
-                </TeamRatings>
+                {renderTeamRatings(awayTeam, awayTeamRatings, loadingAwayRatings, 'away')}
               </>
             )}
           </TeamSection>
@@ -585,28 +800,7 @@ const PreGame = () => {
                   )}
                 </TeamLogo>
                 
-                <TeamRatings>
-                  <RatingItem isOverall={true}>
-                    <RatingLabel isOverall={true}>Overall</RatingLabel>
-                    <RatingValue isOverall={true} value={homeTeam.ratings.overall}>{homeTeam.ratings.overall}</RatingValue>
-                  </RatingItem>
-                  <RatingItem>
-                    <RatingLabel>Offense</RatingLabel>
-                    <RatingValue value={homeTeam.ratings.offense}>{homeTeam.ratings.offense}</RatingValue>
-                  </RatingItem>
-                  <RatingItem>
-                    <RatingLabel>Defense</RatingLabel>
-                    <RatingValue value={homeTeam.ratings.defense}>{homeTeam.ratings.defense}</RatingValue>
-                  </RatingItem>
-                  <RatingItem>
-                    <RatingLabel>Special Teams</RatingLabel>
-                    <RatingValue value={homeTeam.ratings.specialTeams}>{homeTeam.ratings.specialTeams}</RatingValue>
-                  </RatingItem>
-                  <RatingItem>
-                    <RatingLabel>Goaltending</RatingLabel>
-                    <RatingValue value={homeTeam.ratings.goaltending}>{homeTeam.ratings.goaltending}</RatingValue>
-                  </RatingItem>
-                </TeamRatings>
+                {renderTeamRatings(homeTeam, homeTeamRatings, loadingHomeRatings, 'home')}
               </>
             )}
           </TeamSection>

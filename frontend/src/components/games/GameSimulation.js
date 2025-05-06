@@ -275,13 +275,25 @@ const GameSimulation = ({ gameId, homeTeam, awayTeam, simulationMode = 'fast_pla
     if (!teamAbbr) return null;
     
     try {
+      // Only proceed if communityPack is enabled
+      if (communityPack !== 1) {
+        return null;
+      }
+      
       // Normalize the team abbreviation to uppercase
       const normalizedAbbr = teamAbbr.toUpperCase();
       
-      // Check if we have the logo in our imported collection and if community pack is enabled
-      if (teamLogos[normalizedAbbr] && communityPack === 1) {
+      // First try the static mapping for NHL teams (no spaces)
+      if (teamLogos[normalizedAbbr]) {
         return teamLogos[normalizedAbbr];
-      } else {
+      }
+      
+      // If not in static mapping, try dynamic import for teams with spaces
+      try {
+        // This approach handles filenames with spaces
+        return require(`../../assets/Logo_${normalizedAbbr}.png`);
+      } catch (error) {
+        // If dynamic import fails, return null
         return null;
       }
     } catch (error) {

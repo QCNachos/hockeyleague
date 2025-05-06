@@ -3,6 +3,8 @@ import styled from 'styled-components';
 import axios from 'axios';
 import { createClient } from '@supabase/supabase-js';
 import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { selectCommunityPack } from '../store/slices/settingsSlice';
 
 // Import all flag images
 import flagCanada from '../assets/Flag_Canada.png';
@@ -679,10 +681,38 @@ const Draft = () => {
   const [sortDirection, setSortDirection] = useState('asc');
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   
+  // Add the communityPack selector
+  const communityPack = useSelector(selectCommunityPack) || 1;
+  
   // Helper function to get team logo
   const getTeamLogo = (teamAbbrev) => {
     if (!teamAbbrev) return null;
-    return teamLogos[teamAbbrev] || null;
+    
+    try {
+      // Only proceed if communityPack is enabled
+      if (communityPack !== 1) {
+        return null;
+      }
+      
+      const normalizedAbbr = teamAbbrev.toUpperCase();
+      
+      // First try the static mapping for NHL teams (no spaces)
+      if (teamLogos[normalizedAbbr]) {
+        return teamLogos[normalizedAbbr];
+      }
+      
+      // If not in static mapping, try dynamic import for teams with spaces
+      try {
+        // This approach handles filenames with spaces
+        return require(`../assets/Logo_${normalizedAbbr}.png`);
+      } catch (error) {
+        // If dynamic import fails, return null
+        return null;
+      }
+    } catch (error) {
+      console.error(`Error getting logo: ${error.message}`);
+      return null;
+    }
   };
   
   // Fetch draft order

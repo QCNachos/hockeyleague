@@ -438,14 +438,14 @@ const TeamManager = () => {
   const [leaguesData, setLeaguesData] = useState([]); // Store leagues data for reference
   
   // Filter states
-  const [selectedLeagueType, setSelectedLeagueType] = useState('');
-  const [selectedLeague, setSelectedLeague] = useState('');
+  const [selectedLeagueType, setSelectedLeagueType] = useState('Pro'); // Set Pro as default
+  const [selectedLeague, setSelectedLeague] = useState('NHL'); // Set NHL as default
   const [selectedConference, setSelectedConference] = useState('');
   const [selectedDivision, setSelectedDivision] = useState('');
   const [selectedCountry, setSelectedCountry] = useState('');
   
   // Available options for filters
-  const [availableLeagueTypes, setAvailableLeagueTypes] = useState([]);
+  const [availableLeagueTypes, setAvailableLeagueTypes] = useState(['Pro', 'Junior', 'Sub-Junior', 'Minor']); // Default order
   const [availableLeagues, setAvailableLeagues] = useState([]);
   const [availableConferences, setAvailableConferences] = useState([]);
   const [availableDivisions, setAvailableDivisions] = useState([]);
@@ -503,6 +503,18 @@ const TeamManager = () => {
         console.log('League to Type mapping for teams:', leagueToTypeMap);
         console.log('Division to Conference mapping:', divisionToConferenceMap);
         
+        // Filter leagues to only show Pro leagues initially
+        const proLeagues = leagueData.filter(league => league.league_level === 'Pro');
+        
+        // Make sure we have sorted leagues
+        const sortedProLeagues = sortLeaguesByStrength(proLeagues);
+        
+        // If NHL is available in the pro leagues, find its index
+        const nhlIndex = sortedProLeagues.findIndex(l => l.value === 'NHL');
+        
+        // Set the available leagues to Pro leagues only initially
+        setAvailableLeagues(sortedProLeagues);
+        
         // Then fetch teams
         const teamsData = await fetchTeamsFromBackend(leagueToTypeMap, divisionToConferenceMap);
         
@@ -524,14 +536,51 @@ const TeamManager = () => {
             setTeams(teamsData);
           }
           
-          // Extract available countries from teams
-          const countries = [...new Set(teamsData
-            .map(team => team.country)
-            .filter(Boolean)
+          // Extract Pro teams for default view
+          const proTeams = teamsData.filter(team => 
+            String(team.league_type || '').trim().toLowerCase() === 'pro'
+          );
+          
+          // Extract NHL teams
+          const nhlTeams = proTeams.filter(team => team.league === 'NHL');
+          
+          // Extract conferences for NHL
+          const nhlConferences = [...new Set(
+            nhlTeams
+              .map(team => team.conference)
+              .filter(Boolean)
           )].sort();
           
-          setAvailableCountries(countries);
-          console.log(`Extracted ${countries.length} countries from team data.`);
+          // Set default conferences
+          if (nhlConferences.length > 0) {
+            setAvailableConferences(nhlConferences);
+          } else {
+            setAvailableConferences(['Eastern', 'Western']);
+          }
+          
+          // Set default divisions for NHL
+          const nhlDivisions = [
+            { id: 1, name: 'Atlantic', conference: 'Eastern' },
+            { id: 2, name: 'Metropolitan', conference: 'Eastern' },
+            { id: 3, name: 'Central', conference: 'Western' },
+            { id: 4, name: 'Pacific', conference: 'Western' }
+          ];
+          
+          setAvailableDivisions(nhlDivisions);
+          
+          // Extract countries from NHL teams for default view
+          const nhlCountries = [...new Set(
+            nhlTeams
+              .map(team => team.country)
+              .filter(Boolean)
+          )].sort();
+          
+          if (nhlCountries.length > 0) {
+            setAvailableCountries(nhlCountries);
+          } else {
+            // Default to North America for NHL
+            setAvailableCountries(['Canada', 'United States']);
+          }
         }
       } catch (err) {
         console.error('Error during data initialization:', err);
@@ -762,73 +811,6 @@ const TeamManager = () => {
       console.log('Division to Conference mapping:', divisionToConferenceMap);
       
       if (data && data.length > 0) {
-        // Log the first few league items to check for league_strength field
-        console.log('First few leagues from backend (checking league_strength):', data.slice(0, 3));
-        
-        // Check all NHL, KHL, and SHL leagues to verify their league_strength values
-        console.log('-------------------------------------');
-        console.log('LEAGUE STRENGTH VERIFICATION:');
-        ['NHL', 'KHL', 'SHL', 'LIIGA', 'NLA', 'DEL'].forEach(abbr => {
-          const league = data.find(l => l.abbreviation === abbr);
-          if (league) {
-            console.log(`${league.league} (${league.abbreviation}): league_strength=${league.league_strength}, type=${typeof league.league_strength}`);
-          } else {
-            console.log(`${abbr}: Not found in data`);
-          }
-        });
-        console.log('-------------------------------------');
-        
-        // Check if any league lacks the league_strength field
-        const missingStrength = data.filter(league => league.league_strength === null || league.league_strength === undefined);
-        console.log(`Found ${missingStrength.length} out of ${data.length} leagues WITHOUT league_strength values`);
-        if (missingStrength.length > 0) {
-          console.log('Leagues missing strength values:', missingStrength.slice(0, 5).map(l => l.league));
-        }
-        
-        // Log all leagues with their strength values for the top Pro leagues
-        console.log('Pro leagues with strength values:');
-        data.filter(l => l.league_level === 'Pro').slice(0, 15).forEach(league => {
-          console.log(`${league.league} (${league.abbreviation || 'N/A'}): strength=${league.league_strength || 'N/A'}`);
-        });
-        
-        // Count leagues with league_strength values
-        const leaguesWithStrength = data.filter(league => league.league_strength !== null && league.league_strength !== undefined).length;
-        console.log(`Found ${leaguesWithStrength} out of ${data.length} leagues with league_strength values`);
-        
-        // Log league strength distribution
-        const strengthGroups = {
-          'null/undefined': 0,
-          '0-25': 0,
-          '26-50': 0, 
-          '51-75': 0,
-          '76-100': 0,
-          'invalid': 0
-        };
-        
-        data.forEach(league => {
-          const strength = league.league_strength;
-          if (strength === null || strength === undefined) {
-            strengthGroups['null/undefined']++;
-          } else {
-            const numStrength = Number(strength);
-            if (isNaN(numStrength)) {
-              strengthGroups['invalid']++;
-            } else if (numStrength >= 0 && numStrength <= 25) {
-              strengthGroups['0-25']++;
-            } else if (numStrength > 25 && numStrength <= 50) {
-              strengthGroups['26-50']++;
-            } else if (numStrength > 50 && numStrength <= 75) {
-              strengthGroups['51-75']++;
-            } else if (numStrength > 75 && numStrength <= 100) {
-              strengthGroups['76-100']++;
-            } else {
-              strengthGroups['invalid']++;
-            }
-          }
-        });
-        
-        console.log('League strength distribution:', strengthGroups);
-        
         // Create a mapping of league to league type for easy lookup
         const leagueToTypeMapping = {};
         const abbreviationToLeagueMapping = {};
@@ -849,70 +831,34 @@ const TeamManager = () => {
         setLeagueToTypeMap(leagueToTypeMapping);
         setAbbreviationToLeagueMap(abbreviationToLeagueMapping);
         
-        console.log('League name to type mapping:', leagueToTypeMapping);
-        console.log('Abbreviation to League mapping:', abbreviationToLeagueMapping);
-        
-        // Get unique league types for filtering
-        const uniqueLeagueTypes = [...new Set(
-          data
-            .map(league => league.league_level)
-            .filter(Boolean)
-        )];
-        
-        // Order league types in the specific order: Pro, Junior, Sub-Junior, Minor
-        const orderedLeagueTypes = ['Pro', 'Junior', 'Sub-Junior', 'Minor'].filter(
-          type => uniqueLeagueTypes.includes(type)
-        );
-
-        // Add any other league types that weren't in our predefined order
-        uniqueLeagueTypes.forEach(type => {
-          if (!orderedLeagueTypes.includes(type)) {
-            orderedLeagueTypes.push(type);
-          }
-        });
-        
-        setAvailableLeagueTypes(orderedLeagueTypes);
-        console.log('Ordered league types:', orderedLeagueTypes);
-        
         // Format leagues for the dropdown - we need to use abbreviation as the value
         // because team.league contains abbreviations (e.g., NHL, KHL, etc.)
         const formattedLeagues = data.map(league => {
+          // Format the display to match "League Name (Abbreviation) [Strength]"
           return {
             id: league.id,
             value: league.abbreviation || league.league, // Use abbreviation as value since team.league contains abbreviations
-            display: `${league.league}${league.abbreviation ? ` (${league.abbreviation})` : ''}`,
+            display: `${league.league}${league.abbreviation ? ` (${league.abbreviation})` : ''} [${league.league_strength || 0}]`,
             league_level: league.league_level,
             fullName: league.league,
             league_strength: league.league_strength
           };
         });
-
-        // Log the strength values before sorting
-        console.log('League strength values before sorting:');
-        formattedLeagues.slice(0, 10).forEach(league => {
-          console.log(`${league.display}: ${league.league_strength}`);
-        });
         
         // Sort leagues by league_strength from highest to lowest (0-100 value)
         const sortedLeagues = sortLeaguesByStrength(formattedLeagues);
         
-        // Log sorted leagues for verification
-        console.log('Top 10 leagues after sorting by strength:');
-        sortedLeagues.slice(0, 10).forEach((league, index) => {
-          console.log(`${index + 1}. ${league.display}: ${league.league_strength}`);
-        });
-        
-        setAvailableLeagues(sortedLeagues);
-        console.log(`Formatted ${sortedLeagues.length} leagues for dropdown (sorted by strength)`);
-        
-        // Debug: Show league strengths for top leagues
-        console.log("Top 10 leagues in dropdown (after sorting):");
-        sortedLeagues.slice(0, 10).forEach((league, idx) => {
-          console.log(`${idx+1}. ${league.display}: strength=${league.league_strength}, level=${league.league_level}`);
-        });
-        
-        // Store leagues for use in FilterSummary
+        // Store all leagues for reference
         setLeaguesData(sortedLeagues);
+        
+        // Immediately filter to just Pro leagues for initial display
+        const proLeagues = sortedLeagues.filter(league => league.league_level === 'Pro');
+        
+        // Make sure we have sorted Pro leagues 
+        const sortedProLeagues = sortLeaguesByStrength(proLeagues);
+        
+        // Set the available leagues to Pro leagues only initially
+        setAvailableLeagues(sortedProLeagues);
         
         return { 
           leagues: sortedLeagues,
@@ -1008,139 +954,153 @@ const TeamManager = () => {
   const handleLeagueTypeChange = (selectedType) => {
     console.log(`League type filter changed to: "${selectedType}"`);
     setSelectedLeagueType(selectedType);
-    setSelectedLeague('');
-    setSelectedConference('');
-    setSelectedDivision('');
-    setSelectedCountry('');
     
-    // Filter teams based on the selected league type
-    const filteredTeams = selectedType === '' 
-      ? teams 
-      : teams.filter(team => {
-          // Ensure exact string comparison for league_type, case-insensitive
-          return String(team.league_type || '').trim().toLowerCase() === String(selectedType).trim().toLowerCase();
-        });
-    
-    console.log(`Found ${filteredTeams.length} teams matching league type "${selectedType}"`);
-    
-    // Debug the first few filtered teams
-    if (filteredTeams.length > 0) {
-      console.log("First 3 matching teams:", filteredTeams.slice(0, 3).map(t => 
-        ({ name: t.name, league: t.league, conference: t.conference, league_type: t.league_type })
-      ));
-    }
-    
-    // Update available leagues based on the selected type
-    // If no league type is selected, show all leagues
-    // Otherwise, only show leagues with the matching league_level
-    let leaguesForType = selectedType === '' 
-      ? availableLeagues 
-      : availableLeagues.filter(league => {
-          return league.league_level === selectedType;
-        });
-    
-    // Sort leagues by league_strength from highest to lowest (0-100 value)
-    leaguesForType.sort((a, b) => {
-      // Convert to numbers and handle null/undefined values
-      // Use explicit parseInt with radix to ensure proper conversion
-      const strengthA = a.league_strength !== null && a.league_strength !== undefined ? parseInt(a.league_strength, 10) : 0;
-      const strengthB = b.league_strength !== null && b.league_strength !== undefined ? parseInt(b.league_strength, 10) : 0;
+    // Reset dependent filters only if league type changed to empty
+    if (selectedType === '') {
+      setSelectedLeague('');
+      setSelectedConference('');
+      setSelectedDivision('');
+      setSelectedCountry('');
       
-      // Check for NaN after conversion and provide a fallback value
-      const valueA = isNaN(strengthA) ? 0 : strengthA;
-      const valueB = isNaN(strengthB) ? 0 : strengthB;
+      // When clearing league type, show all leagues
+      setAvailableLeagues(leaguesData);
+    } else {
+      // Filter teams based on the selected league type
+      const filteredTeams = teams.filter(team => {
+        // Ensure exact string comparison for league_type, case-insensitive
+        return String(team.league_type || '').trim().toLowerCase() === String(selectedType).trim().toLowerCase();
+      });
       
-      // Sort by strength in descending order (higher values first)
-      if (valueA !== valueB) {
-        return valueB - valueA;
+      console.log(`Found ${filteredTeams.length} teams matching league type "${selectedType}"`);
+      
+      // Filter leagues based on the selected type
+      let leaguesForType = leaguesData.filter(league => {
+        return league.league_level === selectedType;
+      });
+      
+      // If we somehow end up with no leagues, fallback to the full leagues list
+      if (leaguesForType.length === 0) {
+        console.warn(`No leagues found for type "${selectedType}", using full leagues list as fallback`);
+        leaguesForType = leaguesData;
       }
       
-      // If strengths are equal or both 0, fallback to alphabetical sort
-      return a.display.localeCompare(b.display);
-    });
-    
-    // Log the top leagues after sorting
-    console.log(`Top leagues for type "${selectedType}" after sorting:`, 
-      leaguesForType.slice(0, 5).map(l => ({
-        league: l.display,
-        strength: l.league_strength
-      }))
-    );
-    
-    setAvailableLeagues(leaguesForType);
-    console.log(`Available leagues updated: ${leaguesForType.length} leagues available for type "${selectedType}"`);
-    
-    // Get unique leagues from filtered teams as a fallback
-    if (leaguesForType.length === 0 && filteredTeams.length > 0) {
-      const uniqueLeagues = [...new Set(filteredTeams.map(team => team.league))].filter(Boolean);
-      const formattedLeagues = uniqueLeagues.map(leagueName => {
-        return {
-          id: leagueName,
-          value: leagueName,
-          display: leagueName,
-          league_level: selectedType,
-          league_strength: 0 // Default strength since we don't have the data
-          };
-        });
+      // Sort leagues by league_strength from highest to lowest (0-100 value)
+      leaguesForType = sortLeaguesByStrength(leaguesForType);
       
-      setAvailableLeagues(formattedLeagues);
-      console.log(`Fallback: Created ${formattedLeagues.length} leagues from filtered teams`);
+      console.log(`Available leagues updated: ${leaguesForType.length} leagues available for type "${selectedType}"`);
+      
+      // Always update available leagues, even if the list is the same
+      setAvailableLeagues(leaguesForType);
+      
+      // Update conferences based on filtered teams
+      const conferencesForType = [...new Set(
+        filteredTeams
+          .map(team => team.conference)
+          .filter(Boolean)
+      )].sort();
+      
+      console.log(`Found ${conferencesForType.length} unique conferences for league type "${selectedType}"`);
+      
+      setAvailableConferences(conferencesForType);
+      setAvailableDivisions([]);
+      
+      // Update available countries for this league type
+      const countriesForType = [...new Set(
+        filteredTeams
+          .map(team => team.country)
+          .filter(Boolean)
+      )].sort();
+      
+      setAvailableCountries(countriesForType);
+      
+      // If changing to Pro, default to NHL 
+      if (selectedType === 'Pro') {
+        // Check if NHL is available in the leagues for this type
+        const nhlLeague = leaguesForType.find(l => l.value === 'NHL');
+        if (nhlLeague) {
+          // Don't call handleLeagueChange here to avoid recursion, just set the state directly
+          setSelectedLeague('NHL');
+          
+          // Find NHL teams
+          const nhlTeams = filteredTeams.filter(team => team.league === 'NHL');
+          
+          // Get conferences from NHL teams
+          const nhlConferences = [...new Set(
+            nhlTeams
+              .map(team => team.conference)
+              .filter(Boolean)
+          )].sort();
+          
+          setAvailableConferences(nhlConferences.length > 0 ? nhlConferences : ['Eastern', 'Western']);
+          
+          // Set up NHL divisions (1-4 for NHL divisions)
+          const nhlDivisions = [
+            { id: 1, name: 'Atlantic', conference: 'Eastern' },
+            { id: 2, name: 'Metropolitan', conference: 'Eastern' },
+            { id: 3, name: 'Central', conference: 'Western' },
+            { id: 4, name: 'Pacific', conference: 'Western' }
+          ];
+          
+          setAvailableDivisions(nhlDivisions);
+          
+          // Update countries for NHL teams
+          const nhlCountries = [...new Set(
+            nhlTeams
+              .map(team => team.country)
+              .filter(Boolean)
+          )].sort();
+          
+          setAvailableCountries(nhlCountries.length > 0 ? nhlCountries : ['Canada', 'United States']);
+        }
+      } else if (selectedType !== '') {
+        // If we're switching to a non-Pro league type, clear the league selection
+        setSelectedLeague('');
+      }
     }
-    
-    // Extract unique conferences from filtered teams
-    const conferencesForType = [...new Set(
-      filteredTeams
-        .map(team => team.conference)
-        .filter(Boolean)
-    )].sort();
-    
-    console.log(`Found ${conferencesForType.length} unique conferences for league type "${selectedType}":`, conferencesForType);
-    
-    setAvailableConferences(conferencesForType);
-    setAvailableDivisions([]);
   };
   
   // Filter teams based on league selection
   const handleLeagueChange = (selectedLeague) => {
     console.log(`League filter changed to: "${selectedLeague}"`);
     setSelectedLeague(selectedLeague);
+    
+    // Reset dependent filters
     setSelectedConference('');
     setSelectedDivision('');
     setSelectedCountry('');
     
+    // If user selected "All Leagues", maintain the league type filter
+    if (selectedLeague === '') {
+      // Go back to showing all conferences for the current league type
+      if (selectedLeagueType) {
+        // Just call handleLeagueTypeChange again to reset to that type
+        handleLeagueTypeChange(selectedLeagueType);
+      }
+      return;
+    }
+    
     // Filter teams based on the selected league
     const filteredTeams = teams.filter(team => {
-      // If no league is selected, return all teams (or those matching league type if set)
-      if (!selectedLeague) {
-        return selectedLeagueType ? 
-          String(team.league_type || '').trim() === String(selectedLeagueType).trim() : 
-          true;
+      // Apply league type filter if selected
+      if (selectedLeagueType) {
+        const leagueTypeMatches = String(team.league_type || '').trim().toLowerCase() === 
+          String(selectedLeagueType).trim().toLowerCase();
+          
+        if (!leagueTypeMatches) return false;
       }
       
-      // The "league" in Team is actually the abbreviation, not the full league name
+      // Then check if league matches
       return team.league === selectedLeague;
     });
     
     console.log(`Found ${filteredTeams.length} teams matching league "${selectedLeague}"`);
     
-    // Debug the first few filtered teams - show the conferences
-    if (filteredTeams.length > 0) {
-      console.log("First 3 filtered teams:", filteredTeams.slice(0, 3).map(t => 
-        ({ name: t.name, league: t.league, conference: t.conference, division_id: t.division_id, divisionName: t.divisionName })
-      ));
-    } else {
-      console.log("WARNING: No teams found for selected league:", selectedLeague);
-    }
-    
     // Extract conferences from filtered teams - force to an empty array if undefined
-    const uniqueConferences = [];
-    
-    // Only include conferences that actually exist in the filtered teams
-    filteredTeams.forEach(team => {
-      if (team.conference && !uniqueConferences.includes(team.conference)) {
-        uniqueConferences.push(team.conference);
-      }
-    });
+    const uniqueConferences = [...new Set(
+      filteredTeams
+        .map(team => team.conference)
+        .filter(Boolean)
+    )].sort();
     
     // Special case for NHL which should have Eastern and Western
     if (selectedLeague === 'NHL' && uniqueConferences.length < 2) {
@@ -1155,10 +1115,7 @@ const TeamManager = () => {
       console.log("Added default Eastern and Western conferences for NHL");
     }
     
-    // Sort conferences alphabetically
-    uniqueConferences.sort();
-    
-    console.log(`Found ${uniqueConferences.length} conferences for teams in league "${selectedLeague}":`, uniqueConferences);
+    console.log(`Found ${uniqueConferences.length} conferences for teams in league "${selectedLeague}"`);
     
     // Update the available conferences
     setAvailableConferences(uniqueConferences);
@@ -1209,32 +1166,41 @@ const TeamManager = () => {
     // Sort divisions by name
     divisionArray.sort((a, b) => a.name.localeCompare(b.name));
     
-    console.log(`Found ${divisionArray.length} divisions for league "${selectedLeague}":`, divisionArray);
+    console.log(`Found ${divisionArray.length} divisions for league "${selectedLeague}"`);
     
     // Update available divisions
     setAvailableDivisions(divisionArray);
-  };
-  
-  // Helper function to get division name from ID - used for NHL divisions
-  const getDivisionNameById = (divisionId, leagueAbbr) => {
-    if (leagueAbbr === 'NHL') {
-      switch (Number(divisionId)) {
-        case 1: return 'Atlantic';
-        case 2: return 'Metropolitan';
-        case 3: return 'Central';
-        case 4: return 'Pacific';
-        default: return `Division ${divisionId}`;
-      }
-    }
-    return `Division ${divisionId}`;
+    
+    // Update available countries from filtered teams
+    const countriesForLeague = [...new Set(
+      filteredTeams
+        .map(team => team.country)
+        .filter(Boolean)
+    )].sort();
+    
+    setAvailableCountries(countriesForLeague.length > 0 ? countriesForLeague : []);
   };
   
   // Filter teams based on conference selection
   const handleConferenceChange = (selectedConf) => {
     console.log(`Conference filter changed to: "${selectedConf}"`);
     setSelectedConference(selectedConf);
+    
+    // Reset dependent filters
     setSelectedDivision('');
     setSelectedCountry('');
+    
+    // If user selected "All Conferences", show all divisions for current league
+    if (selectedConf === '') {
+      if (selectedLeague) {
+        // Re-trigger the league filter to reset divisions
+        handleLeagueChange(selectedLeague);
+      } else if (selectedLeagueType) {
+        // Re-trigger the league type filter
+        handleLeagueTypeChange(selectedLeagueType);
+      }
+      return;
+    }
     
     // Filter teams based on the selected conference and previous filters
     const filteredTeams = teams.filter(team => {
@@ -1253,19 +1219,6 @@ const TeamManager = () => {
     });
     
     console.log(`Found ${filteredTeams.length} teams in conference "${selectedConf}"`);
-    
-    // Debug info on the filtered teams to see their division_id values
-    if (filteredTeams.length > 0) {
-      console.log("First 3 filtered teams by conference:", filteredTeams.slice(0, 3).map(t => 
-        ({ name: t.team || t.name, league: t.league, conference: t.conference, division_id: t.division_id, division: t.division })
-      ));
-      } else {
-      console.log("WARNING: No teams found for selected conference:", selectedConf);
-      
-      // Debug: show conferences found in teams
-      const conferencesInData = [...new Set(teams.map(t => t.conference).filter(Boolean))];
-      console.log("Available conferences in data:", conferencesInData);
-    }
     
     // Filter the available divisions based on conference
     // Note: Divisions should already be loaded from the league selection
@@ -1302,17 +1255,43 @@ const TeamManager = () => {
     // Sort divisions by name
     conferenceDivisions.sort((a, b) => a.name.localeCompare(b.name));
     
-    console.log(`Found ${conferenceDivisions.length} divisions for conference "${selectedConf}":`, conferenceDivisions);
+    console.log(`Found ${conferenceDivisions.length} divisions for conference "${selectedConf}"`);
     
     // Update available divisions
     setAvailableDivisions(conferenceDivisions);
+    
+    // Update available countries from filtered teams
+    const countriesForConference = [...new Set(
+      filteredTeams
+        .map(team => team.country)
+        .filter(Boolean)
+    )].sort();
+    
+    setAvailableCountries(countriesForConference.length > 0 ? countriesForConference : []);
   };
   
   // Filter teams based on division selection
   const handleDivisionChange = (selectedDiv) => {
     console.log(`Division filter changed to: "${selectedDiv}" (type: ${typeof selectedDiv})`);
     setSelectedDivision(selectedDiv);
+    
+    // Reset dependent filters
     setSelectedCountry('');
+    
+    // If user selected "All Divisions", retain current conference filter
+    if (selectedDiv === '') {
+      if (selectedConference) {
+        // Re-trigger the conference filter
+        handleConferenceChange(selectedConference);
+      } else if (selectedLeague) {
+        // Re-trigger the league filter
+        handleLeagueChange(selectedLeague);
+      } else if (selectedLeagueType) {
+        // Re-trigger the league type filter
+        handleLeagueTypeChange(selectedLeagueType);
+      }
+      return;
+    }
     
     // Find the division object for this ID
     const selectedDivObject = availableDivisions.find(d => String(d.id) === String(selectedDiv));
@@ -1355,34 +1334,6 @@ const TeamManager = () => {
     
     console.log(`Found ${filteredTeams.length} teams matching division ID "${selectedDiv}" (${selectedDivObject?.name || 'Unknown'})`);
     
-    // Debug the first few teams to verify they have the right division
-    if (filteredTeams.length > 0) {
-      console.log("First 3 filtered teams by division:", filteredTeams.slice(0, 3).map(t => 
-        ({ 
-          name: t.team || t.name, 
-          league: t.league, 
-          conference: t.conference, 
-          division_id: t.division_id, 
-          division: t.division,
-          country: t.country 
-        })
-      ));
-    } else {
-      console.log("WARNING: No teams found for selected division:", selectedDiv);
-      console.log("Division ID type:", typeof selectedDiv);
-      console.log("Division name:", selectedDivObject ? selectedDivObject.name : 'Unknown');
-      
-      // Look for teams that might match this division by searching all teams
-      const matchingTeams = teams.filter(team => 
-        String(team.division || '') === String(selectedDiv) || 
-        String(team.division_id || '') === String(selectedDiv)
-      );
-      console.log(`Found ${matchingTeams.length} teams with division matching "${selectedDiv}" in the full dataset`);
-      if (matchingTeams.length > 0) {
-        console.log("First matching team:", matchingTeams[0]);
-      }
-    }
-    
     // Make sure we only include non-empty country values
     const countries = [...new Set(
       filteredTeams
@@ -1393,7 +1344,7 @@ const TeamManager = () => {
     console.log(`Found ${countries.length} countries for teams in division "${selectedDiv}" (${selectedDivObject?.name || 'Unknown'}):`, countries);
     
     // Update available countries based on the filtered teams
-    setAvailableCountries(countries);
+    setAvailableCountries(countries.length > 0 ? countries : []);
   };
   
   // Filter teams based on country selection
@@ -1401,51 +1352,19 @@ const TeamManager = () => {
     console.log(`Country filter changed to: "${selectedCountry}"`);
     setSelectedCountry(selectedCountry);
     
-    // Filter teams based on the selected country
-    const filteredTeams = teams.filter(team => {
-      // Apply all current filters
-      if (selectedLeagueType && String(team.league_type || '').trim() !== String(selectedLeagueType).trim()) {
-        return false;
-      }
-      if (selectedLeague && team.league !== selectedLeague) {
-        return false;
-      }
-      if (selectedConference && String(team.conference || '').trim() !== String(selectedConference).trim()) {
-        return false;
-      }
+    // If user selected "All Countries", reset to previous filters
+    if (selectedCountry === '') {
       if (selectedDivision) {
-        // Special case for NHL with numeric division IDs
-        if (team.league === 'NHL') {
-          const teamDivId = parseInt(team.division || team.division_id);
-          const selectedDivId = parseInt(selectedDivision);
-          if (!(!isNaN(teamDivId) && !isNaN(selectedDivId) && teamDivId === selectedDivId)) {
-            return false;
-          }
-        } else {
-          // Check both division_id and division fields
-          const divisionMatches = 
-            (team.division_id && String(team.division_id) === String(selectedDivision)) ||
-            (team.division && String(team.division) === String(selectedDivision));
-            
-          if (!divisionMatches) {
-            return false;
-          }
-        }
+        handleDivisionChange(selectedDivision);
+      } else if (selectedConference) {
+        handleConferenceChange(selectedConference);
+      } else if (selectedLeague) {
+        handleLeagueChange(selectedLeague);
+      } else if (selectedLeagueType) {
+        handleLeagueTypeChange(selectedLeagueType);
       }
-      if (selectedCountry && team.country !== selectedCountry) {
-        return false;
-      }
-      return true;
-    });
-    
-    console.log(`Found ${filteredTeams.length} teams in country "${selectedCountry}"`);
-    
-    // Debug the first few teams to verify they have the right country
-    if (filteredTeams.length > 0) {
-      console.log("First 3 filtered teams by country:", filteredTeams.slice(0, 3).map(t => 
-        ({ name: t.name, league: t.league, conference: t.conference, division_id: t.division_id, country: t.country })
-      ));
     }
+    // The actual filtering is handled in getFilteredTeams()
   };
   
   // Get filtered teams based on selected filters
@@ -1582,8 +1501,21 @@ const TeamManager = () => {
         
         if (data && data.length > 0) {
           console.log('Fetched league types:', data);
+          
+          // Order league types in the specific order: Pro, Junior, Sub-Junior, Minor
+          const orderedLeagueTypes = ['Pro', 'Junior', 'Sub-Junior', 'Minor'].filter(
+            type => data.includes(type)
+          );
+
+          // Add any other league types that weren't in our predefined order
+          data.forEach(type => {
+            if (!orderedLeagueTypes.includes(type)) {
+              orderedLeagueTypes.push(type);
+            }
+          });
+          
           // If you have a dedicated endpoint
-          setAvailableLeagueTypes(data);
+          setAvailableLeagueTypes(orderedLeagueTypes);
         } else {
           console.warn('No league types found via API endpoint');
         }
@@ -1783,18 +1715,21 @@ const TeamManager = () => {
     try {
       // Normalize the team abbreviation to uppercase
       const normalizedAbbr = normalizeAbbreviation(teamAbbr);
-      // Remove debug logs
       
-      // Check if we have the logo in our imported collection - always allow logo display regardless of communityPack setting
+      // First try the static mapping for NHL teams (no spaces)
       if (teamLogos[normalizedAbbr]) {
-        // Remove debug logs
         return teamLogos[normalizedAbbr];
-      } else {
-        // Remove debug logs
+      }
+      
+      // If not in static mapping, try dynamic import for teams with spaces
+      try {
+        // This approach handles filenames with spaces
+        return require(`../assets/Logo_${normalizedAbbr}.png`);
+      } catch (error) {
+        // If dynamic import fails, return null
         return null;
       }
     } catch (error) {
-      // Keep error log but make it less verbose
       console.error(`Error getting logo: ${error.message}`);
       return null;
     }
@@ -1822,6 +1757,20 @@ const TeamManager = () => {
     selectedLeagueType, selectedLeague, selectedConference, selectedDivision, selectedCountry,
     availableLeagueTypes, availableLeagues, availableConferences, availableDivisions, availableCountries
   ]);
+  
+  // Helper function to get division name from ID - used for NHL divisions
+  const getDivisionNameById = (divisionId, leagueAbbr) => {
+    if (leagueAbbr === 'NHL') {
+      switch (Number(divisionId)) {
+        case 1: return 'Atlantic';
+        case 2: return 'Metropolitan';
+        case 3: return 'Central';
+        case 4: return 'Pacific';
+        default: return `Division ${divisionId}`;
+      }
+    }
+    return `Division ${divisionId}`;
+  };
   
   return (
     <Container>
@@ -2076,12 +2025,11 @@ const TeamManager = () => {
                 console.log("Available leagues:", availableLeagues);
                 handleLeagueChange(e.target.value);
               }}
-              disabled={!availableLeagues || availableLeagues.length === 0}
-            >
+              >
               <option value="">All Leagues ({availableLeagues.length})</option>
                 {availableLeagues.map((league) => (
                 <option key={league.id} value={league.value}>
-                  {league.display} {league.league_strength !== null && league.league_strength !== undefined ? `[${league.league_strength}]` : ''}
+                  {league.display}
                   </option>
                 ))}
               </FilterSelect>
@@ -2095,8 +2043,7 @@ const TeamManager = () => {
                 console.log("Available conferences:", availableConferences);
                 handleConferenceChange(e.target.value);
               }}
-              disabled={!availableConferences || availableConferences.length === 0}
-            >
+              >
               <option value="">All Conferences ({availableConferences.length})</option>
               {availableConferences.map((conf) => (
                 <option key={conf} value={conf}>{conf}</option>
@@ -2112,8 +2059,7 @@ const TeamManager = () => {
                 console.log("Available divisions:", availableDivisions);
                 handleDivisionChange(e.target.value);
               }}
-              disabled={!availableDivisions || availableDivisions.length === 0}
-            >
+              >
               <option value="">All Divisions ({availableDivisions.length})</option>
               {availableDivisions.map((div) => (
                 <option key={div.id} value={div.id}>
@@ -2127,7 +2073,6 @@ const TeamManager = () => {
             <FilterSelect
               value={selectedCountry || ""}
               onChange={(e) => handleCountryChange(e.target.value)}
-              disabled={!availableCountries.length}
             >
               <option value="">All Countries ({availableCountries.length})</option>
               {availableCountries.map((country) => (

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import styled, { keyframes, css } from 'styled-components';
 import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { selectCommunityPack } from '../store/slices/settingsSlice';
 
 // Define a base URL for API calls
 const API_BASE_URL = 'http://localhost:5001/api';
@@ -554,6 +556,9 @@ const SpotlightEffect = styled.div`
 
 // Main component for the Draft Simulation page
 const SimulateDraft = () => {
+  // Add the communityPack selector
+  const communityPack = useSelector(selectCommunityPack) || 1;
+  
   // State for the current step in the process
   const [currentStep, setCurrentStep] = useState(1); // 1: Team Selection, 2: Lottery, 3: Draft
   const [nhlTeams, setNhlTeams] = useState([]);
@@ -1382,8 +1387,32 @@ const SimulateDraft = () => {
   const getTeamLogo = (team) => {
     if (!team || !team.abbreviation) return null;
     
-    const abbr = team.abbreviation;
-    return teamLogos[abbr] || null;
+    try {
+      // Only proceed if communityPack is enabled (assuming this exists in context)
+      // Note: If communityPack doesn't exist in this component, remove this check
+      if (communityPack !== 1) {
+        return null;
+      }
+      
+      const abbr = team.abbreviation.toUpperCase();
+      
+      // First try the static mapping for NHL teams (no spaces)
+      if (teamLogos[abbr]) {
+        return teamLogos[abbr];
+      }
+      
+      // If not in static mapping, try dynamic import for teams with spaces
+      try {
+        // This approach handles filenames with spaces
+        return require(`../assets/Logo_${abbr}.png`);
+      } catch (error) {
+        // If dynamic import fails, return null
+        return null;
+      }
+    } catch (error) {
+      console.error(`Error getting logo: ${error.message}`);
+      return null;
+    }
   };
   
   // Helper to get timer duration for current pick

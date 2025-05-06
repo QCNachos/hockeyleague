@@ -1,7 +1,7 @@
 from typing import Dict, List, Any, Optional
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
-from ..services.league import Division
+from ..services.league import Division, League
 from ..extensions import db
 from datetime import datetime
 import os
@@ -50,6 +50,9 @@ class Team(db.Model):
     coach_id = db.Column(db.Integer, db.ForeignKey('coaches.id'))
     prestige = db.Column(db.Integer, default=50)  # 1-100 scale
     budget = db.Column(db.Integer)  # in $
+    league_id = db.Column(db.Integer, db.ForeignKey('leagues.id'))  # New league_id column
+    league = db.Column(db.String(100))  # Legacy league column for backward compatibility
+    country = db.Column(db.String(100), default='Canada')  # Adding country field
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -58,7 +61,8 @@ class Team(db.Model):
     draft_players = db.relationship('Player', foreign_keys='Player.draft_team_id', backref='draft_team')
     associated_players = db.relationship('Player', foreign_keys='Player.associated_team_id', backref='associated_team')
     coach = db.relationship('Coach', back_populates='team')
-    division = db.relationship('Division', back_populates='teams')
+    division_obj = db.relationship('Division', back_populates='teams')
+    league_object = db.relationship('League', back_populates='teams')  # Updated relationship to League model
     
     # Games relationships - changed to lazy='dynamic' to avoid circular reference issues
     # and removed backref/back_populates to let Game define its own relationships
@@ -74,6 +78,10 @@ class Team(db.Model):
     
     def to_dict(self):
         """Convert Team object to dictionary"""
+        league_type = None
+        if self.league_object:
+            league_type = self.league_object.league_level
+        
         return {
             'id': self.id,
             'name': self.name,
@@ -83,12 +91,17 @@ class Team(db.Model):
             'primary_color': self.primary_color or '#1e1e1e',  # Default dark gray if None
             'secondary_color': self.secondary_color or '#FFFFFF',  # Default white if None
             'division_id': self.division_id,
+            'division': self.division_id,  # For backward compatibility
             'arena_name': self.arena_name,
             'arena_capacity': self.arena_capacity,
             'gm_name': self.gm_name,
             'coach_id': self.coach_id,
             'prestige': self.prestige,
-            'budget': self.budget
+            'budget': self.budget,
+            'league_id': self.league_id,
+            'league': self.league or (self.league_object.league if self.league_object else None),
+            'league_type': league_type,
+            'country': self.country
         }
 
 class TeamService:
@@ -97,52 +110,123 @@ class TeamService:
     """
     
     @staticmethod
-    def get_all_teams(filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    def get_all_teams() -> List[Dict[str, Any]]:
         """
-        Get all teams, optionally filtered.
-        
-        Args:
-            filters: Optional dictionary of filter parameters
+        Get all teams from Supabase.
             
         Returns:
-            List of teams as dictionaries
+            List of teams as dictionaries, with field names normalized
+            to match what the frontend expects.
         """
-        # First try to get teams from Supabase
+        import os
+        from supabase import create_client, Client
+        import logging
+        
+        # Configure logging
+        logging.basicConfig(level=logging.INFO)
+        logger = logging.getLogger(__name__)
+        
+        # Get Supabase credentials
+        SUPABASE_URL = os.getenv("SUPABASE_URL")
+        SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+        
+        if not SUPABASE_URL or not SUPABASE_KEY:
+            logger.error("Supabase credentials not found in environment variables")
+            return []
+        
         try:
-            supabase = get_supabase_client()
-            if supabase:
-                # Fetch all NHL teams from Supabase
-                query = supabase.table("Team").select("*")
+            # Initialize Supabase client
+            logger.info("Initializing Supabase client for team service")
+            supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+            
+            # STEP 1: Get all leagues with their abbreviations and league_level 
+            logger.info("Fetching leagues with their abbreviations and league types")
+            league_response = supabase.table("League").select("league, abbreviation, league_level").execute()
+            leagues_data = league_response.data if hasattr(league_response, 'data') else []
+            
+            # Create mapping of league abbreviation to league_level
+            # This is the key change - we map abbreviation to league_level instead of league name to league_level
+            league_to_type_map = {}
+            for league in leagues_data:
+                if 'abbreviation' in league and 'league_level' in league:
+                    league_to_type_map[league['abbreviation']] = league['league_level']
+            
+            logger.info(f"Created mapping of {len(league_to_type_map)} league abbreviations to league types")
+            
+            # Manually add NHL and other major leagues that might be missing
+            if 'NHL' not in league_to_type_map:
+                league_to_type_map['NHL'] = 'Pro'
+            if 'AHL' not in league_to_type_map:
+                league_to_type_map['AHL'] = 'Pro'
+            if 'KHL' not in league_to_type_map:
+                league_to_type_map['KHL'] = 'Pro'
                 
-                # Apply filters if provided
-                if filters:
-                    if 'league' in filters:
-                        query = query.eq("league", filters['league'])
-                    if 'division_id' in filters:
-                        query = query.eq("division_id", filters['division_id'])
+            # STEP 2: Get all teams
+            logger.info("Fetching teams from Supabase")
+            response = supabase.table("Team").select("*").execute()
+            teams_data = response.data if hasattr(response, 'data') else []
+            
+            # If no teams found, return empty array
+            if not teams_data:
+                logger.warning("No teams found in Supabase")
+                return []
+            
+            # STEP 3: Process teams to include league_type by looking up in the mapping using league as abbreviation
+            processed_teams = []
+            for team in teams_data:
+                # Get the team's league (which is actually the abbreviation in the Team table)
+                team_league = team.get('league', '')
                 
-                # Execute query
-                response = query.execute()
+                # Look up the league_type from the mapping using the abbreviation
+                league_type = league_to_type_map.get(team_league, None)
                 
-                if response.data:
-                    logger.info(f"Fetched {len(response.data)} teams from Supabase")
-                    return response.data
+                # If league_type is still None, use a fallback based on known patterns
+                if league_type is None:
+                    logger.warning(f"No league type found for team {team.get('team')} with league {team_league}")
+                    # Try to infer league type from league name
+                    if 'NHL' in team_league or 'KHL' in team_league or 'SHL' in team_league or 'AHL' in team_league:
+                        league_type = 'Pro'
+                    elif 'Junior' in team_league or 'U20' in team_league:
+                        league_type = 'Junior'
+                    elif 'U18' in team_league or 'U17' in team_league:
+                        league_type = 'Sub-Junior'
+                    elif 'U16' in team_league or 'U15' in team_league or 'U14' in team_league:
+                        league_type = 'Minor'
+                    else:
+                        league_type = 'Unknown'
+                
+                # Create a processed team dictionary with normalized field names
+                processed_team = {
+                    'id': team.get('id'),
+                    'name': team.get('team'),
+                    'city': team.get('location'),
+                    'abbreviation': team.get('abbreviation'),
+                    'league': team.get('league'),
+                    'league_type': league_type,
+                    'conference': team.get('conference'),
+                    'division_id': team.get('division'),
+                    'primary_color': team.get('primary_color'),
+                    'secondary_color': team.get('secondary_color'),
+                    'arena_name': team.get('arena_name'),
+                    'arena_capacity': team.get('arena_capacity'),
+                    'prestige': team.get('prestige'),
+                    'country': team.get('country')
+                }
+                processed_teams.append(processed_team)
+            
+            # Count by league type for logging
+            league_type_counts = {}
+            for team in processed_teams:
+                lt = team.get('league_type', 'Unknown')
+                league_type_counts[lt] = league_type_counts.get(lt, 0) + 1
+                
+            logger.info(f"Processed {len(processed_teams)} teams with league types: {league_type_counts}")
+            
+            return processed_teams
+            
         except Exception as e:
             logger.error(f"Error fetching teams from Supabase: {e}")
-        
-        # Fallback to local database if Supabase fetch fails
-        # Start with base query
-        query = Team.query
-        
-        # Apply filters if provided
-        if filters:
-            if 'division_id' in filters:
-                query = query.filter_by(division_id=filters['division_id'])
-                
-        # Execute query and convert to list of dicts
-        teams = [team.to_dict() for team in query.all()]
-        
-        return teams
+            return []
     
     @staticmethod
     def get_nhl_teams() -> List[Dict[str, Any]]:
@@ -281,7 +365,10 @@ class TeamService:
             gm_name=team_data.get('gm_name'),
             coach_id=team_data.get('coach_id'),
             prestige=team_data.get('prestige', 50),
-            budget=team_data.get('budget')
+            budget=team_data.get('budget'),
+            league_id=team_data.get('league_id'),
+            league=team_data.get('league'),
+            country=team_data.get('country')
         )
         
         db.session.add(new_team)
@@ -346,23 +433,23 @@ class TeamService:
         return [division.to_dict() for division in divisions]
 
 
-# API endpoints that utilize the team service
-
+# API routes
 @team_bp.route('/', methods=['GET'])
-def get_teams():
-    """Get all teams or filter by query parameters"""
-    # Get query parameters
-    filters = {}
+@team_bp.route('', methods=['GET'])  # Add route without trailing slash
+def get_all_teams_api():
+    """Get all teams
     
-    division_id = request.args.get('division_id')
-    
-    if division_id:
-        filters['division_id'] = division_id
-    
-    # Get teams
-    teams = TeamService.get_all_teams(filters)
-    
-    return jsonify(teams), 200
+    Returns:
+        JSON response with teams data
+    """
+    try:
+        # Get teams without any filters
+        teams = TeamService.get_all_teams()
+        return jsonify(teams), 200
+    except Exception as e:
+        import logging
+        logging.error(f"Error in get_all_teams_api: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @team_bp.route('/<int:team_id>', methods=['GET'])
@@ -670,3 +757,11 @@ def get_draft_picks_debug():
     except Exception as e:
         logger.error(f"Error in draft picks debug endpoint: {e}")
         return jsonify({"error": str(e)}), 500 
+
+
+@team_bp.route('/conferences', methods=['GET'])
+def get_team_conferences():
+    """Get all conferences for teams"""
+    from .league import ConferenceService
+    conferences = ConferenceService.get_all_conferences()
+    return jsonify(conferences), 200 

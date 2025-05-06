@@ -370,53 +370,6 @@ const TeamButton = styled.button`
   }
 `;
 
-// Improved sorting function that handles all edge cases
-const sortLeaguesByStrength = (leagues) => {
-  return [...leagues].sort((a, b) => {
-    // Handle edge cases (null, undefined, or non-numeric values)
-    let strengthA, strengthB;
-    
-    try {
-      // Try to convert to integer with radix 10
-      strengthA = a.league_strength !== null && a.league_strength !== undefined ? 
-        parseInt(a.league_strength, 10) : null;
-      
-      // Check if parsing resulted in NaN
-      if (isNaN(strengthA)) strengthA = null;
-    } catch (e) {
-      console.warn(`Error parsing league_strength for ${a.display}:`, e);
-      strengthA = null;
-    }
-    
-    try {
-      // Try to convert to integer with radix 10
-      strengthB = b.league_strength !== null && b.league_strength !== undefined ? 
-        parseInt(b.league_strength, 10) : null;
-      
-      // Check if parsing resulted in NaN
-      if (isNaN(strengthB)) strengthB = null;
-    } catch (e) {
-      console.warn(`Error parsing league_strength for ${b.display}:`, e);
-      strengthB = null;
-    }
-    
-    // Handle cases based on whether we have valid values
-    if (strengthA === null && strengthB === null) {
-      // If both values are invalid, sort alphabetically
-      return a.display.localeCompare(b.display);
-    } else if (strengthA === null) {
-      // Put leagues with missing strength at the end
-      return 1;
-    } else if (strengthB === null) {
-      // Put leagues with missing strength at the end
-      return -1;
-    } else {
-      // Both values are valid numbers, sort highest to lowest
-      return strengthB - strengthA;
-    }
-  });
-};
-
 const TeamManager = () => {
   const communityPack = useSelector(selectCommunityPack);
   const [loading, setLoading] = useState(true);
@@ -533,12 +486,12 @@ const TeamManager = () => {
       
       try {
         // Fetch conferences with correct endpoint
-        const confResponse = await axios.get('/api/teams/conferences');
+        const confResponse = await axios.get('/api/leagues/conferences');
         conferences = confResponse.data || [];
         console.log(`Fetched ${conferences.length} conferences from backend`);
         
         // Fetch divisions with correct endpoint
-        const divResponse = await axios.get('/api/teams/divisions');
+        const divResponse = await axios.get('/api/leagues/divisions');
         divisions = divResponse.data || [];
         console.log(`Fetched ${divisions.length} divisions from backend`);
       } catch (error) {
@@ -571,19 +524,6 @@ const TeamManager = () => {
       if (data && data.length > 0) {
         // Log the first few league items to check for league_strength field
         console.log('First few leagues from backend (checking league_strength):', data.slice(0, 3));
-        
-        // Check all NHL, KHL, and SHL leagues to verify their league_strength values
-        console.log('-------------------------------------');
-        console.log('LEAGUE STRENGTH VERIFICATION:');
-        ['NHL', 'KHL', 'SHL', 'LIIGA', 'NLA', 'DEL'].forEach(abbr => {
-          const league = data.find(l => l.abbreviation === abbr);
-          if (league) {
-            console.log(`${league.league} (${league.abbreviation}): league_strength=${league.league_strength}, type=${typeof league.league_strength}`);
-          } else {
-            console.log(`${abbr}: Not found in data`);
-          }
-        });
-        console.log('-------------------------------------');
         
         // Check if any league lacks the league_strength field
         const missingStrength = data.filter(league => league.league_strength === null || league.league_strength === undefined);
@@ -701,7 +641,24 @@ const TeamManager = () => {
         });
         
         // Sort leagues by league_strength from highest to lowest (0-100 value)
-        formattedLeagues = sortLeaguesByStrength(formattedLeagues);
+        formattedLeagues.sort((a, b) => {
+          // Convert to numbers and handle null/undefined values
+          // Use explicit parseInt with radix to ensure proper conversion
+          const strengthA = a.league_strength !== null && a.league_strength !== undefined ? parseInt(a.league_strength, 10) : 0;
+          const strengthB = b.league_strength !== null && b.league_strength !== undefined ? parseInt(b.league_strength, 10) : 0;
+          
+          // Check for NaN after conversion and provide a fallback value
+          const valueA = isNaN(strengthA) ? 0 : strengthA;
+          const valueB = isNaN(strengthB) ? 0 : strengthB;
+          
+          // Sort by strength in descending order (higher values first)
+          if (valueA !== valueB) {
+            return valueB - valueA;
+          }
+          
+          // If strengths are equal or both 0, fallback to alphabetical sort
+          return a.display.localeCompare(b.display);
+        });
         
         // Log sorted leagues for verification
         console.log('Top 10 leagues after sorting by strength:');
@@ -1201,7 +1158,7 @@ const TeamManager = () => {
           country: t.country 
         })
       ));
-    } else {
+        } else {
       console.log("WARNING: No teams found for selected division:", selectedDiv);
       console.log("Division ID type:", typeof selectedDiv);
       console.log("Division name:", selectedDivObject ? selectedDivObject.name : 'Unknown');
@@ -1217,11 +1174,11 @@ const TeamManager = () => {
       }
     }
     
-    // Make sure we only include non-empty country values
+    // Extract unique countries from filtered teams
     const countries = [...new Set(
       filteredTeams
         .map(team => team.country)
-        .filter(country => country && country.trim() !== '')
+        .filter(Boolean)
     )].sort();
     
     console.log(`Found ${countries.length} countries for teams in division "${selectedDiv}" (${selectedDivObject?.name || 'Unknown'}):`, countries);
@@ -1247,24 +1204,8 @@ const TeamManager = () => {
       if (selectedConference && String(team.conference || '').trim() !== String(selectedConference).trim()) {
         return false;
       }
-      if (selectedDivision) {
-        // Special case for NHL with numeric division IDs
-        if (team.league === 'NHL') {
-          const teamDivId = parseInt(team.division || team.division_id);
-          const selectedDivId = parseInt(selectedDivision);
-          if (!(!isNaN(teamDivId) && !isNaN(selectedDivId) && teamDivId === selectedDivId)) {
-            return false;
-          }
-        } else {
-          // Check both division_id and division fields
-          const divisionMatches = 
-            (team.division_id && String(team.division_id) === String(selectedDivision)) ||
-            (team.division && String(team.division) === String(selectedDivision));
-            
-          if (!divisionMatches) {
-            return false;
-          }
-        }
+      if (selectedDivision && String(team.division_id) !== String(selectedDivision)) {
+        return false;
       }
       if (selectedCountry && team.country !== selectedCountry) {
         return false;
@@ -1353,20 +1294,17 @@ const TeamManager = () => {
           const teamDivId = parseInt(team.division || team.division_id);
           const selectedDivId = parseInt(selectedDivision);
           if (!isNaN(teamDivId) && !isNaN(selectedDivId) && teamDivId === selectedDivId) {
-            // If we're only checking division, and it passes, don't return false
-            // We'll continue with other filters below
-          } else {
-            return false;
+            return true;
           }
-        } else {
-          // Check both division_id and division fields
-          const divisionMatchesString = 
-            (team.division_id && String(team.division_id) === String(selectedDivision)) ||
-            (team.division && String(team.division) === String(selectedDivision));
-          
-          if (!divisionMatchesString) {
-            return false;
-          }
+        }
+        
+        // Check both division_id and division fields
+        const divisionMatches = 
+          (team.division_id && String(team.division_id) === String(selectedDivision)) ||
+          (team.division && String(team.division) === String(selectedDivision));
+        
+        if (!divisionMatches) {
+          return false;
         }
       }
       

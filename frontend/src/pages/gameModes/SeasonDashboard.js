@@ -201,6 +201,95 @@ const NavItem = styled.li`
   }
 `;
 
+// Add new CollapsibleSection component
+const CollapsibleSection = styled.div`
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    color: ${props => props.active ? '#fff' : '#aaa'};
+    background-color: ${props => props.active ? '#252525' : 'transparent'};
+    border-left: 4px solid ${props => props.active ? '#B30E16' : 'transparent'};
+    cursor: pointer;
+    transition: all 0.2s;
+    border-bottom: 1px solid #2a2a2a;
+    
+    &:hover {
+      background-color: #252525;
+      color: #fff;
+    }
+    
+    .toggle-icon {
+      transition: transform 0.3s ease;
+      transform: ${props => props.expanded ? 'rotate(180deg)' : 'rotate(0deg)'};
+    }
+  }
+  
+  .section-content {
+    max-height: ${props => props.expanded ? '500px' : '0'};
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    background-color: #1d1d1d;
+    
+    .task-item {
+      display: flex;
+      align-items: center;
+      padding: 10px 20px 10px 48px;
+      color: #aaa;
+      border-bottom: 1px solid #2a2a2a;
+      cursor: pointer;
+      
+      &:hover {
+        background-color: #252525;
+        color: #fff;
+      }
+      
+      .task-status {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 10px;
+        border: 1px solid #555;
+        
+        &.completed {
+          background-color: #295438;
+          border-color: #295438;
+        }
+        
+        &.in-progress {
+          background-color: #B36C00;
+          border-color: #B36C00;
+        }
+        
+        &.not-started {
+          background-color: transparent;
+        }
+      }
+      
+      &.see-more {
+        justify-content: center;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        background-color: #1a1a1a;
+        
+        span {
+          text-decoration: none;
+          cursor: pointer;
+          
+          &:hover {
+            text-decoration: underline;
+          }
+        }
+        
+        &:hover {
+          background-color: #202020;
+        }
+      }
+    }
+  }
+`;
+
 const SidebarFooter = styled.div`
   padding: 15px 20px;
   border-top: 1px solid #333;
@@ -416,8 +505,8 @@ const Card = styled.div`
 const MatchupCard = styled.div`
   background-color: #1d2330;
   border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 20px;
+  padding: 18px; /* Reduced from 20px */
+  margin-bottom: 18px; /* Reduced from 20px */
   border: 1px solid #333;
 `;
 
@@ -425,7 +514,7 @@ const MatchupHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 14px; /* Reduced from 15px */
   
   h3 {
     margin: 0;
@@ -443,7 +532,7 @@ const MatchupTeams = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 15px;
+  margin-bottom: 14px; /* Reduced from 15px */
 `;
 
 const MatchupTeam = styled.div`
@@ -494,15 +583,15 @@ const VersusContainer = styled.div`
 `;
 
 const StatComparison = styled.div`
-  margin-top: 20px;
-  padding-top: 15px;
+  margin-top: 16px; /* Reduced from 20px */
+  padding-top: 14px; /* Reduced from 15px */
   border-top: 1px solid #333;
 `;
 
 const StatRow = styled.div`
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 7px; /* Reduced from 8px */
   
   .stat-label {
     color: #aaa;
@@ -665,7 +754,7 @@ const QuickLinkButton = styled.button`
 const MatchupDetails = styled.div`
   display: flex;
   flex-direction: column;
-  margin-top: 30px;
+  margin-top: 28px; /* Reduced from 30px */
 `;
 
 const MatchupSubHeader = styled.div`
@@ -674,16 +763,16 @@ const MatchupSubHeader = styled.div`
   font-size: 14px;
   font-weight: bold;
   text-align: center;
-  padding: 12px 0;
+  padding: 11px 0; /* Reduced from 12px */
   background-color: #252932;
-  margin-bottom: 15px;
+  margin-bottom: 13px; /* Reduced from 15px */
   border-radius: 4px;
 `;
 
 const GoalieComparison = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 18px; /* Reduced from 20px */
 `;
 
 const GoalieCard = styled.div`
@@ -691,14 +780,14 @@ const GoalieCard = styled.div`
   align-items: center;
   background-color: #252932;
   border-radius: 8px;
-  padding: 15px;
+  padding: 13px; /* Reduced from 15px */
   
   .goalie-photo {
-    width: 70px;
-    height: 70px;
+    width: 64px; /* Reduced from 70px */
+    height: 68px; /* Reduced from 70px */
     border-radius: 50%;
     object-fit: cover;
-    margin-right: 15px;
+    margin-right: 13px; /* Reduced from 15px */
     border: 2px solid ${props => props.primary ? '#B30E16' : '#333'};
   }
   
@@ -706,8 +795,8 @@ const GoalieCard = styled.div`
     flex: 1;
     
     h4 {
-      font-size: 16px;
-      margin: 0 0 5px 0;
+      font-size: 15px; /* Reduced from 16px */
+      margin: 0 0 4px 0; /* Reduced from 5px */
       color: #fff;
       display: flex;
       align-items: center;
@@ -717,15 +806,15 @@ const GoalieCard = styled.div`
         border-radius: 4px;
         padding: 1px 4px;
         margin-right: 6px;
-        font-size: 12px;
+        font-size: 12px; /* Reduced from 12px */
       }
     }
     
     .goalie-stats {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 5px 15px;
-      margin-top: 10px;
+      gap: 4px 12px; /* Reduced from 5px 15px */
+      margin-top: 8px; /* Reduced from 10px */
       
       .stat-row {
         display: flex;
@@ -733,12 +822,12 @@ const GoalieCard = styled.div`
         
         .stat-label {
           color: #888;
-          font-size: 12px;
+          font-size: 11px; /* Reduced from 12px */
         }
         
         .stat-value {
           color: #fff;
-          font-size: 12px;
+          font-size: 11px; /* Reduced from 12px */
           font-weight: bold;
         }
       }
@@ -749,32 +838,32 @@ const GoalieCard = styled.div`
 const TeamLeaders = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-top: 20px;
+  gap: 16px; /* Reduced from 20px */
+  margin-top: 16px; /* Reduced from 20px */
 `;
 
 const LeaderCard = styled.div`
   background-color: #252932;
   border-radius: 8px;
-  padding: 15px;
+  padding: 12px; /* Reduced from 15px */
   
   h4 {
     color: #C4CED4;
-    margin: 0 0 12px 0;
-    font-size: 14px;
+    margin: 0 0 10px 0; /* Reduced from 12px */
+    font-size: 13px; /* Reduced from 14px */
     text-transform: uppercase;
   }
   
   .leader-row {
     display: flex;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 8px; /* Reduced from 10px */
     
     img {
-      width: 32px;
-      height: 32px;
+      width: 28px; /* Reduced from 32px */
+      height: 28px; /* Reduced from 32px */
       border-radius: 50%;
-      margin-right: 10px;
+      margin-right: 8px; /* Reduced from 10px */
     }
     
     .leader-info {
@@ -782,13 +871,13 @@ const LeaderCard = styled.div`
       
       .leader-name {
         color: #fff;
-        font-size: 14px;
+        font-size: 13px; /* Reduced from 14px */
         margin: 0;
       }
       
       .leader-position {
         color: #888;
-        font-size: 12px;
+        font-size: 11px; /* Reduced from 12px */
         margin: 0;
       }
     }
@@ -796,9 +885,19 @@ const LeaderCard = styled.div`
     .leader-stat {
       color: #B30E16;
       font-weight: bold;
-      font-size: 16px;
-      margin-left: 10px;
+      font-size: 15px; /* Reduced from 16px */
+      margin-left: 8px; /* Reduced from 10px */
     }
+  }
+  
+  .leader-section-title {
+    color: #94a3b8;
+    font-size: 11px; /* Reduced from 12px */
+    margin: 12px 0 8px 0; /* Reduced from 15px 0 10px 0 */
+    border-top: 1px solid #333;
+    padding-top: 8px; /* Reduced from 10px */
+    text-transform: uppercase;
+    font-weight: bold;
   }
 `;
 
@@ -1400,6 +1499,86 @@ const SeasonTasksContainer = styled.div`
   }
 `;
 
+// New News Container component
+const NewsContainer = styled.div`
+  background-color: #252932;
+  border-radius: 8px;
+  padding: 15px;
+  border: 1px solid #333;
+  height: 25%; /* Same height as previous component */
+  min-height: calc(25% - 15px);
+  overflow-y: auto;
+  
+  h3 {
+    margin: 0 0 15px 0;
+    color: #C4CED4;
+    font-size: 16px;
+    text-align: center;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
+  }
+  
+  .news-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  
+  .news-item {
+    padding: 10px 0;
+    border-bottom: 1px solid #333;
+    
+    &:last-child {
+      border-bottom: none;
+    }
+    
+    .news-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 6px;
+      
+      img {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        margin-right: 8px;
+      }
+      
+      .journalist-name {
+        font-weight: bold;
+        color: #fff;
+        font-size: 13px;
+      }
+      
+      .news-time {
+        margin-left: auto;
+        color: #888;
+        font-size: 11px;
+      }
+    }
+    
+    .news-content {
+      color: #C4CED4;
+      font-size: 13px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+    }
+    
+    .news-team {
+      display: flex;
+      align-items: center;
+      font-size: 12px;
+      color: #888;
+      
+      img {
+        width: 16px;
+        height: 16px;
+        margin-right: 4px;
+      }
+    }
+  }
+`;
+
 // Add the renderContent function to handle all tabs
 
 // Add placeholder render functions for the new sections
@@ -1417,6 +1596,9 @@ const SeasonDashboard = () => {
   const [season, setSeason] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(null);
+  
+  // Add state for collapsible sections
+  const [tasksExpanded, setTasksExpanded] = useState(false);
   
   // Add team level state for NHL/AHL/ECHL rotation
   const [teamLevel, setTeamLevel] = useState('NHL');
@@ -1628,6 +1810,10 @@ const SeasonDashboard = () => {
         return renderNumbersContent();
       case 'morale':
         return renderMoraleContent();
+      case 'tasks':
+        return renderTasksContent();
+      case 'settings':
+        return renderSettingsContent();
       default:
         return <div>Content not implemented</div>;
     }
@@ -1921,6 +2107,52 @@ const SeasonDashboard = () => {
                     </div>
                     <div className="leader-stat">21 PTS</div>
                   </div>
+                  <div className="leader-section-title">Goal Scorers</div>
+                  <div className="leader-row">
+                    <img 
+                      src={PlayerSilhouette} 
+                      alt="B. Horvat" 
+                    />
+                    <div className="leader-info">
+                      <p className="leader-name">B. HORVAT</p>
+                      <p className="leader-position">#53 C</p>
+                    </div>
+                    <div className="leader-stat">12 G</div>
+                  </div>
+                  <div className="leader-row">
+                    <img 
+                      src={PlayerSilhouette} 
+                      alt="E. Pettersson" 
+                    />
+                    <div className="leader-info">
+                      <p className="leader-name">E. PETTERSSON</p>
+                      <p className="leader-position">#40 C</p>
+                    </div>
+                    <div className="leader-stat">10 G</div>
+                  </div>
+                  <div className="leader-section-title">Other Leaders</div>
+                  <div className="leader-row">
+                    <img 
+                      src={PlayerSilhouette} 
+                      alt="Q. Hughes" 
+                    />
+                    <div className="leader-info">
+                      <p className="leader-name">Q. HUGHES</p>
+                      <p className="leader-position">#43 D</p>
+                    </div>
+                    <div className="leader-stat">+12</div>
+                  </div>
+                  <div className="leader-row">
+                    <img 
+                      src={PlayerSilhouette} 
+                      alt="T. Myers" 
+                    />
+                    <div className="leader-info">
+                      <p className="leader-name">T. MYERS</p>
+                      <p className="leader-position">#57 D</p>
+                    </div>
+                    <div className="leader-stat">24:35 TOI</div>
+                  </div>
                 </LeaderCard>
                 
                 <LeaderCard>
@@ -1946,6 +2178,52 @@ const SeasonDashboard = () => {
                       <p className="leader-position">#7 LW</p>
                     </div>
                     <div className="leader-stat">19 PTS</div>
+                  </div>
+                  <div className="leader-section-title">Goal Scorers</div>
+                  <div className="leader-row">
+                    <img 
+                      src={PlayerSilhouette} 
+                      alt="B. Tkachuk" 
+                    />
+                    <div className="leader-info">
+                      <p className="leader-name">B. TKACHUK</p>
+                      <p className="leader-position">#7 LW</p>
+                    </div>
+                    <div className="leader-stat">9 G</div>
+                  </div>
+                  <div className="leader-row">
+                    <img 
+                      src={PlayerSilhouette} 
+                      alt="D. Batherson" 
+                    />
+                    <div className="leader-info">
+                      <p className="leader-name">D. BATHERSON</p>
+                      <p className="leader-position">#19 RW</p>
+                    </div>
+                    <div className="leader-stat">8 G</div>
+                  </div>
+                  <div className="leader-section-title">Other Leaders</div>
+                  <div className="leader-row">
+                    <img 
+                      src={PlayerSilhouette} 
+                      alt="A. Zub" 
+                    />
+                    <div className="leader-info">
+                      <p className="leader-name">A. ZUB</p>
+                      <p className="leader-position">#2 D</p>
+                    </div>
+                    <div className="leader-stat">+8</div>
+                  </div>
+                  <div className="leader-row">
+                    <img 
+                      src={PlayerSilhouette} 
+                      alt="T. Chabot" 
+                    />
+                    <div className="leader-info">
+                      <p className="leader-name">T. CHABOT</p>
+                      <p className="leader-position">#72 D</p>
+                    </div>
+                    <div className="leader-stat">25:21 TOI</div>
                   </div>
                 </LeaderCard>
               </TeamLeaders>
@@ -2392,6 +2670,79 @@ const SeasonDashboard = () => {
     );
   };
   
+  // Settings content
+  const renderSettingsContent = () => {
+    return (
+      <>
+        <Header>
+          <Title>Settings</Title>
+        </Header>
+        
+        <div style={{ 
+          flex: '1 1 auto',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <EmptyState>
+            <h3>Game Settings</h3>
+            <p>Configure your franchise mode settings and preferences.</p>
+            <Button primary>Coming Soon</Button>
+          </EmptyState>
+        </div>
+      </>
+    );
+  };
+  
+  // Season Tasks content
+  const renderTasksContent = () => {
+    return (
+      <>
+        <Header>
+          <Title>Season Tasks</Title>
+        </Header>
+        
+        <div style={{ 
+          flex: '1 1 auto',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <div style={{ padding: '20px', backgroundColor: '#252932', borderRadius: '8px' }}>
+            <ul className="task-list" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              <li style={{ display: 'flex', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #333' }}>
+                <div style={{ width: '16px', height: '16px', borderRadius: '50%', marginRight: '10px', backgroundColor: '#295438', border: '1px solid #295438' }}></div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#fff' }}>Set your lines for the season</p>
+                  <span style={{ fontSize: '12px', color: '#aaa' }}>Reward: $1.5M salary cap</span>
+                </div>
+              </li>
+              <li style={{ display: 'flex', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #333' }}>
+                <div style={{ width: '16px', height: '16px', borderRadius: '50%', marginRight: '10px', backgroundColor: '#B36C00', border: '1px solid #B36C00' }}></div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#fff' }}>Win 10 games in a row</p>
+                  <span style={{ fontSize: '12px', color: '#aaa' }}>Progress: 8/10</span>
+                </div>
+              </li>
+              <li style={{ display: 'flex', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #333' }}>
+                <div style={{ width: '16px', height: '16px', borderRadius: '50%', marginRight: '10px', backgroundColor: 'transparent', border: '1px solid #555' }}></div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#fff' }}>Trade for a goalie with 90+ rating</p>
+                  <span style={{ fontSize: '12px', color: '#aaa' }}>Reward: Extra draft pick</span>
+                </div>
+              </li>
+              <li style={{ display: 'flex', alignItems: 'center', padding: '12px 0' }}>
+                <div style={{ width: '16px', height: '16px', borderRadius: '50%', marginRight: '10px', backgroundColor: 'transparent', border: '1px solid #555' }}></div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#fff' }}>Make the playoffs</p>
+                  <span style={{ fontSize: '12px', color: '#aaa' }}>Reward: Contract extensions</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </>
+    );
+  };
+  
   // Show loading indicator while fetching season data
   if (loading) {
     return (
@@ -2537,33 +2888,41 @@ const SeasonDashboard = () => {
             <NavItem active={activeTab === 'morale'}>
               <div onClick={() => setActiveTab('morale')}>Morale</div>
             </NavItem>
+            
+            <CollapsibleSection active={activeTab === 'tasks'} expanded={tasksExpanded}>
+              <div className="section-header" onClick={() => setTasksExpanded(!tasksExpanded)}>
+                <span>Season Tasks</span>
+                <span className="toggle-icon">▼</span>
+              </div>
+              <div className="section-content">
+                <div className="task-item" onClick={() => setActiveTab('tasks')}>
+                  <div className="task-status completed"></div>
+                  <span>Set your lines for the season</span>
+                </div>
+                <div className="task-item" onClick={() => setActiveTab('tasks')}>
+                  <div className="task-status in-progress"></div>
+                  <span>Win 10 games in a row (8/10)</span>
+                </div>
+                <div className="task-item" onClick={() => setActiveTab('tasks')}>
+                  <div className="task-status not-started"></div>
+                  <span>Trade for a goalie with 90+ rating</span>
+                </div>
+                <div className="task-item" onClick={() => setActiveTab('tasks')}>
+                  <div className="task-status not-started"></div>
+                  <span>Make the playoffs</span>
+                </div>
+                <div className="task-item see-more" onClick={() => setActiveTab('tasks')}>
+                  <span style={{ fontStyle: 'italic', color: '#4A90E2', cursor: 'pointer' }}>See More...</span>
+                </div>
+              </div>
+            </CollapsibleSection>
+            
+            <NavItem active={activeTab === 'settings'}>
+              <div onClick={() => setActiveTab('settings')}>Settings</div>
+            </NavItem>
           </NavList>
           
           <SidebarFooter>
-            <div className="franchise-quicklinks">
-              <button>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="12" y1="8" x2="12" y2="16"></line>
-                  <line x1="8" y1="12" x2="16" y2="12"></line>
-                </svg>
-                New Season
-              </button>
-              <button>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-                </svg>
-                Load Season
-              </button>
-              <button>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
-                  <polyline points="16 6 12 2 8 6"></polyline>
-                  <line x1="12" y1="2" x2="12" y2="15"></line>
-                </svg>
-                Export
-              </button>
-            </div>
             <div className="primary-buttons">
               <FooterButton onClick={handleSave}>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2874,6 +3233,52 @@ const SeasonDashboard = () => {
                               </div>
                               <div className="leader-stat">21 PTS</div>
                             </div>
+                            <div className="leader-section-title">Goal Scorers</div>
+                            <div className="leader-row">
+                              <img 
+                                src={PlayerSilhouette} 
+                                alt="B. Horvat" 
+                              />
+                              <div className="leader-info">
+                                <p className="leader-name">B. HORVAT</p>
+                                <p className="leader-position">#53 C</p>
+                              </div>
+                              <div className="leader-stat">12 G</div>
+                            </div>
+                            <div className="leader-row">
+                              <img 
+                                src={PlayerSilhouette} 
+                                alt="E. Pettersson" 
+                              />
+                              <div className="leader-info">
+                                <p className="leader-name">E. PETTERSSON</p>
+                                <p className="leader-position">#40 C</p>
+                              </div>
+                              <div className="leader-stat">10 G</div>
+                            </div>
+                            <div className="leader-section-title">Other Leaders</div>
+                            <div className="leader-row">
+                              <img 
+                                src={PlayerSilhouette} 
+                                alt="Q. Hughes" 
+                              />
+                              <div className="leader-info">
+                                <p className="leader-name">Q. HUGHES</p>
+                                <p className="leader-position">#43 D</p>
+                              </div>
+                              <div className="leader-stat">+12</div>
+                            </div>
+                            <div className="leader-row">
+                              <img 
+                                src={PlayerSilhouette} 
+                                alt="T. Myers" 
+                              />
+                              <div className="leader-info">
+                                <p className="leader-name">T. MYERS</p>
+                                <p className="leader-position">#57 D</p>
+                              </div>
+                              <div className="leader-stat">24:35 TOI</div>
+                            </div>
                           </LeaderCard>
                           
                           <LeaderCard>
@@ -2899,6 +3304,52 @@ const SeasonDashboard = () => {
                                 <p className="leader-position">#7 LW</p>
                               </div>
                               <div className="leader-stat">19 PTS</div>
+                            </div>
+                            <div className="leader-section-title">Goal Scorers</div>
+                            <div className="leader-row">
+                              <img 
+                                src={PlayerSilhouette} 
+                                alt="B. Tkachuk" 
+                              />
+                              <div className="leader-info">
+                                <p className="leader-name">B. TKACHUK</p>
+                                <p className="leader-position">#7 LW</p>
+                              </div>
+                              <div className="leader-stat">9 G</div>
+                            </div>
+                            <div className="leader-row">
+                              <img 
+                                src={PlayerSilhouette} 
+                                alt="D. Batherson" 
+                              />
+                              <div className="leader-info">
+                                <p className="leader-name">D. BATHERSON</p>
+                                <p className="leader-position">#19 RW</p>
+                              </div>
+                              <div className="leader-stat">8 G</div>
+                            </div>
+                            <div className="leader-section-title">Other Leaders</div>
+                            <div className="leader-row">
+                              <img 
+                                src={PlayerSilhouette} 
+                                alt="A. Zub" 
+                              />
+                              <div className="leader-info">
+                                <p className="leader-name">A. ZUB</p>
+                                <p className="leader-position">#2 D</p>
+                              </div>
+                              <div className="leader-stat">+8</div>
+                            </div>
+                            <div className="leader-row">
+                              <img 
+                                src={PlayerSilhouette} 
+                                alt="T. Chabot" 
+                              />
+                              <div className="leader-info">
+                                <p className="leader-name">T. CHABOT</p>
+                                <p className="leader-position">#72 D</p>
+                              </div>
+                              <div className="leader-stat">25:21 TOI</div>
                             </div>
                           </LeaderCard>
                         </TeamLeaders>
@@ -3258,39 +3709,67 @@ const SeasonDashboard = () => {
             </div>
           </TradesProposalContainer>
           
-          <SeasonTasksContainer>
-            <h3>SEASON TASKS</h3>
-            <ul className="task-list">
-              <li>
-                <div className="task-status completed"></div>
-                <div className="task-details">
-                  <p>Set your lines for the season</p>
-                  <span>Reward: $1.5M salary cap</span>
+          <NewsContainer>
+            <h3>HOCKEY NEWS</h3>
+            <ul className="news-list">
+              <li className="news-item">
+                <div className="news-header">
+                  <img src={PlayerSilhouette} alt="Journalist" />
+                  <span className="journalist-name">Elliotte Friedman</span>
+                  <span className="news-time">2h ago</span>
+                </div>
+                <div className="news-content">
+                  Hearing that Vancouver is in serious trade talks with Boston regarding RW David Pastrnak. Could be a blockbuster in the making. Several pieces involved.
+                </div>
+                <div className="news-team">
+                  <img src={getTeamLogo('VAN')} alt="VAN" />
+                  Vancouver Canucks
                 </div>
               </li>
-              <li>
-                <div className="task-status in-progress"></div>
-                <div className="task-details">
-                  <p>Win 10 games in a row</p>
-                  <span>Progress: 8/10</span>
+              <li className="news-item">
+                <div className="news-header">
+                  <img src={PlayerSilhouette} alt="Journalist" />
+                  <span className="journalist-name">Kevin Weekes</span>
+                  <span className="news-time">5h ago</span>
+                </div>
+                <div className="news-content">
+                  BREAKING: Arturs Silovs expected to start tomorrow vs Ottawa. Goalie has been strong in practice this week after recovering from minor injury.
+                </div>
+                <div className="news-team">
+                  <img src={getTeamLogo('VAN')} alt="VAN" />
+                  Vancouver Canucks
                 </div>
               </li>
-              <li>
-                <div className="task-status not-started"></div>
-                <div className="task-details">
-                  <p>Trade for a goalie with 90+ rating</p>
-                  <span>Reward: Extra draft pick</span>
+              <li className="news-item">
+                <div className="news-header">
+                  <img src={PlayerSilhouette} alt="Journalist" />
+                  <span className="journalist-name">Darren Dreger</span>
+                  <span className="news-time">1d ago</span>
+                </div>
+                <div className="news-content">
+                  Claude Giroux is on pace for his best offensive season in years. Vancouver's gamble on the veteran forward is paying off in a big way.
+                </div>
+                <div className="news-team">
+                  <img src={getTeamLogo('VAN')} alt="VAN" />
+                  Vancouver Canucks
                 </div>
               </li>
-              <li>
-                <div className="task-status not-started"></div>
-                <div className="task-details">
-                  <p>Make the playoffs</p>
-                  <span>Reward: Contract extensions</span>
+              <li className="news-item">
+                <div className="news-header">
+                  <img src={PlayerSilhouette} alt="Journalist" />
+                  <span className="journalist-name">Chris Johnston</span>
+                  <span className="news-time">2d ago</span>
+                </div>
+                <div className="news-content">
+                  League sources tell me Vancouver's AHL affiliate will be getting a new head coach next season. Team looking to align development systems across all levels.
+                </div>
+                <div className="news-team">
+                  <img src={getTeamLogo('AHL')} alt="AHL" />
+                  AHL Affiliate
                 </div>
               </li>
             </ul>
-          </SeasonTasksContainer>
+          </NewsContainer>
         </MatchupSidebar>
       </PageContainer>
     </SeasonLayoutContainer>

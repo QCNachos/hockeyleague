@@ -105,6 +105,28 @@ const TabContent = styled.div`
   min-height: 300px;
 `;
 
+const DeleteButton = styled.button`
+  background-color: #8B0000;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+  margin-left: 10px;
+  
+  &:hover {
+    background-color: #6B0000;
+  }
+`;
+
+const ButtonGroup = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
 const SeasonMode = () => {
   const [activeTab, setActiveTab] = useState('start');
   const [savedSeasons, setSavedSeasons] = useState([]);
@@ -112,21 +134,40 @@ const SeasonMode = () => {
   
   // Load saved seasons when the component mounts
   useEffect(() => {
-    const loadSeasons = async () => {
-      try {
-        const { success, data } = await seasonService.getAllSeasons();
-        if (success) {
-          setSavedSeasons(data);
-        }
-      } catch (error) {
-        console.error('Error loading seasons:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
     loadSeasons();
   }, []);
+  
+  const loadSeasons = async () => {
+    try {
+      const { success, data } = await seasonService.getAllSeasons();
+      if (success) {
+        setSavedSeasons(data);
+      }
+    } catch (error) {
+      console.error('Error loading seasons:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Add function to handle season deletion
+  const handleDeleteSeason = async (seasonId, seasonName) => {
+    if (window.confirm(`Are you sure you want to delete the season "${seasonName}"? This action cannot be undone.`)) {
+      try {
+        const { success, error } = await seasonService.deleteSeason(seasonId);
+        
+        if (success) {
+          // Reload seasons after deletion
+          loadSeasons();
+        } else {
+          alert(`Failed to delete season: ${error}`);
+        }
+      } catch (error) {
+        console.error('Error deleting season:', error);
+        alert('An unexpected error occurred while deleting the season');
+      }
+    }
+  };
   
   return (
     <Container>
@@ -212,7 +253,12 @@ const SeasonMode = () => {
                       Team: {season.selectedTeam?.name || 'Unknown'}<br />
                       Created: {new Date(season.createdAt).toLocaleDateString()}
                     </p>
-                    <ActionButton to={`/season/dashboard/${season.id}`}>Continue Season</ActionButton>
+                    <ButtonGroup>
+                      <ActionButton to={`/season/dashboard/${season.id}`}>Continue Season</ActionButton>
+                      <DeleteButton onClick={() => handleDeleteSeason(season.id, season.name)}>
+                        Delete
+                      </DeleteButton>
+                    </ButtonGroup>
                   </OptionCard>
                 ))}
               </OptionsGrid>

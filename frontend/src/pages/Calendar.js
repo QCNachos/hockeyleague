@@ -19,6 +19,8 @@ const CalendarContainer = styled.div`
   max-width: ${props => props.isEmbedded ? '100%' : '1200px'};
   margin: 0 auto;
   padding: ${props => props.isEmbedded ? '0' : '20px'};
+  height: ${props => props.isEmbedded ? '100%' : 'auto'};
+  flex: ${props => props.isEmbedded ? '1' : 'none'};
 `;
 
 const CalendarHeader = styled.div`
@@ -87,9 +89,10 @@ const WeekdayHeaders = styled.div`
 const DaysGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  grid-auto-rows: minmax(120px, auto);
+  grid-auto-rows: ${props => props.isEmbedded ? 'minmax(100px, 1fr)' : 'minmax(120px, auto)'};
   gap: 1px;
   background-color: #111;
+  flex: ${props => props.isEmbedded ? '1' : 'none'};
 `;
 
 const CalendarCell = styled.div`
@@ -1221,7 +1224,7 @@ CREATE POLICY "Allow public read access" ON "events"
         <div>Sat</div>
       </WeekdayHeaders>
       
-      <DaysGrid>
+      <DaysGrid isEmbedded={isEmbedded}>
         {calendarDays.map((day, index) => {
           const dayEvents = getEventsForDay(day);
           const dayIsToday = isToday(day);

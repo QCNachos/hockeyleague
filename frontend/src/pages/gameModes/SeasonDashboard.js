@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import * as seasonService from '../../services/seasonService';
 import { useSelector } from 'react-redux';
 import { selectCommunityPack } from '../../store/slices/settingsSlice';
+import PlayerSilhouette from '../../assets/Player_silouette.png';
 
 // Import team logos for NHL teams
 import ANA from '../../assets/Logo_ANA.png';
@@ -38,6 +39,8 @@ import VGK from '../../assets/Logo_VGK.png';
 import WPG from '../../assets/Logo_WPG.png';
 import WSH from '../../assets/Logo_WSH.png';
 import UTA from '../../assets/Logo_UTA.png';
+import AHL from '../../assets/AHL.png';
+import ECHL from '../../assets/ECHL.png';
 
 // Import all components for direct embedding
 import Calendar from '../../pages/Calendar';
@@ -51,7 +54,8 @@ import Awards from '../../pages/Awards';
 const teamLogos = {
   ANA, BOS, BUF, CAR, CBJ, CGY, CHI, COL, DAL, DET, 
   EDM, FLA, LAK, MIN, MTL, NJD, NSH, NYI, NYR, OTT, 
-  PHI, PIT, SEA, SJS, STL, TBL, TOR, VAN, VGK, WPG, WSH, UTA
+  PHI, PIT, SEA, SJS, STL, TBL, TOR, VAN, VGK, WPG, WSH, UTA,
+  AHL, ECHL
 };
 
 // Custom layout container for Season Dashboard that doesn't include the main app sidebar
@@ -72,22 +76,23 @@ const SeasonLayoutContainer = styled.div`
 
 // Styled components
 const PageContainer = styled.div`
-  display: flex;
-  flex: 1;
+  display: grid;
+  grid-template-columns: 15% 65% 20%;
+  width: 100%;
   min-height: 100vh;
   height: 100vh; /* Set explicit height */
-  background-color: #262626;
+  background-color: #1e1e1e;
   overflow: hidden; /* Prevent scrolling on the container */
 `;
 
 const Sidebar = styled.div`
-  width: 250px;
   background-color: #1a1a1a;
   color: #C4CED4;
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
   border-right: 1px solid #333;
+  overflow-y: auto;
+  height: 100vh;
 `;
 
 const SidebarHeader = styled.div`
@@ -124,9 +129,9 @@ const SidebarTeamInfo = styled.div`
 `;
 
 const TeamLogo = styled.div`
-  width: 40px;
-  height: 40px;
-  background-color: ${props => props.bgColor || '#333'};
+  width: 50px;
+  height: 50px;
+  background-color: ${props => props.bgColor || 'transparent'};
   border-radius: 50%;
   margin-right: 10px;
   display: flex;
@@ -235,8 +240,8 @@ const SidebarFooter = styled.div`
   }
   
   .primary-buttons {
-    display: flex;
-    justify-content: space-between;
+  display: flex;
+  justify-content: space-between;
     gap: 10px;
   }
 `;
@@ -269,13 +274,11 @@ const FooterButton = styled.button`
 `;
 
 const MainContent = styled.div`
-  flex: 1;
   padding: 20px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  height: 100vh; /* Full viewport height */
-  background: linear-gradient(to bottom, #252525, #1e1e1e);
+  background: #1e1e1e;
   position: relative;
   
   &::before {
@@ -358,13 +361,10 @@ const ContentArea = styled.div`
   background-color: rgba(30, 30, 30, 0.7);
   border-radius: 8px;
   padding: 20px;
-  min-height: calc(100vh - 80px); /* Take full height minus some padding */
-  height: 100%;
   display: flex;
   flex-direction: column;
   flex: 1;
   overflow: hidden; /* Prevent scrollbars from appearing unnecessarily */
-  backdrop-filter: blur(5px);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   border: 1px solid #333;
   z-index: 1;
@@ -414,11 +414,11 @@ const Card = styled.div`
 
 // Add these new styled components after the existing Card component
 const MatchupCard = styled.div`
-  background-color: #252525;
+  background-color: #1d2330;
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 20px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #333;
 `;
 
 const MatchupHeader = styled.div`
@@ -443,6 +443,7 @@ const MatchupTeams = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 15px;
 `;
 
 const MatchupTeam = styled.div`
@@ -455,6 +456,7 @@ const MatchupTeam = styled.div`
   img {
     width: 70px;
     height: 70px;
+    object-fit: contain;
     margin-bottom: 10px;
   }
   
@@ -673,8 +675,9 @@ const MatchupSubHeader = styled.div`
   font-weight: bold;
   text-align: center;
   padding: 12px 0;
-  background-color: #1d2330;
+  background-color: #252932;
   margin-bottom: 15px;
+  border-radius: 4px;
 `;
 
 const GoalieComparison = styled.div`
@@ -686,7 +689,7 @@ const GoalieComparison = styled.div`
 const GoalieCard = styled.div`
   display: flex;
   align-items: center;
-  background-color: #1d2330;
+  background-color: #252932;
   border-radius: 8px;
   padding: 15px;
   
@@ -751,7 +754,7 @@ const TeamLeaders = styled.div`
 `;
 
 const LeaderCard = styled.div`
-  background-color: #1d2330;
+  background-color: #252932;
   border-radius: 8px;
   padding: 15px;
   
@@ -803,9 +806,12 @@ const PointsLeaderSection = styled.div`
   background-color: #1d2330;
   border-radius: 0 0 8px 8px;
   padding: 12px 20px;
-  margin-top: 20px;
+  margin-top: auto; /* Push to bottom */
   overflow: hidden;
   white-space: nowrap;
+  position: sticky;
+  bottom: 0;
+  border-top: 1px solid #333;
   
   .points-scrolling {
     animation: scroll-left 30s linear infinite;
@@ -854,6 +860,20 @@ const CustomScrollArea = styled.div`
   }
 `;
 
+// Add the MatchupSidebar styled component
+const MatchupSidebar = styled.div`
+  background-color: #1a1a1a;
+  padding: 20px;
+  border-left: 1px solid #333;
+  overflow-y: auto;
+  height: 99vh; /* Changed from 100vh to 99vh */
+  
+  h3 {
+    color: #C4CED4;
+    font-size: 16px;
+  }
+`;
+
 // Add a function to get team logo based on abbreviation
 const getTeamLogo = (abbreviation) => {
   if (!abbreviation) return null;
@@ -863,73 +883,530 @@ const getTeamLogo = (abbreviation) => {
 
 // Add a new styled component for the week view calendar
 const WeekViewCalendar = styled.div`
-  display: flex;
   width: 100%;
-  background-color: #1d2330;
+  background-color: #0E1A33; /* Darker navy blue background */
   border-radius: 8px;
   margin-bottom: 20px;
   overflow: hidden;
+  border: 1px solid #1E3A67; /* Slightly lighter blue for borders */
+  min-height: 190px; /* Increased height to match screenshot */
+`;
+
+const WeekCalendarHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: #102040; /* Darker blue for header */
+  border-bottom: 1px solid #1E3A67;
+  
+  h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  
+  .calendar-date {
+    color: #94a3b8;
+    font-size: 16px;
+  }
+`;
+
+const CalendarDays = styled.div`
+  display: flex;
+  width: 100%;
+  height: 150px; /* Much taller calendar days container */
 `;
 
 const WeekDay = styled.div`
   flex: 1;
   text-align: center;
-  padding: 10px;
+  padding: 12px 4px;
   position: relative;
-  border-left: ${props => props.active ? '4px solid #B30E16' : '1px solid #333'};
-  background-color: ${props => props.active ? '#252932' : 'transparent'};
+  background-color: ${props => props.active ? '#102D57' : 'transparent'};
   cursor: pointer;
+  border-right: 1px solid #1E3A67;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start; /* Align content to the top */
+  min-height: 150px; /* Increased height to match screenshot */
   
-  &:first-child {
-    border-left: ${props => props.active ? '4px solid #B30E16' : 'none'};
+  &:last-child {
+    border-right: none;
   }
   
   &:hover {
-    background-color: #252932;
+    background-color: #102D57;
   }
   
   .day-name {
-    font-size: 12px;
-    color: #888;
+    font-size: 13px;
+    color: #7D8597;
     text-transform: uppercase;
     margin-bottom: 5px;
+    z-index: 1;
+    position: relative;
   }
   
   .day-number {
-    font-size: 16px;
-    font-weight: ${props => props.active ? 'bold' : 'normal'};
+    font-size: 18px;
+    font-weight: ${props => props.active ? 'bold' : '500'};
     color: #fff;
-    margin-bottom: 8px;
-  }
-  
-  .game-indicator {
-    height: 8px;
-    width: 8px;
-    background-color: ${props => props.isHomeGame ? '#B30E16' : '#4A90E2'};
-    border-radius: 50%;
-    display: ${props => props.hasGame ? 'inline-block' : 'none'};
-    margin: 0 auto;
-  }
-  
-  .game-info {
-    margin-top: 8px;
+    margin-bottom: 6px;
+    position: relative;
+    z-index: 1;
     display: flex;
     justify-content: center;
     align-items: center;
+  }
+  
+  .active-day-indicator {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background-color: #fff;
+    display: ${props => props.active ? 'block' : 'none'};
+  }
+  
+  .game-indicator {
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 6px;
+    height: 6px;
+    background-color: ${props => props.isHomeGame ? '#bd3039' : '#3d78e3'};
+    border-radius: 50%;
+    display: ${props => props.hasGame ? 'block' : 'none'};
+  }
+  
+  .game-info {
+    margin-top: 12px; /* Increased spacing */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    z-index: 1;
     
     .team-logo {
-      width: 24px;
-      height: 24px;
+      width: 35px; /* Bigger team logos */
+      height: 35px;
       object-fit: contain;
     }
     
     .vs {
-      margin: 0 5px;
-      font-size: 12px;
+      margin: 0 2px;
+      font-size: 10px;
+      color: #7D8597;
+    }
+  }
+  
+  .game-result {
+    color: #fff;
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 10px;
+  }
+  
+  .team-level-indicator {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: inline-block;
+    
+    img {
+      width: 24px; /* 30% smaller than the 35px team logos */
+      height: 24px;
+      object-fit: contain;
+    }
+  }
+  
+  .league-logo {
+    width: 35px;
+    height: 35px;
+    margin: 12px auto 0; /* Center the logo and place it vertically centered */
+  }
+`;
+
+// Create a more compact MatchupCard specifically for the sidebar
+const SidebarMatchupCard = styled.div`
+  background-color: #252932;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  border: 1px solid #333;
+  
+  h3 {
+    margin: 0 0 15px 0;
+    color: #C4CED4;
+    font-size: 16px;
+    text-align: center;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
+  }
+`;
+
+// Update StandingsContainer styling to allow for division rotation arrows
+const StandingsContainer = styled.div`
+  background-color: #252932;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  border: 1px solid #333;
+  height: calc(35% - 15px); /* Reduce height to accommodate League standings */
+  overflow-y: auto;
+  
+  h3 {
+    margin: 0 0 15px 0;
+    color: #C4CED4;
+    font-size: 16px;
+    text-align: center;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    
+    .division-arrows {
+      position: absolute;
+      right: 0;
+      display: flex;
+      
+      button {
+        background: none;
+        border: none;
+        color: #888;
+        cursor: pointer;
+        font-size: 14px;
+        padding: 0 5px;
+        
+        &:hover {
+          color: #fff;
+        }
+      }
+    }
+  }
+  
+  .standings-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    
+    th, td {
+      padding: 6px 8px;
+      text-align: left;
+    }
+    
+    th {
       color: #aaa;
+      font-weight: normal;
+      text-transform: uppercase;
+      border-bottom: 1px solid #333;
+    }
+    
+    td {
+      color: #fff;
+      border-bottom: 1px solid #222;
+    }
+    
+    .team {
+      display: flex;
+      align-items: center;
+      
+      img {
+        width: 20px;
+        height: 20px;
+        margin-right: 8px;
+      }
+    }
+    
+    .highlight {
+      font-weight: bold;
+      color: #B30E16;
     }
   }
 `;
+
+// Add new component for League Standings
+const LeagueStandingsContainer = styled.div`
+  background-color: #252932;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  border: 1px solid #333;
+  height: calc(15% - 15px); /* Add League standings section */
+  overflow-y: auto;
+  
+  h3 {
+    margin: 0 0 15px 0;
+    color: #C4CED4;
+    font-size: 16px;
+    text-align: center;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
+  }
+  
+  .standings-groups {
+    display: flex;
+    justify-content: space-between;
+    
+    .standings-group {
+      flex: 1;
+      
+      h4 {
+        color: #aaa;
+        font-size: 12px;
+        margin: 0 0 8px 0;
+        text-transform: uppercase;
+        text-align: center;
+      }
+      
+      .team-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 6px;
+        padding: 0 5px;
+        
+        .rank {
+          width: 16px;
+          text-align: center;
+          font-size: 12px;
+          color: #888;
+          margin-right: 4px;
+        }
+        
+        .team {
+          display: flex;
+          align-items: center;
+          flex: 1;
+          
+          img {
+            width: 20px;
+            height: 20px;
+            margin-right: 6px;
+          }
+          
+          .team-name {
+            font-size: 12px;
+            color: #fff;
+          }
+        }
+        
+        .points {
+          width: 25px;
+          text-align: right;
+          font-size: 12px;
+          font-weight: bold;
+          color: #fff;
+          margin-left: 4px;
+        }
+      }
+    }
+  }
+`;
+
+// Update TradesProposalContainer to 24.5% height
+const TradesProposalContainer = styled.div`
+  background-color: #252932;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  border: 1px solid #333;
+  height: 24.5%; /* Changed from 25% to 24.5% */
+  overflow-y: auto;
+  
+  /* Rest of the styles remain the same */
+  h3 {
+    margin: 0 0 15px 0;
+    color: #C4CED4;
+    font-size: 16px;
+    text-align: center;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
+  }
+  
+  .trade-proposal {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    position: relative;
+    
+    .team-side {
+      text-align: center;
+      
+      img {
+        width: 40px;
+        height: 40px;
+        margin-bottom: 5px;
+      }
+      
+      h4 {
+        margin: 0;
+        font-size: 14px;
+        color: #fff;
+      }
+      
+      p {
+        margin: 5px 0 0;
+        font-size: 12px;
+        color: #aaa;
+      }
+    }
+    
+    .vs {
+      font-size: 16px;
+      color: #aaa;
+    }
+    
+    .status-indicator {
+      position: absolute;
+      top: -10px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 11px;
+      color: #B30E16;
+      font-weight: bold;
+    }
+    
+    &.old {
+      opacity: 0.7;
+      padding-top: 15px;
+      padding-bottom: 15px;
+      border-top: 1px dashed #444;
+      
+      &:before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.1);
+      }
+    }
+  }
+  
+  .action-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 15px;
+    margin-bottom: 20px;
+    
+    button {
+      padding: 8px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      
+      &.accept {
+        background-color: #295438;
+        color: white;
+      }
+      
+      &.reject {
+        background-color: #8B0000;
+        color: white;
+      }
+      
+      &.negotiate {
+        background-color: #394b6a;
+        color: white;
+      }
+    }
+  }
+`;
+
+// Update SeasonTasksContainer to match other components
+const SeasonTasksContainer = styled.div`
+  background-color: #252932;
+  border-radius: 8px;
+  padding: 15px;
+  border: 1px solid #333;
+  height: 25%; /* Keep this height but it's the last element */
+  min-height: calc(25% - 15px); /* Ensure proper spacing */
+  overflow-y: auto;
+  
+  /* Rest of the styles remain the same */
+  h3 {
+    margin: 0 0 15px 0;
+    color: #C4CED4;
+    font-size: 16px;
+    text-align: center;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
+  }
+  
+  .task-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    
+    li {
+      display: flex;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #333;
+      
+      &:last-child {
+        border-bottom: none;
+      }
+      
+      .task-status {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        margin-right: 10px;
+        border: 1px solid #555;
+        
+        &.completed {
+          background-color: #295438;
+          border-color: #295438;
+        }
+        
+        &.in-progress {
+          background-color: #B36C00;
+          border-color: #B36C00;
+        }
+        
+        &.not-started {
+          background-color: transparent;
+        }
+      }
+      
+      .task-details {
+        flex: 1;
+        
+        p {
+          margin: 0;
+          font-size: 13px;
+          color: #fff;
+        }
+        
+        span {
+          font-size: 11px;
+          color: #aaa;
+        }
+      }
+    }
+  }
+`;
+
+// Add the renderContent function to handle all tabs
+
+// Add placeholder render functions for the new sections
+
+
+
+
 
 // SeasonDashboard Component
 const SeasonDashboard = () => {
@@ -941,6 +1418,33 @@ const SeasonDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(null);
   
+  // Add team level state for NHL/AHL/ECHL rotation
+  const [teamLevel, setTeamLevel] = useState('NHL');
+  
+  // Add division state and navigation functions here
+  const [activeDivision, setActiveDivision] = useState('Atlantic');
+  const divisions = ['Atlantic', 'Metropolitan', 'Central', 'Pacific'];
+  
+  // Add function to rotate between team levels
+  const rotateTeamLevel = () => {
+    const levels = ['NHL', 'AHL', 'ECHL'];
+    const currentIndex = levels.indexOf(teamLevel);
+    const nextIndex = (currentIndex + 1) % levels.length;
+    setTeamLevel(levels[nextIndex]);
+  };
+  
+  const nextDivision = () => {
+    const currentIndex = divisions.indexOf(activeDivision);
+    const nextIndex = (currentIndex + 1) % divisions.length;
+    setActiveDivision(divisions[nextIndex]);
+  };
+  
+  const prevDivision = () => {
+    const currentIndex = divisions.indexOf(activeDivision);
+    const prevIndex = (currentIndex - 1 + divisions.length) % divisions.length;
+    setActiveDivision(divisions[prevIndex]);
+  };
+  
   // Add missing calendarData state
   const [calendarData] = useState({
     record: '8-7-3',
@@ -949,38 +1453,78 @@ const SeasonDashboard = () => {
     gamesPlayed: '18'
   });
   
-  // Generate mock week data for the calendar
+  // Generate mock week data for the calendar to match the image
   const [weekDays] = useState(() => {
-    const today = new Date();
+    // Fixed week data matching the image (November 20-26, 2024)
+    const monthName = "NOV";
+    const gameSchedule = {
+      20: { 
+        hasGame: true, 
+        isHomeGame: true, 
+        opponent: 'BUF', 
+        gameCompleted: true, 
+        gameResult: '4-1',
+        teamWon: true 
+      },
+      22: { 
+        hasGame: true, 
+        isHomeGame: false, 
+        opponent: 'OTT', 
+        gameCompleted: false 
+      },
+      23: { 
+        hasGame: true, 
+        isHomeGame: false, 
+        opponent: 'MTL', 
+        gameCompleted: false 
+      },
+      24: { 
+        hasGame: false, 
+        isHomeGame: false, 
+        affiliate: 'AHL',
+        affiliateGame: true,
+        affiliateOpponent: 'TOR' 
+      },
+      25: { 
+        hasGame: false, 
+        isHomeGame: false, 
+        affiliate: 'ECHL',
+        affiliateGame: true,
+        affiliateOpponent: 'FLA' 
+      },
+      26: { 
+        hasGame: true, 
+        isHomeGame: false, 
+        opponent: 'BOS', 
+        gameCompleted: false 
+      }
+    };
+    
     const days = [];
     
-    for (let i = -3; i <= 3; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      
+    for (let i = 20; i <= 26; i++) {
+      const date = new Date(2024, 10, i); // November (10) 2024
       const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
       const dayName = dayNames[date.getDay()];
       const dayNumber = date.getDate();
-      const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-      const monthName = monthNames[date.getMonth()];
       
-      // Randomly determine if there's a game on this day (for mock data)
-      const hasGame = Math.random() > 0.5;
-      const isHomeGame = hasGame && Math.random() > 0.5;
-      
-      // Random opponent for the game (if there is one)
-      const opponents = ['NYR', 'BOS', 'TOR', 'MTL', 'OTT', 'TBL', 'FLA', 'CAR'];
-      const opponent = opponents[Math.floor(Math.random() * opponents.length)];
+      const todayInfo = gameSchedule[dayNumber] || { hasGame: false, isHomeGame: false, opponent: '' };
       
       days.push({
         date,
         dayName,
         dayNumber,
         monthName,
-        hasGame,
-        isHomeGame,
-        opponent,
-        isToday: i === 0
+        hasGame: todayInfo.hasGame,
+        isHomeGame: todayInfo.isHomeGame,
+        opponent: todayInfo.opponent,
+        isToday: dayNumber === 22, // FRI 22 is today
+        gameCompleted: todayInfo.gameCompleted || false,
+        gameResult: todayInfo.gameResult || '',
+        teamWon: todayInfo.teamWon || false,
+        affiliate: todayInfo.affiliate || '',
+        affiliateGame: todayInfo.affiliateGame || false,
+        affiliateOpponent: todayInfo.affiliateOpponent || ''
       });
     }
     
@@ -1064,18 +1608,26 @@ const SeasonDashboard = () => {
         return renderHomeContent();
       case 'calendar':
         return renderCalendarContent();
-      case 'lines':
-        return renderLinesContent();
-      case 'team':
-        return renderTeamContent();
       case 'stats':
         return renderStatsContent();
       case 'standings':
         return renderStandingsContent();
-      case 'trades':
-        return renderTradesContent();
       case 'awards':
         return renderAwardsContent();
+      case 'lines':
+        return renderLinesContent();
+      case 'coaching':
+        return renderCoachingStaffContent();
+      case 'trades':
+        return renderTradesContent();
+      case 'contracts':
+        return renderContractsContent();
+      case 'freeAgents':
+        return renderFreeAgentsContent();
+      case 'numbers':
+        return renderNumbersContent();
+      case 'morale':
+        return renderMoraleContent();
       default:
         return <div>Content not implemented</div>;
     }
@@ -1088,6 +1640,15 @@ const SeasonDashboard = () => {
         <Header>
           <Title>Season Dashboard</Title>
           <ActionButtons>
+            <Button onClick={rotateTeamLevel}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+              {teamLevel}
+            </Button>
             <Button onClick={simulateToNextDay}>
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -1106,85 +1667,92 @@ const SeasonDashboard = () => {
           </ActionButtons>
         </Header>
         
-        {/* Add Week View Calendar */}
         <WeekViewCalendar>
-          {weekDays.map((day, index) => (
-            <WeekDay 
-              key={index}
-              active={day.isToday}
-              hasGame={day.hasGame}
-              isHomeGame={day.isHomeGame}
-              onClick={() => setSelectedDay(day)}
-            >
-              <div className="day-name">{day.dayName}</div>
-              <div className="day-number">{day.dayNumber} {day.monthName}</div>
-              <div className="game-indicator"></div>
-              {day.hasGame && (
-                <div className="game-info">
-                  {communityPack === 1 && getTeamLogo('VAN') ? (
-                    <img 
-                      className="team-logo" 
-                      src={getTeamLogo('VAN')} 
-                      alt="VAN" 
-                    />
-                  ) : (
-                    <span>VAN</span>
-                  )}
-                  <span className="vs">VS</span>
-                  {communityPack === 1 && getTeamLogo(day.opponent) ? (
-                    <img 
-                      className="team-logo" 
-                      src={getTeamLogo(day.opponent)} 
-                      alt={day.opponent} 
-                    />
-                  ) : (
-                    <span>{day.opponent}</span>
-                  )}
+          <WeekCalendarHeader>
+            <h2>CALENDAR</h2>
+            <div className="calendar-date">NOVEMBER 22, 2024</div>
+          </WeekCalendarHeader>
+          <CalendarDays>
+            {weekDays.map((day, index) => (
+              <WeekDay 
+                key={index}
+                active={day.isToday}
+                hasGame={day.hasGame}
+                isHomeGame={day.isHomeGame}
+                onClick={() => setSelectedDay(day)}
+              >
+                <div className="day-name">
+                  {day.dayName === 'FRI' ? 'FRI 22' : 
+                   day.dayName === 'WED' ? 'WED 20' : 
+                   day.dayName === 'THU' ? 'THU 21' : 
+                   day.dayName === 'SAT' ? 'SAT 23' : 
+                   day.dayName === 'SUN' ? 'SUN 24' : 
+                   day.dayName === 'MON' ? 'MON 25' : 
+                   day.dayName === 'TUE' ? 'TUE 26' : 
+                   day.dayName}
                 </div>
-              )}
-            </WeekDay>
-          ))}
+                <div className="day-number">{day.dayNumber}</div>
+                
+                {day.affiliateGame && (
+                  <div className="team-level-indicator">
+                    <img src={getTeamLogo(day.affiliate)} alt={day.affiliate} />
+                  </div>
+                )}
+
+                {/* For the specific day 20, force both game and result to show */}
+                {day.dayNumber === 20 && (
+                  <>
+                    <div className="game-info">
+                      {communityPack === 1 && (
+                        <>
+                          <img className="team-logo" src={getTeamLogo('VAN')} alt="VAN" />
+                          <span className="vs">VS</span>
+                          <img className="team-logo" src={getTeamLogo('BUF')} alt="BUF" />
+                        </>
+                      )}
+                    </div>
+                    <div className="game-result">4-1</div>
+                  </>
+                )}
+
+                {/* For all other days, use the regular logic */}
+                {day.dayNumber !== 20 && day.hasGame && (
+                  <div className="game-info">
+                    {communityPack === 1 && (
+                      <>
+                        {day.isHomeGame ? (
+                          <>
+                            <img className="team-logo" src={getTeamLogo('VAN')} alt="VAN" />
+                            <span className="vs">VS</span>
+                            <img className="team-logo" src={getTeamLogo(day.opponent)} alt={day.opponent} />
+                          </>
+                        ) : (
+                          <>
+                            <img className="team-logo" src={getTeamLogo(day.opponent)} alt={day.opponent} />
+                            <span className="vs">@</span>
+                            <img className="team-logo" src={getTeamLogo('VAN')} alt="VAN" />
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {day.dayNumber !== 20 && day.hasGame && day.gameCompleted && (
+                  <div className="game-result">
+                    {day.gameResult}
+                  </div>
+                )}
+
+                {day.isToday && (
+                  <div className="active-day-indicator"></div>
+                )}
+              </WeekDay>
+            ))}
+          </CalendarDays>
         </WeekViewCalendar>
         
-        <QuickLinks>
-          <QuickLinkButton>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-              <polyline points="22 4 12 14.01 9 11.01"></polyline>
-            </svg>
-            Stats Central
-          </QuickLinkButton>
-          <QuickLinkButton>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-              <line x1="12" y1="17" x2="12.01" y2="17"></line>
-            </svg>
-            Morale
-          </QuickLinkButton>
-          <QuickLinkButton primary>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
-            Coaching Staff
-          </QuickLinkButton>
-          <QuickLinkButton>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            Assign Scout
-          </QuickLinkButton>
-        </QuickLinks>
-        
-        <div style={{ 
-          flex: '1 1 auto',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
+        <div style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column' }}>
           <MatchupCard>
             <MatchupHeader>
               <h3>Next Game</h3>
@@ -1193,14 +1761,14 @@ const SeasonDashboard = () => {
             
             <MatchupTeams>
               <MatchupTeam>
-                {communityPack === 1 && getTeamLogo('VAN') ? (
+                {communityPack === 1 ? (
                   <img 
                     src={getTeamLogo('VAN')} 
                     alt="Vancouver Canucks" 
                   />
                 ) : (
                   <img 
-                    src={season?.selectedTeam?.logoUrl || "https://via.placeholder.com/70"} 
+                    src={season?.selectedTeam?.logoUrl || PlayerSilhouette} 
                     alt="Vancouver Canucks" 
                   />
                 )}
@@ -1215,14 +1783,14 @@ const SeasonDashboard = () => {
               </VersusContainer>
               
               <MatchupTeam>
-                {communityPack === 1 && getTeamLogo('OTT') ? (
+                {communityPack === 1 ? (
                   <img 
                     src={getTeamLogo('OTT')} 
                     alt="Ottawa Senators" 
                   />
                 ) : (
                   <img 
-                    src="https://via.placeholder.com/70" 
+                    src={PlayerSilhouette} 
                     alt="Ottawa Senators" 
                   />
                 )}
@@ -1262,7 +1830,7 @@ const SeasonDashboard = () => {
                 <GoalieCard primary>
                   <img 
                     className="goalie-photo" 
-                    src="https://via.placeholder.com/70" 
+                    src={PlayerSilhouette} 
                     alt="Arturs Silovs" 
                   />
                   <div className="goalie-info">
@@ -1294,7 +1862,7 @@ const SeasonDashboard = () => {
                 <GoalieCard>
                   <img 
                     className="goalie-photo" 
-                    src="https://via.placeholder.com/70" 
+                    src={PlayerSilhouette} 
                     alt="Linus Ullmark" 
                   />
                   <div className="goalie-info">
@@ -1333,7 +1901,7 @@ const SeasonDashboard = () => {
                   <h4>Vancouver Canucks</h4>
                   <div className="leader-row">
                     <img 
-                      src="https://via.placeholder.com/32" 
+                      src={PlayerSilhouette} 
                       alt="J. Debrusk" 
                     />
                     <div className="leader-info">
@@ -1344,7 +1912,7 @@ const SeasonDashboard = () => {
                   </div>
                   <div className="leader-row">
                     <img 
-                      src="https://via.placeholder.com/32" 
+                      src={PlayerSilhouette} 
                       alt="C. Giroux" 
                     />
                     <div className="leader-info">
@@ -1359,7 +1927,7 @@ const SeasonDashboard = () => {
                   <h4>Ottawa Senators</h4>
                   <div className="leader-row">
                     <img 
-                      src="https://via.placeholder.com/32" 
+                      src={PlayerSilhouette} 
                       alt="Player 1" 
                     />
                     <div className="leader-info">
@@ -1370,7 +1938,7 @@ const SeasonDashboard = () => {
                   </div>
                   <div className="leader-row">
                     <img 
-                      src="https://via.placeholder.com/32" 
+                      src={PlayerSilhouette} 
                       alt="Player 2" 
                     />
                     <div className="leader-info">
@@ -1433,6 +2001,15 @@ const SeasonDashboard = () => {
         <Header>
           <Title>Calendar</Title>
           <ActionButtons>
+            <Button onClick={rotateTeamLevel}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+              {teamLevel}
+            </Button>
             <Button onClick={simulateToNextDay}>
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -1505,6 +2082,17 @@ const SeasonDashboard = () => {
       <>
         <Header>
           <Title>Line Combinations</Title>
+          <ActionButtons>
+            <Button onClick={rotateTeamLevel}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+              {teamLevel}
+            </Button>
+          </ActionButtons>
         </Header>
         
         <div style={{ 
@@ -1514,7 +2102,7 @@ const SeasonDashboard = () => {
         }}>
           <LineCombinations 
             isEmbedded={true} 
-            league="nhl" 
+            league={teamLevel.toLowerCase()} 
             teamId={teamId.toString()} 
           />
         </div>
@@ -1551,6 +2139,17 @@ const SeasonDashboard = () => {
       <>
         <Header>
           <Title>Statistics</Title>
+          <ActionButtons>
+            <Button onClick={rotateTeamLevel}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+              {teamLevel}
+            </Button>
+          </ActionButtons>
         </Header>
         
         <div style={{ 
@@ -1559,7 +2158,7 @@ const SeasonDashboard = () => {
           flexDirection: 'column',
           height: 'calc(100vh - 120px)' // Ensure it takes full height minus header
         }}>
-          <Statistics isEmbedded={true} />
+          <Statistics isEmbedded={true} league={teamLevel.toLowerCase()} />
         </div>
       </>
     );
@@ -1571,6 +2170,17 @@ const SeasonDashboard = () => {
       <>
         <Header>
           <Title>Standings</Title>
+          <ActionButtons>
+            <Button onClick={rotateTeamLevel}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+              {teamLevel}
+            </Button>
+          </ActionButtons>
         </Header>
         
         <div style={{ 
@@ -1579,7 +2189,7 @@ const SeasonDashboard = () => {
           flexDirection: 'column',
           height: 'calc(100vh - 120px)' // Ensure it takes full height minus header
         }}>
-          <Standings isEmbedded={true} />
+          <Standings isEmbedded={true} league={teamLevel.toLowerCase()} />
         </div>
       </>
     );
@@ -1591,6 +2201,17 @@ const SeasonDashboard = () => {
       <>
         <Header>
           <Title>Asset Movement</Title>
+          <ActionButtons>
+            <Button onClick={rotateTeamLevel}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+              {teamLevel}
+            </Button>
+          </ActionButtons>
         </Header>
         
         <div style={{ 
@@ -1599,7 +2220,7 @@ const SeasonDashboard = () => {
           flexDirection: 'column',
           height: 'calc(100vh - 120px)' // Ensure it takes full height minus header
         }}>
-          <AssetMovement isEmbedded={true} />
+          <AssetMovement isEmbedded={true} league={teamLevel.toLowerCase()} />
         </div>
       </>
     );
@@ -1620,6 +2241,152 @@ const SeasonDashboard = () => {
           height: 'calc(100vh - 120px)' // Ensure it takes full height minus header
         }}>
           <Awards isEmbedded={true} />
+        </div>
+      </>
+    );
+  };
+  
+  // Inside the SeasonDashboard component, before the renderContent function
+  // Define additional render functions for new tabs
+  const renderCoachingStaffContent = () => {
+    return (
+      <>
+        <Header>
+          <Title>Coaching Staff</Title>
+          <ActionButtons>
+            <Button onClick={rotateTeamLevel}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+              {teamLevel}
+            </Button>
+          </ActionButtons>
+        </Header>
+        
+        <div style={{ 
+          flex: '1 1 auto',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <EmptyState>
+            <h3>Coaching Staff Management</h3>
+            <p>Manage your {teamLevel} coaching staff and their abilities.</p>
+            <Button primary>Coming Soon</Button>
+          </EmptyState>
+        </div>
+      </>
+    );
+  };
+  
+  // Contracts content
+  const renderContractsContent = () => {
+    return (
+      <>
+        <Header>
+          <Title>Contracts</Title>
+          <ActionButtons>
+            <Button onClick={rotateTeamLevel}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+              {teamLevel}
+            </Button>
+          </ActionButtons>
+        </Header>
+        
+        <div style={{ 
+          flex: '1 1 auto',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <EmptyState>
+            <h3>Contracts Management</h3>
+            <p>Review and manage player contracts for {teamLevel} team.</p>
+            <Button primary>Coming Soon</Button>
+          </EmptyState>
+        </div>
+      </>
+    );
+  };
+  
+  const renderFreeAgentsContent = () => {
+    return (
+      <>
+        <Header>
+          <Title>Free Agents</Title>
+          <ActionButtons>
+            <Button onClick={rotateTeamLevel}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+              </svg>
+              {teamLevel}
+            </Button>
+          </ActionButtons>
+        </Header>
+        
+        <div style={{ 
+          flex: '1 1 auto',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <EmptyState>
+            <h3>Free Agents</h3>
+            <p>Browse and sign free agents for {teamLevel} league.</p>
+            <Button primary>Coming Soon</Button>
+          </EmptyState>
+        </div>
+      </>
+    );
+  };
+  
+  const renderNumbersContent = () => {
+    return (
+      <>
+        <Header>
+          <Title>Numbers</Title>
+        </Header>
+        
+        <div style={{ 
+          flex: '1 1 auto',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <EmptyState>
+            <h3>Team Numbers</h3>
+            <p>View and manage your team numbers and analytics.</p>
+            <Button primary>Coming Soon</Button>
+          </EmptyState>
+        </div>
+      </>
+    );
+  };
+  
+  const renderMoraleContent = () => {
+    return (
+      <>
+        <Header>
+          <Title>Team Morale</Title>
+        </Header>
+        
+        <div style={{ 
+          flex: '1 1 auto',
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          <EmptyState>
+            <h3>Team Morale</h3>
+            <p>View and manage player and team morale.</p>
+            <Button primary>Coming Soon</Button>
+          </EmptyState>
         </div>
       </>
     );
@@ -1653,6 +2420,15 @@ const SeasonDashboard = () => {
         <Sidebar>
           <SidebarHeader>
             <h2>Franchise Overview</h2>
+            <div className="franchise-info" style={{ marginBottom: '10px' }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B30E16" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                <path d="M3 5c0 1.66 4 3 9 3s9-1.34 9-3"></path>
+                <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"></path>
+              </svg>
+              CURRENT TEAM: {teamLevel}
+            </div>
             <div className="franchise-info">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B30E16" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -1705,7 +2481,7 @@ const SeasonDashboard = () => {
             )}
             <TeamName>
               <h3>{season?.selectedTeam?.team || 'Team Name'}</h3>
-              <p>{season?.name || '2023-24 Season'}</p>
+              <p>{season?.name || '2023-24 Season'} ({teamLevel})</p>
             </TeamName>
           </SidebarTeamInfo>
           
@@ -1731,23 +2507,35 @@ const SeasonDashboard = () => {
             <NavItem active={activeTab === 'calendar'}>
               <div onClick={() => setActiveTab('calendar')}>Calendar</div>
             </NavItem>
-            <NavItem active={activeTab === 'lines'}>
-              <div onClick={() => setActiveTab('lines')}>Line Combinations</div>
-            </NavItem>
-            <NavItem active={activeTab === 'team'}>
-              <div onClick={() => setActiveTab('team')}>Team Management</div>
-            </NavItem>
             <NavItem active={activeTab === 'stats'}>
               <div onClick={() => setActiveTab('stats')}>Statistics</div>
             </NavItem>
             <NavItem active={activeTab === 'standings'}>
               <div onClick={() => setActiveTab('standings')}>Standings</div>
             </NavItem>
-            <NavItem active={activeTab === 'trades'}>
-              <div onClick={() => setActiveTab('trades')}>Asset Movement</div>
-            </NavItem>
             <NavItem active={activeTab === 'awards'}>
               <div onClick={() => setActiveTab('awards')}>Awards</div>
+            </NavItem>
+            <NavItem active={activeTab === 'lines'}>
+              <div onClick={() => setActiveTab('lines')}>Line Combinations</div>
+            </NavItem>
+            <NavItem active={activeTab === 'coaching'}>
+              <div onClick={() => setActiveTab('coaching')}>Coaching Staff</div>
+            </NavItem>
+            <NavItem active={activeTab === 'trades'}>
+              <div onClick={() => setActiveTab('trades')}>Trade</div>
+            </NavItem>
+            <NavItem active={activeTab === 'contracts'}>
+              <div onClick={() => setActiveTab('contracts')}>Contracts</div>
+            </NavItem>
+            <NavItem active={activeTab === 'freeAgents'}>
+              <div onClick={() => setActiveTab('freeAgents')}>Free Agents</div>
+            </NavItem>
+            <NavItem active={activeTab === 'numbers'}>
+              <div onClick={() => setActiveTab('numbers')}>Numbers</div>
+            </NavItem>
+            <NavItem active={activeTab === 'morale'}>
+              <div onClick={() => setActiveTab('morale')}>Morale</div>
             </NavItem>
           </NavList>
           
@@ -1800,10 +2588,710 @@ const SeasonDashboard = () => {
         <MainContent>
           <ContentArea>
             <CustomScrollArea>
-              {renderContent()}
+              {activeTab === 'home' && (
+                <>
+                  <Header>
+                    <Title>Season Dashboard</Title>
+                    <ActionButtons>
+                      <Button onClick={rotateTeamLevel}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="15 3 21 3 21 9"></polyline>
+                          <polyline points="9 21 3 21 3 15"></polyline>
+                          <line x1="21" y1="3" x2="14" y2="10"></line>
+                          <line x1="3" y1="21" x2="10" y2="14"></line>
+                        </svg>
+                        {teamLevel}
+                      </Button>
+                      <Button onClick={simulateToNextDay}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                          <line x1="16" y1="2" x2="16" y2="6"></line>
+                          <line x1="8" y1="2" x2="8" y2="6"></line>
+                          <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        Advance Day
+                      </Button>
+                      <Button primary onClick={simulateNextGame}>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                        Sim to Next Game
+                      </Button>
+                    </ActionButtons>
+                  </Header>
+                  
+                  <WeekViewCalendar>
+                    <WeekCalendarHeader>
+                      <h2>CALENDAR</h2>
+                      <div className="calendar-date">NOVEMBER 22, 2024</div>
+                    </WeekCalendarHeader>
+                    <CalendarDays>
+                      {weekDays.map((day, index) => (
+                        <WeekDay 
+                          key={index}
+                          active={day.isToday}
+                          hasGame={day.hasGame}
+                          isHomeGame={day.isHomeGame}
+                          onClick={() => setSelectedDay(day)}
+                        >
+                          <div className="day-name">
+                            {day.dayName === 'FRI' ? 'FRI 22' : 
+                             day.dayName === 'WED' ? 'WED 20' : 
+                             day.dayName === 'THU' ? 'THU 21' : 
+                             day.dayName === 'SAT' ? 'SAT 23' : 
+                             day.dayName === 'SUN' ? 'SUN 24' : 
+                             day.dayName === 'MON' ? 'MON 25' : 
+                             day.dayName === 'TUE' ? 'TUE 26' : 
+                             day.dayName}
+                          </div>
+                          <div className="day-number">{day.dayNumber}</div>
+                          
+                          {day.affiliateGame && (
+                            <div className="team-level-indicator">
+                              <img src={getTeamLogo(day.affiliate)} alt={day.affiliate} />
+                            </div>
+                          )}
+
+                          {/* For the specific day 20, force both game and result to show */}
+                          {day.dayNumber === 20 && (
+                            <>
+                              <div className="game-info">
+                                {communityPack === 1 && (
+                                  <>
+                                    <img className="team-logo" src={getTeamLogo('VAN')} alt="VAN" />
+                                    <span className="vs">VS</span>
+                                    <img className="team-logo" src={getTeamLogo('BUF')} alt="BUF" />
+                                  </>
+                                )}
+                              </div>
+                              <div className="game-result">4-1</div>
+                            </>
+                          )}
+
+                          {/* For all other days, use the regular logic */}
+                          {day.dayNumber !== 20 && day.hasGame && (
+                            <div className="game-info">
+                              {communityPack === 1 && (
+                                <>
+                                  {day.isHomeGame ? (
+                                    <>
+                                      <img className="team-logo" src={getTeamLogo('VAN')} alt="VAN" />
+                                      <span className="vs">VS</span>
+                                      <img className="team-logo" src={getTeamLogo(day.opponent)} alt={day.opponent} />
+                                    </>
+                                  ) : (
+                                    <>
+                                      <img className="team-logo" src={getTeamLogo(day.opponent)} alt={day.opponent} />
+                                      <span className="vs">@</span>
+                                      <img className="team-logo" src={getTeamLogo('VAN')} alt="VAN" />
+                                    </>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          )}
+
+                          {day.dayNumber !== 20 && day.hasGame && day.gameCompleted && (
+                            <div className="game-result">
+                              {day.gameResult}
+                            </div>
+                          )}
+
+                          {day.isToday && (
+                            <div className="active-day-indicator"></div>
+                          )}
+                        </WeekDay>
+                      ))}
+                    </CalendarDays>
+                  </WeekViewCalendar>
+                  
+                  <div style={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column' }}>
+                    <MatchupCard>
+                      <MatchupHeader>
+                        <h3>Next Game</h3>
+                        <span>FRI 22</span>
+                      </MatchupHeader>
+                      
+                      <MatchupTeams>
+                        <MatchupTeam>
+                          {communityPack === 1 ? (
+                            <img 
+                              src={getTeamLogo('VAN')} 
+                              alt="Vancouver Canucks" 
+                            />
+                          ) : (
+                            <img 
+                              src={season?.selectedTeam?.logoUrl || PlayerSilhouette} 
+                              alt="Vancouver Canucks" 
+                            />
+                          )}
+                          <h4>VANCOUVER</h4>
+                          <p>CANUCKS</p>
+                          <p>8-7-3</p>
+                        </MatchupTeam>
+                        
+                        <VersusContainer>
+                          <span>VS</span>
+                          <p>Canadian Tire Centre™</p>
+                        </VersusContainer>
+                        
+                        <MatchupTeam>
+                          {communityPack === 1 ? (
+                            <img 
+                              src={getTeamLogo('OTT')} 
+                              alt="Ottawa Senators" 
+                            />
+                          ) : (
+                            <img 
+                              src={PlayerSilhouette} 
+                              alt="Ottawa Senators" 
+                            />
+                          )}
+                          <h4>OTTAWA</h4>
+                          <p>SENATORS</p>
+                          <p>9-9-1</p>
+                        </MatchupTeam>
+                      </MatchupTeams>
+                      
+                      <StatComparison>
+                        <StatRow highlight="home">
+                          <div className="home-stat">3.11</div>
+                          <div className="stat-label">GOALS FOR PER GAME</div>
+                          <div className="away-stat">2.79</div>
+                        </StatRow>
+                        <StatRow highlight="away">
+                          <div className="home-stat">2.84</div>
+                          <div className="stat-label">GOALS AGAINST PER GAME</div>
+                          <div className="away-stat">3.11</div>
+                        </StatRow>
+                        <StatRow highlight="home">
+                          <div className="home-stat">18.2%</div>
+                          <div className="stat-label">POWERPLAY %</div>
+                          <div className="away-stat">21.4%</div>
+                        </StatRow>
+                        <StatRow highlight="home">
+                          <div className="home-stat">84.5%</div>
+                          <div className="stat-label">PENALTY KILL %</div>
+                          <div className="away-stat">85.5%</div>
+                        </StatRow>
+                      </StatComparison>
+                      
+                      <MatchupDetails>
+                        <MatchupSubHeader>PROJECTED GOALIES</MatchupSubHeader>
+                        
+                        <GoalieComparison>
+                          <GoalieCard primary>
+                            <img 
+                              className="goalie-photo" 
+                              src={PlayerSilhouette} 
+                              alt="Arturs Silovs" 
+                            />
+                            <div className="goalie-info">
+                              <h4>
+                                <span className="number">#31</span>
+                                ARTURS SILOVS
+                              </h4>
+                              <div className="goalie-stats">
+                                <div className="stat-row">
+                                  <div className="stat-label">GP</div>
+                                  <div className="stat-value">5</div>
+                                </div>
+                                <div className="stat-row">
+                                  <div className="stat-label">W</div>
+                                  <div className="stat-value">1</div>
+                                </div>
+                                <div className="stat-row">
+                                  <div className="stat-label">SV%</div>
+                                  <div className="stat-value">.921</div>
+                                </div>
+                                <div className="stat-row">
+                                  <div className="stat-label">GAA</div>
+                                  <div className="stat-value">2.77</div>
+                                </div>
+                              </div>
+                            </div>
+                          </GoalieCard>
+                          
+                          <GoalieCard>
+                            <img 
+                              className="goalie-photo" 
+                              src={PlayerSilhouette} 
+                              alt="Linus Ullmark" 
+                            />
+                            <div className="goalie-info">
+                              <h4>
+                                <span className="number">#29</span>
+                                LINUS ULLMARK
+                              </h4>
+                              <div className="goalie-stats">
+                                <div className="stat-row">
+                                  <div className="stat-label">GP</div>
+                                  <div className="stat-value">17</div>
+                                </div>
+                                <div className="stat-row">
+                                  <div className="stat-label">W</div>
+                                  <div className="stat-value">9</div>
+                                </div>
+                                <div className="stat-row">
+                                  <div className="stat-label">SV%</div>
+                                  <div className="stat-value">.913</div>
+                                </div>
+                                <div className="stat-row">
+                                  <div className="stat-label">GAA</div>
+                                  <div className="stat-value">2.97</div>
+                                </div>
+                              </div>
+                            </div>
+                          </GoalieCard>
+                        </GoalieComparison>
+                      </MatchupDetails>
+                      
+                      <MatchupDetails>
+                        <MatchupSubHeader>TEAM LEADERS</MatchupSubHeader>
+                        
+                        <TeamLeaders>
+                          <LeaderCard>
+                            <h4>Vancouver Canucks</h4>
+                            <div className="leader-row">
+                              <img 
+                                src={PlayerSilhouette} 
+                                alt="J. Debrusk" 
+                              />
+                              <div className="leader-info">
+                                <p className="leader-name">J. DEBRUSK</p>
+                                <p className="leader-position">#74 LW</p>
+                              </div>
+                              <div className="leader-stat">18 PTS</div>
+                            </div>
+                            <div className="leader-row">
+                              <img 
+                                src={PlayerSilhouette} 
+                                alt="C. Giroux" 
+                              />
+                              <div className="leader-info">
+                                <p className="leader-name">C. GIROUX</p>
+                                <p className="leader-position">#28 C</p>
+                              </div>
+                              <div className="leader-stat">21 PTS</div>
+                            </div>
+                          </LeaderCard>
+                          
+                          <LeaderCard>
+                            <h4>Ottawa Senators</h4>
+                            <div className="leader-row">
+                              <img 
+                                src={PlayerSilhouette} 
+                                alt="Player 1" 
+                              />
+                              <div className="leader-info">
+                                <p className="leader-name">T. CHABOT</p>
+                                <p className="leader-position">#72 D</p>
+                              </div>
+                              <div className="leader-stat">15 PTS</div>
+                            </div>
+                            <div className="leader-row">
+                              <img 
+                                src={PlayerSilhouette} 
+                                alt="Player 2" 
+                              />
+                              <div className="leader-info">
+                                <p className="leader-name">B. TKACHUK</p>
+                                <p className="leader-position">#7 LW</p>
+                              </div>
+                              <div className="leader-stat">19 PTS</div>
+                            </div>
+                          </LeaderCard>
+                        </TeamLeaders>
+                      </MatchupDetails>
+                    </MatchupCard>
+                    
+                    <PointsLeaderSection>
+                      <div className="points-scrolling">
+                        <span>1) <strong>C. MCDAVID - 29</strong></span>
+                        <span>2) <strong>N. MACKINNON - 29</strong></span>
+                        <span>3) <strong>M. MARNER - 29</strong></span>
+                        <span>4) <strong>N. KUCHEROV - 27</strong></span>
+                        <span>5) <strong>M. RANTANEN - 27</strong></span>
+                        <span>6) <strong>N. EHLERS - 26</strong></span>
+                        <span>7) <strong>A. MATTHEWS - 26</strong></span>
+                        <span>8) <strong>J. ROBERTSON - 25</strong></span>
+                        <span>9) <strong>D. PASTRNAK - 25</strong></span>
+                        <span>10) <strong>E. PETTERSSON - 24</strong></span>
+                      </div>
+                    </PointsLeaderSection>
+                  </div>
+                </>
+              )}
+              
+              {activeTab !== 'home' && renderContent()}
             </CustomScrollArea>
           </ContentArea>
         </MainContent>
+        
+        <MatchupSidebar>
+          <StandingsContainer>
+            <h3>
+              {activeDivision} DIVISION
+              <div className="division-arrows">
+                <button onClick={prevDivision}>◀</button>
+                <button onClick={nextDivision}>▶</button>
+              </div>
+            </h3>
+            <table className="standings-table">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Team</th>
+                  <th>GP</th>
+                  <th>W</th>
+                  <th>L</th>
+                  <th>OTL</th>
+                  <th>PTS</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>1</td>
+                  <td className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('BOS')} alt="BOS" />
+                    ) : (
+                      <span>BOS</span>
+                    )}
+                    Boston
+                  </td>
+                  <td>20</td>
+                  <td>13</td>
+                  <td>4</td>
+                  <td>3</td>
+                  <td className="highlight">29</td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('TOR')} alt="TOR" />
+                    ) : (
+                      <span>TOR</span>
+                    )}
+                    Toronto
+                  </td>
+                  <td>21</td>
+                  <td>12</td>
+                  <td>6</td>
+                  <td>3</td>
+                  <td className="highlight">27</td>
+                </tr>
+                <tr>
+                  <td>3</td>
+                  <td className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('FLA')} alt="FLA" />
+                    ) : (
+                      <span>FLA</span>
+                    )}
+                    Florida
+                  </td>
+                  <td>19</td>
+                  <td>12</td>
+                  <td>6</td>
+                  <td>1</td>
+                  <td className="highlight">25</td>
+                </tr>
+                <tr>
+                  <td>4</td>
+                  <td className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('TBL')} alt="TBL" />
+                    ) : (
+                      <span>TBL</span>
+                    )}
+                    Tampa Bay
+                  </td>
+                  <td>19</td>
+                  <td>12</td>
+                  <td>7</td>
+                  <td>0</td>
+                  <td className="highlight">24</td>
+                </tr>
+                <tr>
+                  <td>5</td>
+                  <td className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('MTL')} alt="MTL" />
+                    ) : (
+                      <span>MTL</span>
+                    )}
+                    Montreal
+                  </td>
+                  <td>20</td>
+                  <td>10</td>
+                  <td>8</td>
+                  <td>2</td>
+                  <td className="highlight">22</td>
+                </tr>
+                <tr>
+                  <td>6</td>
+                  <td className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('BUF')} alt="BUF" />
+                    ) : (
+                      <span>BUF</span>
+                    )}
+                    Buffalo
+                  </td>
+                  <td>19</td>
+                  <td>9</td>
+                  <td>7</td>
+                  <td>3</td>
+                  <td className="highlight">21</td>
+                </tr>
+                <tr>
+                  <td>7</td>
+                  <td className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('OTT')} alt="OTT" />
+                    ) : (
+                      <span>OTT</span>
+                    )}
+                    Ottawa
+                  </td>
+                  <td>19</td>
+                  <td>9</td>
+                  <td>9</td>
+                  <td>1</td>
+                  <td className="highlight">19</td>
+                </tr>
+                <tr className="highlight">
+                  <td>8</td>
+                  <td className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('VAN')} alt="VAN" />
+                    ) : (
+                      <span>VAN</span>
+                    )}
+                    Vancouver
+                  </td>
+                  <td>18</td>
+                  <td>8</td>
+                  <td>7</td>
+                  <td>3</td>
+                  <td className="highlight">19</td>
+                </tr>
+              </tbody>
+            </table>
+          </StandingsContainer>
+          
+          <LeagueStandingsContainer>
+            <h3>LEAGUE STANDINGS</h3>
+            <div className="standings-groups">
+              <div className="standings-group">
+                <h4>Top Teams</h4>
+                <div className="team-row">
+                  <div className="rank">1</div>
+                  <div className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('COL')} alt="COL" />
+                    ) : (
+                      <span>COL</span>
+                    )}
+                    <div className="team-name">Colorado</div>
+                  </div>
+                  <div className="points">35</div>
+                </div>
+                <div className="team-row">
+                  <div className="rank">2</div>
+                  <div className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('VGK')} alt="VGK" />
+                    ) : (
+                      <span>VGK</span>
+                    )}
+                    <div className="team-name">Vegas</div>
+                  </div>
+                  <div className="points">32</div>
+                </div>
+                <div className="team-row">
+                  <div className="rank">3</div>
+                  <div className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('BOS')} alt="BOS" />
+                    ) : (
+                      <span>BOS</span>
+                    )}
+                    <div className="team-name">Boston</div>
+                  </div>
+                  <div className="points">29</div>
+                </div>
+              </div>
+              
+              <div className="standings-group">
+                <h4>Bottom Teams</h4>
+                <div className="team-row">
+                  <div className="rank">30</div>
+                  <div className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('ANA')} alt="ANA" />
+                    ) : (
+                      <span>ANA</span>
+                    )}
+                    <div className="team-name">Anaheim</div>
+                  </div>
+                  <div className="points">11</div>
+                </div>
+                <div className="team-row">
+                  <div className="rank">31</div>
+                  <div className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('SJS')} alt="SJS" />
+                    ) : (
+                      <span>SJS</span>
+                    )}
+                    <div className="team-name">San Jose</div>
+                  </div>
+                  <div className="points">9</div>
+                </div>
+                <div className="team-row">
+                  <div className="rank">32</div>
+                  <div className="team">
+                    {communityPack === 1 ? (
+                      <img src={getTeamLogo('CHI')} alt="CHI" />
+                    ) : (
+                      <span>CHI</span>
+                    )}
+                    <div className="team-name">Chicago</div>
+                  </div>
+                  <div className="points">7</div>
+                </div>
+              </div>
+            </div>
+          </LeagueStandingsContainer>
+          
+          <TradesProposalContainer>
+            <h3>TRADE PROPOSAL</h3>
+            <div className="trade-proposal">
+              <div className="status-indicator">NEW</div>
+              <div className="team-side">
+                {communityPack === 1 ? (
+                  <img src={getTeamLogo('VAN')} alt="VAN" />
+                ) : (
+                  <img src={season?.selectedTeam?.logoUrl || PlayerSilhouette} alt="Your Team" />
+                )}
+                <h4>YOU RECEIVE</h4>
+                <p>D. PASTRNAK</p>
+                <p>2024 RD3</p>
+              </div>
+              
+              <span className="vs">↔</span>
+              
+              <div className="team-side">
+                {communityPack === 1 ? (
+                  <img src={getTeamLogo('BOS')} alt="BOS" />
+                ) : (
+                  <img src={PlayerSilhouette} alt="Trading Team" />
+                )}
+                <h4>BOS RECEIVES</h4>
+                <p>C. GIROUX</p>
+                <p>J. DEBRUSK</p>
+                <p>2024 RD1</p>
+              </div>
+            </div>
+            
+            <div className="action-buttons">
+              <button className="accept">Accept</button>
+              <button className="negotiate">Negotiate</button>
+              <button className="reject">Reject</button>
+            </div>
+            
+            <div className="trade-proposal old">
+              <div className="status-indicator">2 DAYS AGO</div>
+              <div className="team-side">
+                {communityPack === 1 ? (
+                  <img src={getTeamLogo('VAN')} alt="VAN" />
+                ) : (
+                  <img src={season?.selectedTeam?.logoUrl || PlayerSilhouette} alt="Your Team" />
+                )}
+                <h4>YOU RECEIVE</h4>
+                <p>C. MAKAR</p>
+              </div>
+              
+              <span className="vs">↔</span>
+              
+              <div className="team-side">
+                {communityPack === 1 ? (
+                  <img src={getTeamLogo('COL')} alt="COL" />
+                ) : (
+                  <img src={PlayerSilhouette} alt="Trading Team" />
+                )}
+                <h4>COL RECEIVES</h4>
+                <p>Q. HUGHES</p>
+                <p>2025 RD1</p>
+                <p>2026 RD2</p>
+              </div>
+            </div>
+            
+            <div className="trade-proposal old">
+              <div className="status-indicator">5 DAYS AGO</div>
+              <div className="team-side">
+                {communityPack === 1 ? (
+                  <img src={getTeamLogo('VAN')} alt="VAN" />
+                ) : (
+                  <img src={season?.selectedTeam?.logoUrl || PlayerSilhouette} alt="Your Team" />
+                )}
+                <h4>YOU RECEIVE</h4>
+                <p>F. ANDERSEN</p>
+                <p>2024 RD5</p>
+              </div>
+              
+              <span className="vs">↔</span>
+              
+              <div className="team-side">
+                {communityPack === 1 ? (
+                  <img src={getTeamLogo('CAR')} alt="CAR" />
+                ) : (
+                  <img src={PlayerSilhouette} alt="Trading Team" />
+                )}
+                <h4>CAR RECEIVES</h4>
+                <p>A. SILOVS</p>
+                <p>2024 RD3</p>
+              </div>
+            </div>
+          </TradesProposalContainer>
+          
+          <SeasonTasksContainer>
+            <h3>SEASON TASKS</h3>
+            <ul className="task-list">
+              <li>
+                <div className="task-status completed"></div>
+                <div className="task-details">
+                  <p>Set your lines for the season</p>
+                  <span>Reward: $1.5M salary cap</span>
+                </div>
+              </li>
+              <li>
+                <div className="task-status in-progress"></div>
+                <div className="task-details">
+                  <p>Win 10 games in a row</p>
+                  <span>Progress: 8/10</span>
+                </div>
+              </li>
+              <li>
+                <div className="task-status not-started"></div>
+                <div className="task-details">
+                  <p>Trade for a goalie with 90+ rating</p>
+                  <span>Reward: Extra draft pick</span>
+                </div>
+              </li>
+              <li>
+                <div className="task-status not-started"></div>
+                <div className="task-details">
+                  <p>Make the playoffs</p>
+                  <span>Reward: Contract extensions</span>
+                </div>
+              </li>
+            </ul>
+          </SeasonTasksContainer>
+        </MatchupSidebar>
       </PageContainer>
     </SeasonLayoutContainer>
   );

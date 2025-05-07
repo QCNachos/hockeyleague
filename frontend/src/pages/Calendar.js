@@ -16,9 +16,9 @@ const supabase = createClient(
 const CalendarContainer = styled.div`
   display: flex;
   flex-direction: column;
-  max-width: 1200px;
+  max-width: ${props => props.isEmbedded ? '100%' : '1200px'};
   margin: 0 auto;
-  padding: 20px;
+  padding: ${props => props.isEmbedded ? '0' : '20px'};
 `;
 
 const CalendarHeader = styled.div`
@@ -350,7 +350,7 @@ const ImportanceBadge = styled.span`
   color: white;
 `;
 
-const Calendar = () => {
+const Calendar = ({ isEmbedded = false }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState([]);
   const [filteredEvents, setFilteredEvents] = useState([]);
@@ -1117,7 +1117,9 @@ CREATE POLICY "Allow public read access" ON "events"
   }
   
   return (
-    <CalendarContainer>
+    <CalendarContainer isEmbedded={isEmbedded}>
+      {!isEmbedded && <h1 style={{ marginBottom: '20px', color: '#C4CED4' }}>Calendar</h1>}
+      
       {/* Add the filter switch above the calendar */}
       <FilterContainer>
         <FilterLabel>Filter:</FilterLabel>

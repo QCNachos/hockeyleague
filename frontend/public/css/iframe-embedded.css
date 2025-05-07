@@ -1,0 +1,166 @@
+/* CSS specifically for iframes embedded in the SeasonDashboard */
+
+/* 
+ * This CSS is loaded directly by the SeasonDashboard component
+ * and contains more aggressive selectors to ensure navigation elements
+ * are hidden in embedded views
+ */
+
+/* Hide all navigation and header elements */
+header, 
+.header, 
+nav, 
+aside, 
+.sidebar, 
+.navigation, 
+.menu, 
+.Sidebar,
+[id*="header"],
+[class*="header"],
+[class*="Header"],
+[id*="sidebar"],
+[class*="sidebar"],
+[class*="Sidebar"],
+[id*="navigation"],
+[class*="navigation"],
+[class*="Navigation"],
+[id*="menu"],
+[class*="menu"],
+[class*="Menu"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Hide specific HOCKEYLEAGUE elements */
+.hockey-league-header,
+.hockey-league-navigation,
+.hockeyleague-header,
+.hockeyleague-navigation,
+.general-menu,
+.game-modes-menu,
+.management-menu,
+.analytics-menu,
+[class*="hockey-league"],
+[id*="hockey-league"],
+[class*="hockeyleague"],
+[id*="hockeyleague"] {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Make main content take full width */
+body > div, 
+#root > div, 
+.content, 
+.Content, 
+.main-content, 
+.main, 
+main,
+.content-wrapper, 
+[class*="content"],
+[class*="Content"] { 
+  width: 100% !important; 
+  margin: 0 !important; 
+  padding: 0 !important;
+  display: block !important;
+  max-width: 100% !important;
+}
+
+/* Reset body styling */
+body {
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+}
+
+/* Ensure embedded class is applied directly to the body */
+body.embedded {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Target containers that might contain the sidebar and main content in a flex layout */
+#root > div {
+  display: block !important;
+}
+
+/* Adjust Season sidebar width to be narrower */
+.sidebar, 
+div[class*="Sidebar"], 
+aside, 
+nav.hockey-league-menu,
+[class*="sidebar"],
+div[class*="sideNav"],
+div[class*="side-nav"],
+div[class*="SideNav"] {
+  max-width: 15% !important;
+  width: 15% !important;
+  flex-basis: 15% !important;
+}
+
+/* Adjust the main content to take remaining width */
+.main-content, 
+div[class*="MainContent"],
+div[class*="main-content"],
+main,
+.content-wrapper,
+div[class*="content-wrapper"],
+div[class*="ContentWrapper"] {
+  width: 85% !important;
+  margin-left: 15% !important;
+  flex-basis: 85% !important;
+}
+
+/* Adjust any grid or flex layouts */
+#root > div {
+  display: flex !important;
+  flex-direction: row !important;
+}
+
+/* Hide elements with menu text */
+div:has(> span:contains("HOCKEYLEAGUE")),
+div:has(> a:contains("HOCKEYLEAGUE")),
+div:has(> div:contains("HOCKEYLEAGUE")),
+div:has(> span:contains("GENERAL")),
+div:has(> a:contains("GENERAL")),
+div:has(> div:contains("GENERAL")),
+div:has(> span:contains("GAME MODES")),
+div:has(> a:contains("GAME MODES")),
+div:has(> div:contains("GAME MODES")),
+div:has(> span:contains("MANAGEMENT")),
+div:has(> a:contains("MANAGEMENT")),
+div:has(> div:contains("MANAGEMENT")),
+div:has(> span:contains("ANALYTICS")),
+div:has(> a:contains("ANALYTICS")),
+div:has(> div:contains("ANALYTICS")) {
+  display: none !important;
+}
+
+/* Target the Login button */
+.login-button {
+  display: none !important;
+}
+
+/* Make sure the iframe document takes full width */
+body, html {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+/* Improve visibility of content */
+.content, 
+[class*="Content"],
+[class*="content-area"] {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+} 

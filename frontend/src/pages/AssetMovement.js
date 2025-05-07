@@ -21,7 +21,10 @@ const supabase = createClient(
 );
 
 const PageContainer = styled.div`
-  padding: 20px;
+  padding: ${props => props.isEmbedded ? '0' : '20px'};
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 `;
 
 const Title = styled.h1`
@@ -521,7 +524,7 @@ const CollapseIcon = styled.div`
   margin-left: 10px;
 `;
 
-const AssetMovement = () => {
+const AssetMovement = ({ isEmbedded = false }) => {
   // Helper for safe ID comparison
   const isSameId = (id1, id2) => {
     if (id1 === undefined || id1 === null || id2 === undefined || id2 === null) return false;
@@ -1681,7 +1684,7 @@ const AssetMovement = () => {
   );
   
   return (
-    <PageContainer>
+    <PageContainer isEmbedded={isEmbedded}>
       <Title>Asset Movement</Title>
       <Description>
         Manage player trades, draft pick exchanges, and other asset movements between teams.

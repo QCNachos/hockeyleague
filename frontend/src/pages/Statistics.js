@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import axios from 'axios';
 import StatsLeaderboard from '../components/stats/StatsLeaderboard';
 
-const Statistics = () => {
+const Statistics = ({ isEmbedded = false }) => {
   const [timeFrame, setTimeFrame] = useState('current'); // 'current' or 'allTime'
   const [league, setLeague] = useState('NHL'); // Default to NHL
   const [players, setPlayers] = useState([]);
@@ -108,7 +108,7 @@ const Statistics = () => {
   ];
 
   return (
-    <StatsContainer>
+    <StatsContainer isEmbedded={isEmbedded}>
       <StatsHeader>
         <FilterSection>
           <SelectWrapper>
@@ -221,9 +221,13 @@ const Statistics = () => {
 
 // Styled Components
 const StatsContainer = styled.div`
-  padding: 20px;
-  max-width: 1200px;
+  max-width: ${props => props.isEmbedded ? '100%' : '1200px'};
   margin: 0 auto;
+  padding: ${props => props.isEmbedded ? '0' : '20px'};
+  color: #C4CED4;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 `;
 
 const StatsHeader = styled.div`

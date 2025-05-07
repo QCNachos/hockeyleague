@@ -7,8 +7,11 @@ import { useNavigate } from 'react-router-dom';
 import { selectCommunityPack } from '../store/slices/settingsSlice';
 
 const PageContainer = styled.div`
-  padding: 20px;
+  padding: ${props => props.isEmbedded ? '0' : '20px'};
   position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 `;
 
 const PageTitle = styled.h1`
@@ -470,7 +473,7 @@ const getAwardClassName = (awardName) => {
     .replace(/[^\w-]/g, ''); // remove non-word characters except hyphens
 };
 
-const Awards = () => {
+const Awards = ({ isEmbedded = false }) => {
   const [awards, setAwards] = useState([]);
   const [filteredAwards, setFilteredAwards] = useState([]);
   const [recentWinners, setRecentWinners] = useState({});
@@ -606,7 +609,7 @@ const Awards = () => {
   }
 
   return (
-    <PageContainer>
+    <PageContainer isEmbedded={isEmbedded}>
       <PageTitle>
         <FaTrophy /> Hockey Awards
       </PageTitle>

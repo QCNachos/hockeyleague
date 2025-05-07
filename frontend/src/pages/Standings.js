@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
 
-const Standings = () => {
+const Standings = ({ isEmbedded = false }) => {
   const [standingsType, setStandingsType] = useState('division'); // 'division', 'conference', 'wildcard', 'league'
   const [season, setSeason] = useState('2023-24');
   const [loading, setLoading] = useState(true);
@@ -57,7 +57,7 @@ const Standings = () => {
   };
 
   return (
-    <StandingsContainer>
+    <StandingsContainer isEmbedded={isEmbedded}>
       <StandingsHeader>
         <Title>Standings</Title>
         <FilterSection>
@@ -301,10 +301,13 @@ const Standings = () => {
 
 // Styled Components
 const StandingsContainer = styled.div`
-  padding: 20px;
-  max-width: 1200px;
+  max-width: ${props => props.isEmbedded ? '100%' : '1200px'};
   margin: 0 auto;
-  overflow-x: auto;
+  padding: ${props => props.isEmbedded ? '0' : '20px'};
+  color: #C4CED4;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 `;
 
 const StandingsHeader = styled.div`

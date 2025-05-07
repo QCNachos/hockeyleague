@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { Link } from 'react-router-dom';
+import * as seasonService from '../../services/seasonService';
 
 const Container = styled.div`
   padding: 20px;
@@ -106,6 +107,26 @@ const TabContent = styled.div`
 
 const SeasonMode = () => {
   const [activeTab, setActiveTab] = useState('start');
+  const [savedSeasons, setSavedSeasons] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Load saved seasons when the component mounts
+  useEffect(() => {
+    const loadSeasons = async () => {
+      try {
+        const { success, data } = await seasonService.getAllSeasons();
+        if (success) {
+          setSavedSeasons(data);
+        }
+      } catch (error) {
+        console.error('Error loading seasons:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadSeasons();
+  }, []);
   
   return (
     <Container>
@@ -174,10 +195,28 @@ const SeasonMode = () => {
             <h2 style={{ color: '#C4CED4', marginBottom: '20px' }}>Continue Season</h2>
             <p style={{ color: '#aaa', marginBottom: '30px' }}>Resume a saved season in progress.</p>
             
-            <div style={{ color: '#aaa', textAlign: 'center', marginTop: '50px' }}>
-              <p>No saved seasons found.</p>
-              <p>Start a new season to begin your journey.</p>
-            </div>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '20px' }}>Loading saved seasons...</div>
+            ) : savedSeasons.length === 0 ? (
+              <div style={{ color: '#aaa', textAlign: 'center', marginTop: '50px' }}>
+                <p>No saved seasons found.</p>
+                <p>Start a new season to begin your journey.</p>
+              </div>
+            ) : (
+              <OptionsGrid>
+                {savedSeasons.map(season => (
+                  <OptionCard key={season.id}>
+                    <h3>{season.name}</h3>
+                    <p>
+                      {season.type === 'standard' ? 'Standard Season' : 'Custom Season'}<br />
+                      Team: {season.selectedTeam?.name || 'Unknown'}<br />
+                      Created: {new Date(season.createdAt).toLocaleDateString()}
+                    </p>
+                    <ActionButton to={`/season/dashboard/${season.id}`}>Continue Season</ActionButton>
+                  </OptionCard>
+                ))}
+              </OptionsGrid>
+            )}
           </>
         )}
         

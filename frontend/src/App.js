@@ -40,6 +40,8 @@ import FranchiseSettings from './pages/gameModes/FranchiseSettings';
 import FranchiseTeamSelection from './pages/gameModes/FranchiseTeamSelection';
 import FranchiseExpansionSetup from './pages/gameModes/FranchiseExpansionSetup';
 import FranchiseSummary from './pages/gameModes/FranchiseSummary';
+import SeasonSetup from './pages/gameModes/SeasonSetup';
+import SeasonDashboard from './pages/gameModes/SeasonDashboard';
 
 // Auth guard component
 const PrivateRoute = ({ children }) => {
@@ -55,6 +57,9 @@ function App() {
           {/* Auth routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          
+          {/* Season Dashboard - Standalone layout */}
+          <Route path="season/dashboard/:seasonId" element={<SeasonDashboard />} />
           
           {/* Main app routes with layout */}
           <Route path="/" element={<MainLayout />}>
@@ -74,6 +79,7 @@ function App() {
             <Route path="game/simulation" element={<GameSimulationPage />} />
             <Route path="game/simulation/:homeTeamId/:awayTeamId/:mode" element={<GameSimulationPage />} />
             <Route path="season" element={<SeasonMode />} />
+            <Route path="season/create/:seasonType" element={<SeasonSetup />} />
             <Route path="tournaments" element={<Tournaments />} />
             <Route path="tournaments/stanley-cup/setup" element={<StanleyCupSetup />} />
             <Route path="tournaments/stanley-cup/play" element={<div>Stanley Cup Playoffs (Coming Soon)</div>} />

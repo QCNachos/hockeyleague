@@ -434,6 +434,32 @@ class TeamService:
         """
         divisions = Division.query.all()
         return [division.to_dict() for division in divisions]
+        
+    @staticmethod
+    def get_detailed_team_info() -> List[Dict[str, Any]]:
+        """
+        Get detailed team information including identity fields from Supabase.
+        
+        Returns:
+            List of teams with detailed information
+        """
+        try:
+            supabase = get_supabase_client()
+            if supabase:
+                # Fetch teams with all columns including identity fields
+                response = supabase.table("Team").select("*, identity_main, identity_secondary, team_status, owner_culture, favorite_player_nationality_1, favorite_player_nationality_2, organisation").execute()
+                
+                if response.data:
+                    logger.info(f"Fetched {len(response.data)} teams with detailed info from Supabase")
+                    return response.data
+                else:
+                    logger.warning("No detailed team info found in Supabase")
+            else:
+                logger.warning("Could not connect to Supabase")
+        except Exception as e:
+            logger.error(f"Error fetching detailed team info from Supabase: {e}")
+        
+        return []
 
 
 # API routes
@@ -884,4 +910,20 @@ def get_general_managers():
             return jsonify([]), 200
     except Exception as e:
         logger.error(f"Error fetching general managers: {e}")
+        return jsonify({"error": str(e)}), 500 
+
+@team_bp.route('/detailed', methods=['GET'])
+def get_detailed_teams():
+    """Get all teams with detailed information including identity fields
+    
+    Returns:
+        JSON response with detailed team data
+    """
+    try:
+        # Get teams with detailed information
+        teams = TeamService.get_detailed_team_info()
+        return jsonify(teams), 200
+    except Exception as e:
+        import logging
+        logging.error(f"Error in get_detailed_teams: {e}")
         return jsonify({"error": str(e)}), 500 

@@ -381,6 +381,32 @@ const TeamButton = styled.button`
   }
 `;
 
+// Add styled components for More Info section
+const MoreInfoButton = styled.button`
+  padding: 8px 0;
+  margin: 8px 0;
+  background-color: transparent;
+  color: #C4CED4;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  width: 100%;
+  text-align: center;
+  font-weight: bold;
+  
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+`;
+
+const ExpandedInfo = styled.div`
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  width: 100%;
+`;
+
 // Improved sorting function that handles all edge cases
 const sortLeaguesByStrength = (leagues) => {
   return [...leagues].sort((a, b) => {
@@ -428,6 +454,26 @@ const sortLeaguesByStrength = (leagues) => {
   });
 };
 
+// Determine text color based on background for contrast
+const getTextColor = (bgColor) => {
+  // Default to a dark color if bgColor is undefined or null
+  if (!bgColor) {
+    return '#FFFFFF'; // Default to white text
+  }
+  
+  // Convert hex to RGB
+  const hex = bgColor.replace('#', '');
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  
+  // Calculate brightness
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  
+  // Return black or white text based on brightness
+  return brightness > 128 ? '#000000' : '#FFFFFF';
+};
+
 const TeamManager = () => {
   const communityPack = useSelector(selectCommunityPack);
   const [loading, setLoading] = useState(true);
@@ -436,6 +482,9 @@ const TeamManager = () => {
   const [divisions, setDivisions] = useState([]); // Used for the new team form
   // eslint-disable-next-line no-unused-vars
   const [leaguesData, setLeaguesData] = useState([]); // Store leagues data for reference
+  
+  // Track expanded team cards for "More Info" sections
+  const [expandedTeams, setExpandedTeams] = useState({});
   
   // Filter states
   const [selectedLeagueType, setSelectedLeagueType] = useState('Pro'); // Set Pro as default
@@ -515,7 +564,8 @@ const TeamManager = () => {
         // Set the available leagues to Pro leagues only initially
         setAvailableLeagues(sortedProLeagues);
         
-        // Then fetch teams
+        // Then fetch teams from backend with enhanced data
+        console.log('Fetching teams with enhanced data from backend...');
         const teamsData = await fetchTeamsFromBackend(leagueToTypeMap, divisionToConferenceMap);
         
         if (teamsData.length === 0) {
@@ -524,16 +574,57 @@ const TeamManager = () => {
         } else {
           console.log(`Successfully loaded ${teamsData.length} teams from backend.`);
           
-          // Fetch player, coach, and GM data for teams
+          // Try to retrieve additional team information from Supabase
           try {
-            // Enhance teams with best player data for NHL teams
+            // Use the supabase client directly through our API
+            const enhancedTeamData = await axios.get('/api/teams/detailed');
+            if (enhancedTeamData.data && enhancedTeamData.data.length > 0) {
+              console.log('Retrieved additional team information from Supabase');
+              
+              // Create a map of team IDs to enhanced data
+              const teamEnhancementsMap = {};
+              enhancedTeamData.data.forEach(enhancedTeam => {
+                if (enhancedTeam.id) {
+                  teamEnhancementsMap[enhancedTeam.id] = enhancedTeam;
+                } else if (enhancedTeam.abbreviation) {
+                  // If no ID, try matching by abbreviation
+                  const matchingTeam = teamsData.find(t => 
+                    t.abbreviation && t.abbreviation.toUpperCase() === enhancedTeam.abbreviation.toUpperCase()
+                  );
+                  if (matchingTeam) {
+                    teamEnhancementsMap[matchingTeam.id] = enhancedTeam;
+                  }
+                }
+              });
+              
+              // Merge the enhanced data with our existing teams
+              const mergedTeamsData = teamsData.map(team => {
+                const enhancedData = teamEnhancementsMap[team.id] || {};
+                return {
+                  ...team,
+                  identity_main: enhancedData.identity_main || team.identity_main,
+                  identity_secondary: enhancedData.identity_secondary || team.identity_secondary,
+                  team_status: enhancedData.team_status || team.team_status,
+                  owner_culture: enhancedData.owner_culture || team.owner_culture,
+                  favorite_player_nationality_1: enhancedData.favorite_player_nationality_1 || team.favorite_player_nationality_1,
+                  favorite_player_nationality_2: enhancedData.favorite_player_nationality_2 || team.favorite_player_nationality_2,
+                  organisation: enhancedData.organisation || team.organisation
+                };
+              });
+              
+              // Fetch player, coach, and GM data for teams
+              const finalEnhancedTeams = await fetchTeamEnhancements(mergedTeamsData);
+              setTeams(finalEnhancedTeams);
+            } else {
+              // If no enhanced data, just use what we have
+              const enhancedTeams = await fetchTeamEnhancements(teamsData);
+              setTeams(enhancedTeams);
+            }
+          } catch (enhancementErr) {
+            console.error('Error retrieving additional team information:', enhancementErr);
+            // Still continue with the existing team data
             const enhancedTeams = await fetchTeamEnhancements(teamsData);
             setTeams(enhancedTeams);
-            console.log('Teams enhanced with player, coach, and GM data:', enhancedTeams.slice(0, 3));
-          } catch (err) {
-            console.error('Error enhancing teams with player data:', err);
-            // Still set teams even if enhancement fails
-            setTeams(teamsData);
           }
           
           // Extract Pro teams for default view
@@ -548,7 +639,7 @@ const TeamManager = () => {
           const nhlConferences = [...new Set(
             nhlTeams
               .map(team => team.conference)
-              .filter(Boolean)
+            .filter(Boolean)
           )].sort();
           
           // Set default conferences
@@ -572,7 +663,7 @@ const TeamManager = () => {
           const nhlCountries = [...new Set(
             nhlTeams
               .map(team => team.country)
-              .filter(Boolean)
+            .filter(Boolean)
           )].sort();
           
           if (nhlCountries.length > 0) {
@@ -606,12 +697,40 @@ const TeamManager = () => {
       // Clone the teams array so we don't modify the original
       const enhancedTeams = [...teams];
       
-      // First, get best players for all teams
+      // First, get best players for all teams - try multiple endpoints to handle API variations
       try {
         console.log('Fetching best players for all teams...');
-        const { data: playersData } = await axios.get('/api/players/best-by-team');
+        let playersData = [];
+        let success = false;
         
-        if (playersData && Array.isArray(playersData)) {
+        // Try the team service endpoint first
+        try {
+          const response = await axios.get('/api/teams/players/best-by-team');
+          if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+            playersData = response.data;
+            success = true;
+            console.log('Successfully fetched best players from /api/teams/players/best-by-team');
+          }
+        } catch (e) {
+          console.warn('Could not fetch best players from team service endpoint:', e.message);
+        }
+        
+        // If first endpoint fails, try the player service endpoint
+        if (!success) {
+          try {
+            const response = await axios.get('/api/players/best-by-team');
+            if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+              playersData = response.data;
+              success = true;
+              console.log('Successfully fetched best players from /api/players/best-by-team');
+            }
+          } catch (e) {
+            console.warn('Could not fetch best players from player service endpoint:', e.message);
+          }
+        }
+        
+        // If either endpoint succeeded, process the data
+        if (success && playersData.length > 0) {
           console.log(`Received ${playersData.length} best players for teams`);
           console.log('Sample player data:', playersData.slice(0, 1));
           
@@ -651,7 +770,6 @@ const TeamManager = () => {
           });
         } else {
           console.warn('No player data returned from API or data is not an array');
-          console.log('Raw player data:', playersData);
         }
       } catch (error) {
         console.error('Error fetching best players:', error);
@@ -660,9 +778,37 @@ const TeamManager = () => {
       // Next, get coaches for all teams
       try {
         console.log('Fetching coaches for all teams...');
-        const { data: coachesData } = await axios.get('/api/staff/coaches');
+        let coachesData = [];
+        let success = false;
         
-        if (coachesData && Array.isArray(coachesData)) {
+        // Try the team service endpoint first
+        try {
+          const response = await axios.get('/api/teams/staff/coaches');
+          if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+            coachesData = response.data;
+            success = true;
+            console.log('Successfully fetched coaches from /api/teams/staff/coaches');
+          }
+        } catch (e) {
+          console.warn('Could not fetch coaches from team service endpoint:', e.message);
+        }
+        
+        // If first endpoint fails, try the staff service endpoint
+        if (!success) {
+          try {
+            const response = await axios.get('/api/staff/coaches');
+            if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+              coachesData = response.data;
+              success = true;
+              console.log('Successfully fetched coaches from /api/staff/coaches');
+            }
+          } catch (e) {
+            console.warn('Could not fetch coaches from staff service endpoint:', e.message);
+          }
+        }
+        
+        // If either endpoint succeeded, process the data
+        if (success && coachesData.length > 0) {
           console.log(`Received ${coachesData.length} coaches`);
           console.log('Sample coach data:', coachesData.slice(0, 1));
           
@@ -692,7 +838,6 @@ const TeamManager = () => {
           });
         } else {
           console.warn('No coach data returned from API or data is not an array');
-          console.log('Raw coach data:', coachesData);
         }
       } catch (error) {
         console.error('Error fetching coaches:', error);
@@ -701,9 +846,37 @@ const TeamManager = () => {
       // Finally, get GMs for all teams
       try {
         console.log('Fetching GMs for all teams...');
-        const { data: gmsData } = await axios.get('/api/staff/gms');
+        let gmsData = [];
+        let success = false;
         
-        if (gmsData && Array.isArray(gmsData)) {
+        // Try the team service endpoint first
+        try {
+          const response = await axios.get('/api/teams/staff/gms');
+          if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+            gmsData = response.data;
+            success = true;
+            console.log('Successfully fetched GMs from /api/teams/staff/gms');
+          }
+        } catch (e) {
+          console.warn('Could not fetch GMs from team service endpoint:', e.message);
+        }
+        
+        // If first endpoint fails, try the staff service endpoint
+        if (!success) {
+          try {
+            const response = await axios.get('/api/staff/gms');
+            if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+              gmsData = response.data;
+              success = true;
+              console.log('Successfully fetched GMs from /api/staff/gms');
+            }
+          } catch (e) {
+            console.warn('Could not fetch GMs from staff service endpoint:', e.message);
+          }
+        }
+        
+        // If either endpoint succeeded, process the data
+        if (success && gmsData.length > 0) {
           console.log(`Received ${gmsData.length} GMs`);
           console.log('Sample GM data:', gmsData.slice(0, 1));
           
@@ -733,11 +906,22 @@ const TeamManager = () => {
           });
         } else {
           console.warn('No GM data returned from API or data is not an array');
-          console.log('Raw GM data:', gmsData);
         }
       } catch (error) {
         console.error('Error fetching GMs:', error);
       }
+      
+      // Preserve any additional fields we've added (identity_main, etc.)
+      enhancedTeams.forEach(team => {
+        // Make sure we don't lose any identity fields that were already present
+        if (team.identity_main === undefined) team.identity_main = null;
+        if (team.identity_secondary === undefined) team.identity_secondary = null;
+        if (team.team_status === undefined) team.team_status = null;
+        if (team.owner_culture === undefined) team.owner_culture = null;
+        if (team.favorite_player_nationality_1 === undefined) team.favorite_player_nationality_1 = null;
+        if (team.favorite_player_nationality_2 === undefined) team.favorite_player_nationality_2 = null;
+        if (team.organisation === undefined) team.organisation = null;
+      });
       
       // Return the enhanced teams
       const enhancedCount = enhancedTeams.reduce((count, team) => {
@@ -759,6 +943,79 @@ const TeamManager = () => {
     }
   };
   
+  // Add a useEffect to monitor filter state changes
+  useEffect(() => {
+    // Remove verbose debugging console logs
+    /*
+    console.log("Filter state changed:");
+    console.log("- selectedLeagueType:", selectedLeagueType);
+    console.log("- selectedLeague:", selectedLeague);
+    console.log("- selectedConference:", selectedConference);
+    console.log("- selectedDivision:", selectedDivision);
+    console.log("- selectedCountry:", selectedCountry);
+    
+    console.log("Available filter options:");
+    console.log("- availableLeagueTypes:", availableLeagueTypes.length);
+    console.log("- availableLeagues:", availableLeagues.length);
+    console.log("- availableConferences:", availableConferences.length);
+    console.log("- availableDivisions:", availableDivisions.length);
+    console.log("- availableCountries:", availableCountries.length);
+    */
+  }, [
+    selectedLeagueType, selectedLeague, selectedConference, selectedDivision, selectedCountry,
+    availableLeagueTypes, availableLeagues, availableConferences, availableDivisions, availableCountries
+  ]);
+  
+  // Helper function to get division name from ID - used for NHL divisions
+  const getDivisionNameById = (divisionId, leagueAbbr) => {
+    if (leagueAbbr === 'NHL') {
+      switch (Number(divisionId)) {
+        case 1: return 'Atlantic';
+        case 2: return 'Metropolitan';
+        case 3: return 'Central';
+        case 4: return 'Pacific';
+        default: return `Division ${divisionId}`;
+      }
+    }
+    return `Division ${divisionId}`;
+  };
+  
+  // Add a function to normalize abbreviations consistently
+  const normalizeAbbreviation = (abbr) => {
+    if (!abbr) return '';
+    return abbr.trim().toUpperCase();
+  };
+  
+  // Try to get team logo
+  const getTeamLogo = (teamAbbr) => {
+    if (!teamAbbr) {
+      return null;
+    }
+    
+    try {
+      // Normalize the team abbreviation to uppercase
+      const normalizedAbbr = normalizeAbbreviation(teamAbbr);
+      
+      // First try the static mapping for NHL teams (no spaces)
+      if (teamLogos[normalizedAbbr]) {
+        return teamLogos[normalizedAbbr];
+      }
+      
+      // If not in static mapping, try dynamic import for teams with spaces
+      try {
+        // This approach handles filenames with spaces
+        return require(`../assets/Logo_${normalizedAbbr}.png`);
+      } catch (error) {
+        // If dynamic import fails, return null
+        return null;
+      }
+    } catch (error) {
+      console.error(`Error getting logo: ${error.message}`);
+      return null;
+    }
+  };
+  
+  // Define functions needed by the component
   // Fetch leagues from backend API
   const fetchLeaguesFromBackend = async () => {
     try {
@@ -851,16 +1108,7 @@ const TeamManager = () => {
         // Store all leagues for reference
         setLeaguesData(sortedLeagues);
         
-        // Immediately filter to just Pro leagues for initial display
-        const proLeagues = sortedLeagues.filter(league => league.league_level === 'Pro');
-        
-        // Make sure we have sorted Pro leagues 
-        const sortedProLeagues = sortLeaguesByStrength(proLeagues);
-        
-        // Set the available leagues to Pro leagues only initially
-        setAvailableLeagues(sortedProLeagues);
-        
-        return { 
+        return {
           leagues: sortedLeagues,
           leagueToTypeMap: leagueToTypeMapping,
           abbreviationToLeagueMap: abbreviationToLeagueMapping,
@@ -931,15 +1179,20 @@ const TeamManager = () => {
             ...team,
             league_type: team.league_type || leagueType || 'Unknown',
             conference: conference || team.conference || 'Unknown',
+            // Include additional fields for team identities and attributes
+            identity_main: team.identity_main || null,
+            identity_secondary: team.identity_secondary || null,
+            team_status: team.team_status || null,
+            owner_culture: team.owner_culture || null,
+            favorite_player_nationality_1: team.favorite_player_nationality_1 || null,
+            favorite_player_nationality_2: team.favorite_player_nationality_2 || null,
+            organisation: team.organisation || null
           };
         });
         
         console.log(`Processed ${processedTeams.length} teams`);
         
-        // Enhance teams with player, coach, and GM data if NHL teams
-        const enhancedTeams = await fetchTeamEnhancements(processedTeams);
-        
-        return enhancedTeams;
+        return processedTeams;
       } else {
         console.warn('No teams returned from backend');
         return [];
@@ -948,6 +1201,140 @@ const TeamManager = () => {
       console.error('Error fetching teams from backend:', error);
       return [];
     }
+  };
+  
+  // Get filtered teams based on selected filters
+  const getFilteredTeams = useCallback(() => {
+    if (!teams || !Array.isArray(teams)) {
+      console.warn("Teams array is not available yet");
+      return [];
+    }
+    
+    const filteredTeams = teams.filter(team => {
+      // Filter by league type if selected
+      if (selectedLeagueType && selectedLeagueType !== '') {
+        if (!team.league_type) {
+          return false;
+        }
+        
+        // Compare values for debugging
+        const normalizedTeamType = String(team.league_type).trim().toLowerCase();
+        const normalizedSelectedType = String(selectedLeagueType).trim().toLowerCase();
+        
+        if (normalizedTeamType !== normalizedSelectedType) {
+          return false;
+        }
+      }
+      
+      // Filter by league if selected
+      if (selectedLeague && selectedLeague !== '') {
+        // Compare values for debugging
+        if (team.league !== selectedLeague) {
+          return false;
+        }
+      }
+      
+      // Filter by conference if selected
+      if (selectedConference && selectedConference !== '') {
+        // Check if the team has a conference property
+        if (!team.conference) {
+          return false;
+        }
+        
+        // Normalize both values for comparison
+        const normalizedTeamConf = String(team.conference).trim().toLowerCase();
+        const normalizedSelectedConf = String(selectedConference).trim().toLowerCase();
+        
+        if (normalizedTeamConf !== normalizedSelectedConf) {
+          return false;
+        }
+      }
+      
+      // Filter by division if selected
+      if (selectedDivision && selectedDivision !== '') {
+        // Special case for NHL - handle numeric division IDs
+        if (team.league === 'NHL') {
+          const teamDivId = parseInt(team.division || team.division_id);
+          const selectedDivId = parseInt(selectedDivision);
+          if (!isNaN(teamDivId) && !isNaN(selectedDivId) && teamDivId === selectedDivId) {
+            // If we're only checking division, and it passes, don't return false
+            // We'll continue with other filters below
+          } else {
+            return false;
+          }
+        } else {
+          // Check both division_id and division fields
+          const divisionMatchesString = 
+            (team.division_id && String(team.division_id) === String(selectedDivision)) ||
+            (team.division && String(team.division) === String(selectedDivision));
+          
+          if (!divisionMatchesString) {
+            return false;
+          }
+        }
+      }
+      
+      // Filter by country if selected
+      if (selectedCountry && team.country !== selectedCountry) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    // Sort teams by city alphabetically
+    return [...filteredTeams].sort((a, b) => {
+      if (!a.city && !b.city) return 0;
+      if (!a.city) return 1;
+      if (!b.city) return -1;
+      return a.city.localeCompare(b.city);
+    });
+  }, [teams, selectedLeagueType, selectedLeague, selectedConference, selectedDivision, selectedCountry]);
+  
+  // Handler for Create Team button
+  const handleCreateTeam = () => {
+    setActiveTab('create');
+  };
+  
+  const handleNewTeamSubmit = (e) => {
+    e.preventDefault();
+    
+    // Use the real API
+    axios.post('/api/teams', newTeam, {
+      headers: getAuthHeaders()
+    })
+      .then(response => {
+        // Add the new team to the state
+        setTeams([...teams, response.data]);
+        
+        // Reset form
+        setNewTeam({
+          name: '',
+          city: '',
+          abbreviation: '',
+          primary_color: '#000000',
+          secondary_color: '#FFFFFF',
+          division_id: '',
+          arena_name: '',
+          arena_capacity: 18000,
+          prestige: 50
+        });
+        
+        // Switch to teams tab
+        setActiveTab('teams');
+      })
+      .catch(error => {
+        console.error('Error creating team:', error);
+        alert('Failed to create team. Please try again.');
+      });
+  };
+  
+  const handleNewTeamChange = (e) => {
+    const { name, value } = e.target;
+    setNewTeam(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
   
   // Filter teams based on league type selection
@@ -1098,8 +1485,8 @@ const TeamManager = () => {
     // Extract conferences from filtered teams - force to an empty array if undefined
     const uniqueConferences = [...new Set(
       filteredTeams
-        .map(team => team.conference)
-        .filter(Boolean)
+      .map(team => team.conference)
+      .filter(Boolean)
     )].sort();
     
     // Special case for NHL which should have Eastern and Western
@@ -1367,280 +1754,10 @@ const TeamManager = () => {
     // The actual filtering is handled in getFilteredTeams()
   };
   
-  // Get filtered teams based on selected filters
-  const getFilteredTeams = useCallback(() => {
-    if (!teams || !Array.isArray(teams)) {
-      console.warn("Teams array is not available yet");
-      return [];
-    }
-    
-    // Log a few sample teams with their league_type values
-    if (teams.length > 0) {
-      console.log("First 5 teams and their league_type values:");
-      teams.slice(0, 5).forEach((team, index) => {
-        console.log(`Team ${index+1}: ${team.name}, League: ${team.league}, League Type: "${team.league_type}" (type: ${typeof team.league_type})`);
-      });
-      console.log(`selectedLeagueType: "${selectedLeagueType}" (type: ${typeof selectedLeagueType})`);
-      
-      // Count teams by league_type
-      const leagueTypeCounts = {};
-      teams.forEach(team => {
-        const type = team.league_type || "No Type";
-        leagueTypeCounts[type] = (leagueTypeCounts[type] || 0) + 1;
-      });
-      console.log("Teams by league_type:", leagueTypeCounts);
-      
-      // Log Pro teams specifically to debug
-      if (selectedLeagueType === 'Pro') {
-        const proTeams = teams.filter(team => team.league_type === 'Pro');
-        console.log(`Found ${proTeams.length} Pro teams. First 3:`, proTeams.slice(0, 3));
-      }
-    }
-    
-    const filteredTeams = teams.filter(team => {
-      // Filter by league type if selected
-      if (selectedLeagueType && selectedLeagueType !== '') {
-        if (!team.league_type) {
-          console.log(`Team ${team.name} (${team.id}) has no league_type property, filtering out`);
-          return false;
-        }
-        
-        // Compare values for debugging
-        const normalizedTeamType = String(team.league_type).trim().toLowerCase();
-        const normalizedSelectedType = String(selectedLeagueType).trim().toLowerCase();
-        
-        if (normalizedTeamType !== normalizedSelectedType) {
-          // Log detailed info for precise debugging
-          if (teams.length < 50) { // Only log if not too many teams
-            console.log(`Team ${team.name} league_type "${normalizedTeamType}" doesn't match selected "${normalizedSelectedType}"`);
-          }
-          return false;
-        }
-      }
-      
-      // Filter by league if selected
-      if (selectedLeague && selectedLeague !== '') {
-        // Compare values for debugging
-        if (team.league !== selectedLeague) {
-          // Log detailed info for precise debugging
-          if (teams.length < 50) { // Only log if not too many teams
-            console.log(`Team ${team.name} league "${team.league}" doesn't match selected league "${selectedLeague}"`);
-          }
-          return false;
-        }
-      }
-      
-      // Filter by conference if selected
-      if (selectedConference && selectedConference !== '') {
-        // Check if the team has a conference property
-        if (!team.conference) {
-          return false;
-        }
-        
-        // Normalize both values for comparison
-        const normalizedTeamConf = String(team.conference).trim().toLowerCase();
-        const normalizedSelectedConf = String(selectedConference).trim().toLowerCase();
-        
-        if (normalizedTeamConf !== normalizedSelectedConf) {
-          return false;
-        }
-      }
-      
-      // Filter by division if selected
-      if (selectedDivision && selectedDivision !== '') {
-        // Special case for NHL - handle numeric division IDs
-        if (team.league === 'NHL') {
-          const teamDivId = parseInt(team.division || team.division_id);
-          const selectedDivId = parseInt(selectedDivision);
-          if (!isNaN(teamDivId) && !isNaN(selectedDivId) && teamDivId === selectedDivId) {
-            // If we're only checking division, and it passes, don't return false
-            // We'll continue with other filters below
-          } else {
-            return false;
-          }
-        } else {
-          // Check both division_id and division fields
-          const divisionMatchesString = 
-            (team.division_id && String(team.division_id) === String(selectedDivision)) ||
-            (team.division && String(team.division) === String(selectedDivision));
-          
-          if (!divisionMatchesString) {
-            return false;
-          }
-        }
-      }
-      
-      // Filter by country if selected
-      if (selectedCountry && team.country !== selectedCountry) {
-        return false;
-      }
-      
-      return true;
-    });
-    
-    console.log(`GetFilteredTeams: Filtered ${teams.length} teams to ${filteredTeams.length} for current filters`);
-    if (filteredTeams.length > 0) {
-      console.log("First matching team:", filteredTeams[0]);
-    }
-    
-    // Sort teams by city alphabetically
-    return [...filteredTeams].sort((a, b) => {
-      if (!a.city && !b.city) return 0;
-      if (!a.city) return 1;
-      if (!b.city) return -1;
-      return a.city.localeCompare(b.city);
-    });
-  }, [teams, selectedLeagueType, selectedLeague, selectedConference, selectedDivision, selectedCountry]);
-  
-  // Fetch league types directly from Supabase - call early in component lifecycle
-  useEffect(() => {
-    const fetchLeagueTypes = async () => {
-      try {
-        // Use axios to fetch league level rules via the backend
-        const { data } = await axios.get('/api/league-types');
-        
-        if (data && data.length > 0) {
-          console.log('Fetched league types:', data);
-          
-          // Order league types in the specific order: Pro, Junior, Sub-Junior, Minor
-          const orderedLeagueTypes = ['Pro', 'Junior', 'Sub-Junior', 'Minor'].filter(
-            type => data.includes(type)
-          );
-
-          // Add any other league types that weren't in our predefined order
-          data.forEach(type => {
-            if (!orderedLeagueTypes.includes(type)) {
-              orderedLeagueTypes.push(type);
-            }
-          });
-          
-          // If you have a dedicated endpoint
-          setAvailableLeagueTypes(orderedLeagueTypes);
-        } else {
-          console.warn('No league types found via API endpoint');
-        }
-      } catch (error) {
-        console.error('Error fetching league types:', error);
-        setSupabaseError(`Failed to fetch league types: ${error.message}`);
-      }
-    };
-    
-    fetchLeagueTypes();
-  }, []);
-  
-  const handleNewTeamChange = (e) => {
-    const { name, value } = e.target;
-    setNewTeam(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-  
-  const handleNewTeamSubmit = (e) => {
-    e.preventDefault();
-    
-    // Use the real API
-    axios.post('/api/teams', newTeam, {
-      headers: getAuthHeaders()
-    })
-      .then(response => {
-        // Add the new team to the state
-        setTeams([...teams, response.data]);
-        
-        // Reset form
-        setNewTeam({
-          name: '',
-          city: '',
-          abbreviation: '',
-          primary_color: '#000000',
-          secondary_color: '#FFFFFF',
-          division_id: '',
-          arena_name: '',
-          arena_capacity: 18000,
-          prestige: 50
-        });
-        
-        // Switch to teams tab
-        setActiveTab('teams');
-      })
-      .catch(error => {
-        console.error('Error creating team:', error);
-        alert('Failed to create team. Please try again.');
-      });
-  };
-  
-  const initializeNHLTeams = () => {
-    setInitializing(true);
-    setInitMessage(null);
-    
-    axios.post('/api/init/nhl-data', {}, {
-      headers: getAuthHeaders()
-    })
-      .then(response => {
-        setInitMessage({
-          type: 'success',
-          text: `Successfully initialized ${response.data.data.teams} NHL teams!`
-        });
-        
-        // Refresh the teams list
-        return axios.get('/api/teams');
-      })
-      .then(response => {
-        // Ensure all team objects have required properties
-        const processedTeams = response.data.map(team => ({
-          ...team,
-          name: team.name || 'Unknown Team',
-          city: team.city || 'Unknown City',
-          abbreviation: team.abbreviation || '???',
-          primary_color: team.primary_color || '#1e1e1e',
-          secondary_color: team.secondary_color || '#FFFFFF',
-          arena_name: team.arena_name || 'Unknown Arena',
-          arena_capacity: team.arena_capacity || 0,
-          prestige: team.prestige || 50,
-          league_type: team.league_type || 'Professional',
-          league: team.league || 'NHL',
-          conference: team.conference || (team.division_id <= 2 ? 'Eastern' : 'Western')
-        }));
-        
-        // Sort teams alphabetically by name
-        setTeams(processedTeams.sort((a, b) => a.name.localeCompare(b.name)));
-      })
-      .catch(error => {
-        console.error('Error initializing NHL teams:', error);
-        setInitMessage({
-          type: 'error',
-          text: 'Failed to initialize NHL teams. Please try again.'
-        });
-      })
-      .finally(() => {
-        setInitializing(false);
-      });
-  };
-  
-  // Determine text color based on background for contrast
-  const getTextColor = (bgColor) => {
-    // Default to a dark color if bgColor is undefined or null
-    if (!bgColor) {
-      return '#FFFFFF'; // Default to white text
-    }
-    
-    // Convert hex to RGB
-    const hex = bgColor.replace('#', '');
-    const r = parseInt(hex.substring(0, 2), 16);
-    const g = parseInt(hex.substring(2, 4), 16);
-    const b = parseInt(hex.substring(4, 6), 16);
-    
-    // Calculate brightness
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    
-    // Return black or white text based on brightness
-    return brightness > 128 ? '#000000' : '#FFFFFF';
-  };
-  
   // Add function to handle navigation to Line Combinations
   const handleEditLines = (teamId) => {
     try {
-      // Find the team in our local state instead of making an API call
+      // Find the team in our local state
       const team = teams.find(t => t.id === teamId);
       
       if (!team) {
@@ -1695,81 +1812,52 @@ const TeamManager = () => {
     }
   };
   
-  // Handler for Create Team button
-  const handleCreateTeam = () => {
-    setActiveTab('create');
-  };
-  
-  // Add a function to normalize abbreviations consistently
-  const normalizeAbbreviation = (abbr) => {
-    if (!abbr) return '';
-    return abbr.trim().toUpperCase();
-  };
-
-  // Try to get team logo
-  const getTeamLogo = (teamAbbr) => {
-    if (!teamAbbr) {
-      return null;
-    }
+  const initializeNHLTeams = () => {
+    setInitializing(true);
+    setInitMessage(null);
     
-    try {
-      // Normalize the team abbreviation to uppercase
-      const normalizedAbbr = normalizeAbbreviation(teamAbbr);
-      
-      // First try the static mapping for NHL teams (no spaces)
-      if (teamLogos[normalizedAbbr]) {
-        return teamLogos[normalizedAbbr];
-      }
-      
-      // If not in static mapping, try dynamic import for teams with spaces
-      try {
-        // This approach handles filenames with spaces
-        return require(`../assets/Logo_${normalizedAbbr}.png`);
-      } catch (error) {
-        // If dynamic import fails, return null
-        return null;
-      }
-    } catch (error) {
-      console.error(`Error getting logo: ${error.message}`);
-      return null;
-    }
-  };
-  
-  // Add a useEffect to monitor filter state changes
-  useEffect(() => {
-    // Remove verbose debugging console logs
-    /*
-    console.log("Filter state changed:");
-    console.log("- selectedLeagueType:", selectedLeagueType);
-    console.log("- selectedLeague:", selectedLeague);
-    console.log("- selectedConference:", selectedConference);
-    console.log("- selectedDivision:", selectedDivision);
-    console.log("- selectedCountry:", selectedCountry);
-    
-    console.log("Available filter options:");
-    console.log("- availableLeagueTypes:", availableLeagueTypes.length);
-    console.log("- availableLeagues:", availableLeagues.length);
-    console.log("- availableConferences:", availableConferences.length);
-    console.log("- availableDivisions:", availableDivisions.length);
-    console.log("- availableCountries:", availableCountries.length);
-    */
-  }, [
-    selectedLeagueType, selectedLeague, selectedConference, selectedDivision, selectedCountry,
-    availableLeagueTypes, availableLeagues, availableConferences, availableDivisions, availableCountries
-  ]);
-  
-  // Helper function to get division name from ID - used for NHL divisions
-  const getDivisionNameById = (divisionId, leagueAbbr) => {
-    if (leagueAbbr === 'NHL') {
-      switch (Number(divisionId)) {
-        case 1: return 'Atlantic';
-        case 2: return 'Metropolitan';
-        case 3: return 'Central';
-        case 4: return 'Pacific';
-        default: return `Division ${divisionId}`;
-      }
-    }
-    return `Division ${divisionId}`;
+    axios.post('/api/init/nhl-data', {}, {
+      headers: getAuthHeaders()
+    })
+      .then(response => {
+        setInitMessage({
+          type: 'success',
+          text: `Successfully initialized ${response.data.data.teams} NHL teams!`
+        });
+        
+        // Refresh the teams list
+        return axios.get('/api/teams');
+      })
+      .then(response => {
+        // Ensure all team objects have required properties
+        const processedTeams = response.data.map(team => ({
+          ...team,
+          name: team.name || 'Unknown Team',
+          city: team.city || 'Unknown City',
+          abbreviation: team.abbreviation || '???',
+          primary_color: team.primary_color || '#1e1e1e',
+          secondary_color: team.secondary_color || '#FFFFFF',
+          arena_name: team.arena_name || 'Unknown Arena',
+          arena_capacity: team.arena_capacity || 0,
+          prestige: team.prestige || 50,
+          league_type: team.league_type || 'Professional',
+          league: team.league || 'NHL',
+          conference: team.conference || (team.division_id <= 2 ? 'Eastern' : 'Western')
+        }));
+        
+        // Sort teams alphabetically by name
+        setTeams(processedTeams.sort((a, b) => a.name.localeCompare(b.name)));
+      })
+      .catch(error => {
+        console.error('Error initializing NHL teams:', error);
+        setInitMessage({
+          type: 'error',
+          text: 'Failed to initialize NHL teams. Please try again.'
+        });
+      })
+      .finally(() => {
+        setInitializing(false);
+      });
   };
   
   return (
@@ -2192,16 +2280,18 @@ const TeamManager = () => {
                     <TeamDetail>
                       <span>In-League Prestige:</span>
                       <span>{team.prestige}/100</span>
-                        </TeamDetail>
+                    </TeamDetail>
+                    
                     {/* Only show Salary Cap for NHL teams */}
                     {team.league === 'NHL' && (
-                          <TeamDetail>
-                            <span>Salary Cap:</span>
-                            <span>${(team.salary_cap || 82500000).toLocaleString()}</span>
+                    <TeamDetail>
+                      <span>Salary Cap:</span>
+                      <span>${(team.salary_cap || 82500000).toLocaleString()}</span>
                     </TeamDetail>
                     )}
-                    {/* Add GM and Coach for NHL teams */}
-                    {team.league === 'NHL' && (
+                    
+                    {/* Add GM and Coach for all Pro teams */}
+                    {team.league_type === 'Pro' && (
                       <>
                         <TeamDetail>
                           <span>General Manager:</span>
@@ -2213,6 +2303,97 @@ const TeamManager = () => {
                         </TeamDetail>
                       </>
                     )}
+                    
+                    {/* NHL specific attributes */}
+                    {team.league === 'NHL' && (
+                      <>
+                        <TeamDetail>
+                          <span>Main Identity:</span>
+                          <span>{team.identity_main || 'Not specified'}</span>
+                        </TeamDetail>
+                        
+                        {/* More Info button for NHL teams */}
+                        <MoreInfoButton 
+                          onClick={() => {
+                            // Toggle expanded state for this team
+                            setExpandedTeams(prev => ({
+                              ...prev,
+                              [team.id]: !prev[team.id]
+                            }));
+                          }}
+                        >
+                          {expandedTeams[team.id] ? 'Less Info' : 'More Info'}
+                        </MoreInfoButton>
+                        
+                        {/* Expanded info section for NHL teams */}
+                        {expandedTeams[team.id] && (
+                          <ExpandedInfo>
+                            <TeamDetail>
+                              <span>Secondary Identity:</span>
+                              <span>{team.identity_secondary || 'Not specified'}</span>
+                            </TeamDetail>
+                            <TeamDetail>
+                              <span>Status:</span>
+                              <span>{team.team_status || 'Not specified'}</span>
+                            </TeamDetail>
+                            <TeamDetail>
+                              <span>Owner Culture:</span>
+                              <span>{team.owner_culture || 'Not specified'}</span>
+                            </TeamDetail>
+                            <TeamDetail>
+                              <span>Favorite Player Nationality 1:</span>
+                              <span>{team.favorite_player_nationality_1 || 'Not specified'}</span>
+                            </TeamDetail>
+                            <TeamDetail>
+                              <span>Favorite Player Nationality 2:</span>
+                              <span>{team.favorite_player_nationality_2 || 'Not specified'}</span>
+                            </TeamDetail>
+                          </ExpandedInfo>
+                        )}
+                      </>
+                    )}
+                    
+                    {/* Show Main Identity for Pro leagues other than NHL */}
+                    {(team.league_type === 'Pro' && team.league !== 'NHL') && (
+                      <>
+                        <TeamDetail>
+                          <span>Main Identity:</span>
+                          <span>{team.identity_main || 'Not specified'}</span>
+                        </TeamDetail>
+                        
+                        {/* More Info button for other Pro teams */}
+                        <MoreInfoButton 
+                          onClick={() => {
+                            // Toggle expanded state for this team
+                            setExpandedTeams(prev => ({
+                              ...prev,
+                              [team.id]: !prev[team.id]
+                            }));
+                          }}
+                        >
+                          {expandedTeams[team.id] ? 'Less Info' : 'More Info'}
+                        </MoreInfoButton>
+                        
+                        {/* Expanded info section for other Pro teams */}
+                        {expandedTeams[team.id] && (
+                          <ExpandedInfo>
+                            <TeamDetail>
+                              <span>Organisation:</span>
+                              <span>{team.organisation || 'Not specified'}</span>
+                            </TeamDetail>
+                          </ExpandedInfo>
+                        )}
+                      </>
+                    )}
+                    
+                    {/* Show Main Identity for Junior leagues */}
+                    {(team.league_type === 'Junior') && (
+                      <TeamDetail>
+                        <span>Main Identity:</span>
+                        <span>{team.identity_main || 'Not specified'}</span>
+                      </TeamDetail>
+                    )}
+                    
                     {/* Best Player section for all teams */}
                     <BestPlayerSection>
                       <BestPlayerName>Best Player</BestPlayerName>

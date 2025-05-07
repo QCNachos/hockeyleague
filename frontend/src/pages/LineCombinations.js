@@ -6,8 +6,8 @@ import { Select, Tag, Radio, Menu, Dropdown, Button, Tabs, Slider, Switch, Row, 
 
 // Styled components
 const Container = styled.div`
-  padding: 20px;
-  max-width: 1200px;
+  padding: ${props => props.isEmbedded ? '0' : '20px'};
+  max-width: ${props => props.isEmbedded ? '100%' : '1200px'};
   margin: 0 auto;
   background-color: #111;
 `;
@@ -776,13 +776,22 @@ const debugAPI = (message, data) => {
   console.log(`[${timestamp}] ${message}`, data);
 };
 
-const LineCombinations = () => {
-  const { league, teamId } = useParams();
-  const [selectedLeague, setSelectedLeague] = useState(league || 'NHL');
+const LineCombinations = ({ isEmbedded = false, league: propLeague, teamId: propTeamId }) => {
+  // Use URL params if not provided via props
+  const params = useParams();
+  const routeLeague = params.league;
+  const routeTeamId = params.teamId;
+  
+  // Use props if provided, otherwise use route params
+  const initialLeague = propLeague || routeLeague || 'nhl';
+  const initialTeamId = propTeamId || routeTeamId || '1';
+  
+  const [activeWidget, setActiveWidget] = useState('forward-lines');
+  // Keep the original state variables for compatibility with existing code
+  const [selectedLeague, setSelectedLeague] = useState(initialLeague);
+  const [selectedTeam, setSelectedTeam] = useState(initialTeamId);
   const [teams, setTeams] = useState([]);
-  const [selectedTeam, setSelectedTeam] = useState(null);
   const [teamInfo, setTeamInfo] = useState(null);
-  const [activeWidget, setActiveWidget] = useState('lines');
   const [roster, setRoster] = useState({
     forwards: [],
     defensemen: [],
@@ -1133,13 +1142,15 @@ const LineCombinations = () => {
     const fetchTeams = async () => {
       try {
         const { data, error } = await supabase
-          .from('Team')
+          .from('teams')
           .select(`
-            *,
-            League (
-              league,
-              league_level
-            )
+            id,
+            team,
+            abbreviation,
+            city,
+            state,
+            country,
+            league
           `)
           .eq('league', selectedLeague)
           .order('team');
@@ -1149,11 +1160,10 @@ const LineCombinations = () => {
         setTeams(data || []);
         
         // If we have a teamId but no teamInfo, find and set it
-        if (teamId && !teamInfo) {
-          const team = data?.find(t => t.id === parseInt(teamId));
-          if (team) {
-            setTeamInfo(team);
-            setSelectedTeam(team.id);
+        if (selectedTeam && (!teamInfo || teamInfo.id !== selectedTeam)) {
+          const foundTeam = data.find(t => t.id === parseInt(selectedTeam));
+          if (foundTeam) {
+            setTeamInfo(foundTeam);
           }
         }
       } catch (error) {
@@ -1163,12 +1173,12 @@ const LineCombinations = () => {
     };
 
     fetchTeams();
-  }, [selectedLeague, teamId]);
+  }, [selectedLeague, selectedTeam, teamInfo]);
 
   // Effect to fetch team info when teamId changes
   useEffect(() => {
     const fetchTeamInfo = async () => {
-      if (!teamId) return;
+      if (!selectedTeam) return;
       
       try {
         const { data, error } = await supabase
@@ -1180,14 +1190,14 @@ const LineCombinations = () => {
               league_level
             )
           `)
-          .eq('id', teamId)
+          .eq('id', selectedTeam)
           .single();
 
         if (error) throw error;
         
         setTeamInfo(data);
         setSelectedTeam(data.id);
-        setSelectedLeague(data.league || league || 'NHL');
+        setSelectedLeague(data.league || selectedLeague || 'NHL');
         // Reset the team ratings flag when team info changes
         hasLoadedTeamRatings.current = false;
         
@@ -1198,7 +1208,7 @@ const LineCombinations = () => {
     };
 
     fetchTeamInfo();
-  }, [teamId, league, setSelectedTeam, setSelectedLeague, setTeamInfo]);
+  }, [selectedTeam, selectedLeague, setSelectedTeam, setSelectedLeague, setTeamInfo]);
 
   // Effect to fetch roster data
   useEffect(() => {
@@ -3134,91 +3144,101 @@ const LineCombinations = () => {
     );
   };
 
+  // Component render
   return (
-    <Container>
-      <Header>
-        <TeamSelector>
-          <StyledSelect value={selectedLeague} onChange={handleLeagueChange}>
-            <option value="NHL">NHL</option>
-            <option value="AHL">AHL</option>
-            <option value="CHL">CHL</option>
-          </StyledSelect>
-          <StyledSelect 
-            value={selectedTeam || ''} 
-            onChange={handleTeamChange}
-          >
-            <option value="">Select Team</option>
-            {teams.map(team => (
-              <option key={team.id} value={team.id}>
-                {team.team}
-              </option>
-            ))}
-          </StyledSelect>
-        </TeamSelector>
+    <Container isEmbedded={isEmbedded}>
+      {!isEmbedded && (
+        <Header>
+          <h1 style={{ color: '#C4CED4' }}>Line Combinations</h1>
+        </Header>
+      )}
+      
+      {teamInfo ? (
+        <TeamHeader>
+          <TeamLogo>
+            {teamInfo.abbreviation || '???'}
+          </TeamLogo>
+          <TeamInfo>
+            <TeamName>
+              {teamInfo.team || 'Select Team'}
+              <TeamOverall>
+                {Math.round(teamRatings.overall) || '??'}
+                <Tooltip title={`Offense: ${Math.round(teamRatings.offense || 0)}, Defense: ${Math.round(teamRatings.defense || 0)}, Special Teams: ${Math.round(teamRatings.special_teams || 0)}, Goaltending: ${Math.round(teamRatings.goaltending || 0)}`}>
+                  <span style={{ marginLeft: '5px', fontSize: '0.8rem', cursor: 'help' }}>ⓘ</span>
+                </Tooltip>
+              </TeamOverall>
+            </TeamName>
+            <LeagueInfo>{teamInfo.league || selectedLeague}</LeagueInfo>
+          </TeamInfo>
+          <EditLinesButton onClick={() => alert('Edit lines feature coming soon!')}>
+            Edit Lines
+          </EditLinesButton>
+        </TeamHeader>
+      ) : (
+        <TeamHeader>
+          <TeamInfo>
+            <TeamName>Line Combinations</TeamName>
+            <LeagueInfo>{selectedLeague}</LeagueInfo>
+          </TeamInfo>
+        </TeamHeader>
+      )}
 
-        {teamInfo ? (
-          <TeamHeader>
-            <TeamLogo>
-              {teamInfo.abbreviation || '???'}
-            </TeamLogo>
-            <TeamInfo>
-              <TeamName>
-                {teamInfo.team || 'Select Team'}
-                <TeamOverall>
-                  {Math.round(teamRatings.overall) || '??'}
-                  <Tooltip title={`Offense: ${Math.round(teamRatings.offense || 0)}, Defense: ${Math.round(teamRatings.defense || 0)}, Special Teams: ${Math.round(teamRatings.special_teams || 0)}, Goaltending: ${Math.round(teamRatings.goaltending || 0)}`}>
-                    <span style={{ marginLeft: '5px', fontSize: '0.8rem', cursor: 'help' }}>ⓘ</span>
-                  </Tooltip>
-                </TeamOverall>
-              </TeamName>
-              <LeagueInfo>{teamInfo.league || selectedLeague}</LeagueInfo>
-            </TeamInfo>
-            <EditLinesButton onClick={() => alert('Edit lines feature coming soon!')}>
-              Edit Lines
-            </EditLinesButton>
-          </TeamHeader>
-        ) : (
-          <TeamHeader>
-            <TeamInfo>
-              <TeamName>Line Combinations</TeamName>
-              <LeagueInfo>{selectedLeague}</LeagueInfo>
-            </TeamInfo>
-          </TeamHeader>
-        )}
-
-        <NavWidgets>
-          <NavWidget 
-            active={activeWidget === 'lines'} 
-            onClick={() => handleWidgetClick('lines')}
-          >
-            Lines
-          </NavWidget>
-          <NavWidget 
-            active={activeWidget === 'stats'} 
-            onClick={() => handleWidgetClick('stats')}
-          >
-            Last 10 Games
-          </NavWidget>
-          <NavWidget 
-            active={activeWidget === 'season'} 
-            onClick={() => handleWidgetClick('season')}
-          >
-            Season Stats
-          </NavWidget>
-          <NavWidget 
-            active={activeWidget === 'news'} 
-            onClick={() => handleWidgetClick('news')}
-          >
-            Team News
-          </NavWidget>
-        </NavWidgets>
-      </Header>
+      <NavWidgets>
+        <NavWidget 
+          active={activeWidget === 'forward-lines'} 
+          onClick={() => handleWidgetClick('forward-lines')}
+        >
+          Forward Lines
+        </NavWidget>
+        <NavWidget 
+          active={activeWidget === 'defense-pairs'} 
+          onClick={() => handleWidgetClick('defense-pairs')}
+        >
+          Defense Pairs
+        </NavWidget>
+        <NavWidget 
+          active={activeWidget === 'goalies'} 
+          onClick={() => handleWidgetClick('goalies')}
+        >
+          Goalies
+        </NavWidget>
+        <NavWidget 
+          active={activeWidget === 'power-play'} 
+          onClick={() => handleWidgetClick('power-play')}
+        >
+          Power Play
+        </NavWidget>
+        <NavWidget 
+          active={activeWidget === 'penalty-kill'} 
+          onClick={() => handleWidgetClick('penalty-kill')}
+        >
+          Penalty Kill
+        </NavWidget>
+        <NavWidget 
+          active={activeWidget === 'other-lines'} 
+          onClick={() => handleWidgetClick('other-lines')}
+        >
+          Other Lines
+        </NavWidget>
+        <NavWidget 
+          active={activeWidget === 'injured'} 
+          onClick={() => handleWidgetClick('injured')}
+        >
+          Injured
+        </NavWidget>
+        <NavWidget 
+          active={activeWidget === 'benched'} 
+          onClick={() => handleWidgetClick('benched')}
+        >
+          Benched
+        </NavWidget>
+      </NavWidgets>
 
       {loading ? (
         <div>Loading...</div>
       ) : (
         <ContentArea>
-          {activeWidget === 'lines' && (
+          {activeWidget === 'forward-lines' && (
             <>
               {renderForwardLines()}
               {renderDefensePairs()}
@@ -3233,9 +3253,13 @@ const LineCombinations = () => {
               {renderBenched()}
             </>
           )}
-          {activeWidget === 'stats' && renderLast10GamesStats()}
-          {activeWidget === 'season' && renderSeasonStats()}
-          {activeWidget === 'news' && <div>Team News Coming Soon</div>}
+          {activeWidget === 'defense-pairs' && renderDefensePairs()}
+          {activeWidget === 'goalies' && renderGoalies()}
+          {activeWidget === 'power-play' && renderPowerPlay()}
+          {activeWidget === 'penalty-kill' && renderPenaltyKill()}
+          {activeWidget === 'other-lines' && renderOtherLines()}
+          {activeWidget === 'injured' && renderInjured()}
+          {activeWidget === 'benched' && renderBenched()}
         </ContentArea>
       )}
 

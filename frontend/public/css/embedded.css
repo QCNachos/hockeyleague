@@ -1,0 +1,207 @@
+/* CSS for embedded views - hides main navigation and layout elements */
+
+/* Core styles for basic embedding */
+body.embedded {
+  padding: 0 !important;
+  margin: 0 !important;
+  background-color: transparent !important;
+}
+
+/* Hide header elements */
+body.embedded header,
+body.embedded .header, 
+body.embedded .main-header,
+body.embedded .hockey-league-header,
+body.embedded .hockey-league-logo,
+body.embedded .hockey-league-navigation,
+body.embedded div[class*="header-"],
+body.embedded div[class*="-header"],
+body.embedded div[class*="Header"],
+body.no-header header,
+body.no-header .header,
+body.no-header div[class*="header"],
+body.no-header div[class*="Header"] {
+  display: none !important;
+}
+
+/* Hide menu and sidebar elements */
+body.embedded .sidebar, 
+body.embedded .Sidebar,
+body.embedded nav,
+body.embedded aside,
+body.embedded .menu-container,
+body.embedded .general-menu,
+body.embedded .game-modes-menu,
+body.embedded .management-menu,
+body.embedded .analytics-menu,
+body.embedded div[class*="sidebar"],
+body.embedded div[class*="Sidebar"],
+body.embedded div[class*="menu-"],
+body.embedded div[class*="-menu"],
+body.embedded .global-tabs,
+body.embedded .global-actions,
+body.embedded .return-button,
+body.embedded .breadcrumb-navigation,
+body.embedded .login-button,
+body.no-sidebar .sidebar,
+body.no-sidebar nav,
+body.no-sidebar aside,
+body.no-sidebar [class*="sidebar"],
+body.no-sidebar [class*="Sidebar"],
+body.hide-nav nav {
+  display: none !important;
+}
+
+/* Target any elements that contain "HOCKEYLEAGUE" */
+body.embedded div:has(> span:contains("HOCKEYLEAGUE")),
+body.embedded div:has(> a:contains("HOCKEYLEAGUE")),
+body.embedded div:has(> div:contains("HOCKEYLEAGUE")),
+body.embedded div[class*="hockeyleague"],
+body.embedded div[class*="hockey-league"] {
+  display: none !important;
+}
+
+/* Hide by menu text content */
+body.embedded div:has(> div:contains("GENERAL")),
+body.embedded div:has(> div:contains("GAME MODES")),
+body.embedded div:has(> div:contains("MANAGEMENT")),
+body.embedded div:has(> div:contains("ANALYTICS")),
+body.embedded div:has(> a:contains("GENERAL")),
+body.embedded div:has(> a:contains("GAME MODES")),
+body.embedded div:has(> a:contains("MANAGEMENT")),
+body.embedded div:has(> a:contains("ANALYTICS")),
+body.embedded div[class*="GENERAL"],
+body.embedded div[class*="GAME MODES"],
+body.embedded div[class*="MANAGEMENT"],
+body.embedded div[class*="ANALYTICS"],
+body.no-sidebar div:has(> div:contains("GENERAL")),
+body.no-sidebar div:has(> div:contains("GAME MODES")),
+body.no-sidebar div:has(> div:contains("MANAGEMENT")),
+body.no-sidebar div:has(> div:contains("ANALYTICS")) {
+  display: none !important;
+}
+
+/* Make main content take full width */
+body.embedded .main-layout > .content-wrapper,
+body.embedded .main-content,
+body.embedded main,
+body.embedded .content-container,
+body.embedded .container,
+body.embedded [class*="content"],
+body.embedded [class*="Content"],
+body.embedded #root > div > div:not([class*="sidebar"]):not([class*="Sidebar"]) {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Root elements */
+body.embedded #root > div {
+  display: flex;
+  width: 100%;
+}
+
+/* Make content visible for various layouts */
+body.embedded .content, 
+body.embedded [class*="Content"],
+body.embedded [class*="content-area"] {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* Ensure full document width */
+body.embedded, 
+body.embedded html {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+/* Hide specific menu elements by ID if they exist */
+body.embedded #main-navigation,
+body.embedded #global-header,
+body.embedded #hockey-league-menu,
+body.embedded #app-sidebar,
+body.embedded #nav-menu {
+  display: none !important;
+}
+
+/* Reset padding/margins and take full width when in embedded mode */
+body.embedded {
+  padding: 0 !important;
+  margin: 0 !important;
+  background-color: transparent !important;
+}
+
+.main-layout > .content-wrapper,
+.main-content,
+.container {
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Hide any other unnecessary UI elements */
+.return-button,
+.global-actions,
+.breadcrumb-navigation {
+  display: none !important;
+}
+
+/* Specific class for the hockey league header */
+.hockey-league-header,
+.hockey-league-navigation {
+  display: none !important;
+}
+
+/* Target the common class names for the sidebar */
+#root > div > .sidebar,
+[class*="sidebar"],
+[class*="Sidebar"],
+[id*="sidebar"],
+[id*="Sidebar"] {
+  display: none !important;
+}
+
+/* Make the main content take full width */
+#root > div > div:not([class*="sidebar"]):not([class*="Sidebar"]) {
+  width: 100% !important; 
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+}
+
+/* Additional specific selectors based on the screenshot */
+[class*="GAME MODES"],
+[class*="MANAGEMENT"],
+[class*="ANALYTICS"],
+[class*="GENERAL"] {
+  display: none !important;
+}
+
+/* Target the navigation menu in the screenshot */
+nav.hockey-league-menu,
+div.hockey-league-menu,
+[class*="hockey-league"],
+[id*="hockey-league"],
+[class*="hockeyleague"],
+[id*="hockeyleague"] {
+  display: none !important;
+}
+
+/* Ensure no padding on root element */
+#root {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Adjust iframe-specific styling */
+body.embedded iframe {
+  border: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+} 

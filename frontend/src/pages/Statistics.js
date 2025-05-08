@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
+import { useParams } from 'react-router-dom';
 import StatsLeaderboard from '../components/stats/StatsLeaderboard';
 
 const Statistics = ({ isEmbedded = false }) => {
+  const { playerType, category } = useParams();
   const [timeFrame, setTimeFrame] = useState('current'); // 'current' or 'allTime'
   const [league, setLeague] = useState('NHL'); // Default to NHL
   const [players, setPlayers] = useState([]);
@@ -144,7 +146,7 @@ const Statistics = ({ isEmbedded = false }) => {
             {/* Top Row */}
             <GridItem>
               <CategoryTitle>
-                <CategoryName>Skaters</CategoryName>
+                <CategoryName>SKATERS</CategoryName>
               </CategoryTitle>
               <StatsLeaderboard 
                 players={mockSkaterStats} 
@@ -155,7 +157,7 @@ const Statistics = ({ isEmbedded = false }) => {
             </GridItem>
             <GridItem>
               <CategoryTitle>
-                <CategoryName>Goalies</CategoryName>
+                <CategoryName>GOALIES</CategoryName>
               </CategoryTitle>
               <StatsLeaderboard 
                 players={mockGoalieStats} 
@@ -168,7 +170,7 @@ const Statistics = ({ isEmbedded = false }) => {
             {/* Bottom Row */}
             <GridItem>
               <CategoryTitle>
-                <CategoryName>Defensemen</CategoryName>
+                <CategoryName>DEFENSEMEN</CategoryName>
               </CategoryTitle>
               <StatsLeaderboard 
                 players={mockDefensemenStats} 
@@ -179,7 +181,7 @@ const Statistics = ({ isEmbedded = false }) => {
             </GridItem>
             <GridItem>
               <CategoryTitle>
-                <CategoryName>Rookies</CategoryName>
+                <CategoryName>ROOKIES</CategoryName>
               </CategoryTitle>
               <StatsLeaderboard 
                 players={mockRookieStats} 
@@ -203,7 +205,7 @@ const Statistics = ({ isEmbedded = false }) => {
             </GridItem>
             <GridItem>
               <CategoryTitle>
-                <CategoryName>Time on Ice</CategoryName>
+                <CategoryName>TIME ON ICE</CategoryName>
               </CategoryTitle>
               <StatsLeaderboard 
                 players={mockTimeOnIceStats} 
@@ -221,7 +223,7 @@ const Statistics = ({ isEmbedded = false }) => {
 
 // Styled Components
 const StatsContainer = styled.div`
-  max-width: ${props => props.isEmbedded ? '100%' : '1200px'};
+  max-width: ${props => props.isEmbedded ? '100%' : '1400px'};
   margin: 0 auto;
   padding: ${props => props.isEmbedded ? '0' : '20px'};
   color: #C4CED4;
@@ -237,38 +239,41 @@ const StatsHeader = styled.div`
 const FilterSection = styled.div`
   display: flex;
   gap: 20px;
-  margin-bottom: 20px;
+  margin-bottom: 25px;
 `;
 
 const SelectWrapper = styled.div`
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
 
   label {
     font-weight: 500;
+    color: #C4CED4;
   }
 
   select {
-    padding: 8px 12px;
+    padding: 7px 10px;
     border-radius: 4px;
-    border: 1px solid #ddd;
-    background-color: white;
+    border: 1px solid #333;
+    background-color: #1e1e1e;
+    color: #FFFFFF;
   }
 `;
 
 const LoadingMessage = styled.div`
   text-align: center;
-  padding: 40px;
-  font-size: 18px;
-  color: #666;
+  padding: 36px;
+  font-size: 16px;
+  color: #C4CED4;
 `;
 
 const StatsCategoryGridContainer = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 30px;
+  gap: 15px 25px;
+  margin-bottom: 10px;
+  row-gap: 10px;
 
   @media (max-width: 1024px) {
     grid-template-columns: 1fr;
@@ -276,21 +281,28 @@ const StatsCategoryGridContainer = styled.div`
 `;
 
 const GridItem = styled.div`
-  margin-bottom: 20px;
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
 `;
 
 const CategoryTitle = styled.div`
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 0;
+  background-color: #232323;
+  border-radius: 6px 6px 0 0;
+  padding: 10px 15px;
+  border-left: 3px solid #B30E16;
+  border-bottom: none;
 `;
 
 const CategoryName = styled.h2`
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 600;
   margin: 0;
-  color: #333;
+  color: #FFFFFF;
+  letter-spacing: 0.5px;
 `;
 
 export default Statistics;

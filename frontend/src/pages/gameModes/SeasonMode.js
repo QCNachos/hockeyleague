@@ -137,19 +137,19 @@ const SeasonMode = () => {
     loadSeasons();
   }, []);
   
-  const loadSeasons = async () => {
-    try {
-      const { success, data } = await seasonService.getAllSeasons();
-      if (success) {
-        setSavedSeasons(data);
+    const loadSeasons = async () => {
+      try {
+        const { success, data } = await seasonService.getAllSeasons();
+        if (success) {
+          setSavedSeasons(data);
+        }
+      } catch (error) {
+        console.error('Error loading seasons:', error);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error loading seasons:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
+    };
+    
   // Add function to handle season deletion
   const handleDeleteSeason = async (seasonId, seasonName) => {
     if (window.confirm(`Are you sure you want to delete the season "${seasonName}"? This action cannot be undone.`)) {
@@ -158,7 +158,7 @@ const SeasonMode = () => {
         
         if (success) {
           // Reload seasons after deletion
-          loadSeasons();
+    loadSeasons();
         } else {
           alert(`Failed to delete season: ${error}`);
         }
@@ -254,7 +254,7 @@ const SeasonMode = () => {
                       Created: {new Date(season.createdAt).toLocaleDateString()}
                     </p>
                     <ButtonGroup>
-                      <ActionButton to={`/season/dashboard/${season.id}`}>Continue Season</ActionButton>
+                    <ActionButton to={`/season/dashboard/${season.id}`}>Continue Season</ActionButton>
                       <DeleteButton onClick={() => handleDeleteSeason(season.id, season.name)}>
                         Delete
                       </DeleteButton>

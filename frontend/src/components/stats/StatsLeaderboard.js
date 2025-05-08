@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
+import playerSilhouette from '../../assets/Player_silouette.png';
 
 const StatsLeaderboard = ({ players, category, playerType, showTitle = true }) => {
+  const navigate = useNavigate();
   // Take the first player as the initially selected player
   const [selectedPlayer, setSelectedPlayer] = useState(players.length > 0 ? players[0] : null);
 
@@ -39,6 +42,9 @@ const StatsLeaderboard = ({ players, category, playerType, showTitle = true }) =
     return b[category] - a[category];
   });
 
+  // Get the top 7 players only
+  const topPlayers = sortedPlayers.slice(0, 7);
+
   // Get the stat value for a player based on the category
   const getStatValue = (player) => {
     if (!player) return '-';
@@ -48,6 +54,10 @@ const StatsLeaderboard = ({ players, category, playerType, showTitle = true }) =
     }
     
     return player[category] !== undefined ? player[category] : '-';
+  };
+
+  const handleViewAllClick = () => {
+    navigate(`/stats/${playerType}/${category}`);
   };
 
   if (!selectedPlayer) {
@@ -60,8 +70,7 @@ const StatsLeaderboard = ({ players, category, playerType, showTitle = true }) =
       <PlayerProfileSection>
         <PlayerInfo>
           <PlayerPhoto>
-            {/* Empty circle as placeholder for player photo */}
-            <EmptyCircle />
+            <PlayerImage src={playerSilhouette} alt="Player" />
           </PlayerPhoto>
           <PlayerName>
             <FirstName>{selectedPlayer.first_name}</FirstName>
@@ -101,7 +110,7 @@ const StatsLeaderboard = ({ players, category, playerType, showTitle = true }) =
           <StatCol>{getStatLabel()}</StatCol>
         </LeaderboardHeader>
         <LeaderboardList>
-          {sortedPlayers.map((player, index) => (
+          {topPlayers.map((player, index) => (
             <LeaderboardRow 
               key={player.id}
               isSelected={selectedPlayer.id === player.id}
@@ -118,7 +127,7 @@ const StatsLeaderboard = ({ players, category, playerType, showTitle = true }) =
             </LeaderboardRow>
           ))}
         </LeaderboardList>
-        <ViewAllLink>All Leaders</ViewAllLink>
+        <ViewAllLink onClick={handleViewAllClick}>All Leaders</ViewAllLink>
       </LeaderboardSection>
     </LeaderboardContainer>
   );
@@ -127,10 +136,13 @@ const StatsLeaderboard = ({ players, category, playerType, showTitle = true }) =
 // Styled Components
 const LeaderboardContainer = styled.div`
   display: flex;
-  gap: 20px;
-  margin-bottom: 10px;
+  gap: 0;
+  margin-bottom: 0;
   flex-wrap: wrap;
   height: 100%;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 
   @media (min-width: 768px) {
     flex-wrap: nowrap;
@@ -140,12 +152,15 @@ const LeaderboardContainer = styled.div`
 const PlayerProfileSection = styled.div`
   flex: 1;
   min-width: 220px;
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  padding: 20px;
+  background-color: #1e1e1e;
+  border-radius: 0 0 0 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  padding: 16px;
   display: flex;
   flex-direction: column;
+  border: 1px solid #333;
+  border-top: none;
+  z-index: 1;
 `;
 
 const PlayerInfo = styled.div`
@@ -153,34 +168,37 @@ const PlayerInfo = styled.div`
   flex-direction: column;
   align-items: center;
   text-align: center;
-  margin-bottom: 20px;
-`;
-
-const PlayerPhoto = styled.div`
   margin-bottom: 15px;
 `;
 
-const EmptyCircle = styled.div`
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  background-color: #f0f0f0;
-  border: 1px solid #ddd;
-`;
-
-const PlayerName = styled.div`
+const PlayerPhoto = styled.div`
   margin-bottom: 10px;
 `;
 
+const PlayerImage = styled.img`
+  width: 80px;
+  height: 75px;
+  border-radius: 50%;
+  background-color: #333;
+  border: 1px solid #444;
+  object-fit: cover;
+`;
+
+const PlayerName = styled.div`
+  margin-bottom: 7px;
+`;
+
 const FirstName = styled.div`
-  font-size: 16px;
-  color: #333;
+  font-size: 14px;
+  color: #C4CED4;
+  line-height: 1.1;
 `;
 
 const LastName = styled.div`
-  font-size: 22px;
+  font-size: 18px;
   font-weight: bold;
-  color: #111;
+  color: #FFFFFF;
+  line-height: 1.1;
 `;
 
 const PlayerTeam = styled.div`
@@ -190,20 +208,20 @@ const PlayerTeam = styled.div`
 `;
 
 const TeamLogo = styled.div`
-  margin-bottom: 5px;
+  margin-bottom: 3px;
   font-weight: bold;
-  color: #666;
+  color: #B30E16;
 `;
 
 const TeamInfo = styled.div`
   display: flex;
   align-items: center;
-  color: #666;
-  font-size: 14px;
+  color: #C4CED4;
+  font-size: 10px;
 `;
 
 const Separator = styled.span`
-  margin: 0 5px;
+  margin: 0 3px;
 `;
 
 const StatBox = styled.div`
@@ -214,46 +232,51 @@ const StatBox = styled.div`
 `;
 
 const StatLabel = styled.div`
-  font-size: 14px;
+  font-size: 10px;
   font-weight: 500;
-  color: #666;
-  margin-bottom: 5px;
+  color: #C4CED4;
+  margin-bottom: 3px;
 `;
 
 const StatValue = styled.div`
-  font-size: 48px;
+  font-size: 40px;
   font-weight: bold;
-  color: #111;
+  color: #FFFFFF;
+  line-height: 1;
 `;
 
 const LeaderboardSection = styled.div`
   flex: 2;
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background-color: #1e1e1e;
+  border-radius: 0 0 8px 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
+  border: 1px solid #333;
+  border-top: none;
+  border-left: none;
+  min-height: 350px;
 `;
 
 const LeaderboardTitle = styled.div`
-  padding: 15px 20px;
-  font-size: 18px;
+  padding: 10px 16px;
+  font-size: 16px;
   font-weight: 600;
-  border-bottom: 1px solid #eee;
-  color: #333;
+  border-bottom: 1px solid #333;
+  color: #FFFFFF;
 `;
 
 const LeaderboardHeader = styled.div`
   display: flex;
-  padding: 12px 20px;
-  border-bottom: 1px solid #eee;
-  color: #666;
+  padding: 8px 16px;
+  border-bottom: 1px solid #333;
+  color: #C4CED4;
   font-weight: 500;
-  font-size: 14px;
+  font-size: 12px;
 `;
 
 const RankCol = styled.div`
-  width: 50px;
+  width: 40px;
   text-align: center;
 `;
 
@@ -262,25 +285,26 @@ const PlayerCol = styled.div`
 `;
 
 const StatCol = styled.div`
-  width: 80px;
+  width: 60px;
   text-align: center;
 `;
 
 const LeaderboardList = styled.div`
   flex: 1;
   overflow-y: auto;
-  max-height: 300px;
+  max-height: 280px;
 `;
 
 const LeaderboardRow = styled.div`
   display: flex;
-  padding: 10px 20px;
-  border-bottom: 1px solid #eee;
+  padding: 8px 16px;
+  border-bottom: 1px solid #333;
   cursor: pointer;
-  background-color: ${props => props.isSelected ? '#f0f8ff' : 'transparent'};
+  background-color: ${props => props.isSelected ? '#2a2a2a' : 'transparent'};
+  color: ${props => props.isSelected ? '#FFFFFF' : '#C4CED4'};
   
   &:hover {
-    background-color: ${props => props.isSelected ? '#f0f8ff' : '#f9f9f9'};
+    background-color: ${props => props.isSelected ? '#2a2a2a' : '#252525'};
   }
 `;
 
@@ -290,19 +314,20 @@ const PlayerRowInfo = styled.div`
 `;
 
 const TeamAbbr = styled.div`
-  margin-right: 10px;
+  margin-right: 7px;
   font-weight: 600;
-  color: #444;
-  min-width: 40px;
+  color: #B30E16;
+  min-width: 30px;
 `;
 
 const ViewAllLink = styled.div`
   text-align: right;
-  padding: 10px 20px;
-  color: #1e88e5;
+  padding: 9px 16px;
+  color: #B30E16;
   font-weight: 500;
   cursor: pointer;
-  border-top: 1px solid #eee;
+  border-top: 1px solid #333;
+  margin-top: 5px;
   
   &:hover {
     text-decoration: underline;
@@ -310,10 +335,10 @@ const ViewAllLink = styled.div`
 `;
 
 const EmptyState = styled.div`
-  padding: 40px;
+  padding: 30px;
   text-align: center;
-  color: #666;
-  font-size: 16px;
+  color: #C4CED4;
+  font-size: 14px;
 `;
 
 export default StatsLeaderboard; 

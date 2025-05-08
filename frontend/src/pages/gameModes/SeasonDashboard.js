@@ -5,6 +5,9 @@ import * as seasonService from '../../services/seasonService';
 import { useSelector } from 'react-redux';
 import { selectCommunityPack } from '../../store/slices/settingsSlice';
 import PlayerSilhouette from '../../assets/Player_silouette.png';
+import FreeAgentsContent from '../../components/FreeAgentsContent';
+import ContractsContent from '../../components/ContractsContent';
+import CoachingStaffContent from '../../components/CoachingStaffContent';
 
 // Import team logos for NHL teams
 import ANA from '../../assets/Logo_ANA.png';
@@ -3392,103 +3395,16 @@ const SeasonDashboard = () => {
   // Inside the SeasonDashboard component, before the renderContent function
   // Define additional render functions for new tabs
   const renderCoachingStaffContent = () => {
-    return (
-      <>
-        <Header>
-          <Title>Coaching Staff</Title>
-          <ActionButtons>
-            <Button onClick={rotateTeamLevel}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <polyline points="9 21 3 21 3 15"></polyline>
-                <line x1="21" y1="3" x2="14" y2="10"></line>
-                <line x1="3" y1="21" x2="10" y2="14"></line>
-              </svg>
-              {teamLevel}
-            </Button>
-          </ActionButtons>
-        </Header>
-        
-        <div style={{ 
-          flex: '1 1 auto',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          <EmptyState>
-            <h3>Coaching Staff Management</h3>
-            <p>Manage your {teamLevel} coaching staff and their abilities.</p>
-            <Button primary>Coming Soon</Button>
-          </EmptyState>
-        </div>
-      </>
-    );
+    return <CoachingStaffContent teamLevel={teamLevel} rotateTeamLevel={rotateTeamLevel} />;
   };
   
   // Contracts content
   const renderContractsContent = () => {
-    return (
-      <>
-        <Header>
-          <Title>Contracts</Title>
-          <ActionButtons>
-            <Button onClick={rotateTeamLevel}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <polyline points="9 21 3 21 3 15"></polyline>
-                <line x1="21" y1="3" x2="14" y2="10"></line>
-                <line x1="3" y1="21" x2="10" y2="14"></line>
-              </svg>
-              {teamLevel}
-            </Button>
-          </ActionButtons>
-        </Header>
-        
-        <div style={{ 
-          flex: '1 1 auto',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          <EmptyState>
-            <h3>Contracts Management</h3>
-            <p>Review and manage player contracts for {teamLevel} team.</p>
-            <Button primary>Coming Soon</Button>
-          </EmptyState>
-        </div>
-      </>
-    );
+    return <ContractsContent teamLevel={teamLevel} rotateTeamLevel={rotateTeamLevel} />;
   };
   
   const renderFreeAgentsContent = () => {
-    return (
-      <>
-        <Header>
-          <Title>Free Agents</Title>
-          <ActionButtons>
-            <Button onClick={rotateTeamLevel}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <polyline points="9 21 3 21 3 15"></polyline>
-                <line x1="21" y1="3" x2="14" y2="10"></line>
-                <line x1="3" y1="21" x2="10" y2="14"></line>
-              </svg>
-              {teamLevel}
-            </Button>
-          </ActionButtons>
-        </Header>
-        
-        <div style={{ 
-          flex: '1 1 auto',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          <EmptyState>
-            <h3>Free Agents</h3>
-            <p>Browse and sign free agents for {teamLevel} league.</p>
-            <Button primary>Coming Soon</Button>
-          </EmptyState>
-        </div>
-      </>
-    );
+    return <FreeAgentsContent teamLevel={teamLevel} rotateTeamLevel={rotateTeamLevel} />;
   };
   
   // Jersey Numbers & Leadership content

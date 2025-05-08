@@ -24,6 +24,9 @@ import Awards from './pages/Awards';
 import AwardsCeremony from './pages/AwardsCeremony';
 import Settings from './pages/Settings';
 
+// Components
+import StatsDetailPage from './components/stats/StatsDetailPage';
+
 // Game Modes
 import FranchiseMode from './pages/gameModes/FranchiseMode';
 import BeAProMode from './pages/gameModes/BeAProMode';
@@ -102,6 +105,7 @@ function App() {
             
             {/* Analytics */}
             <Route path="stats" element={<Statistics />} />
+            <Route path="stats/:playerType/:category" element={<StatsDetailPage />} />
             <Route path="standings" element={<Standings />} />
             <Route path="awards" element={<Awards />} />
             <Route path="awards-ceremony" element={<AwardsCeremony />} />

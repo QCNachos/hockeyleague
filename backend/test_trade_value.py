@@ -7,9 +7,12 @@ Run this file from the backend directory: python3 test_trade_value.py
 import json
 from app.services.value_trade import (
     calculate_player_trade_value,
+    calculate_draft_pick_value,
     evaluate_trade,
-    visualize_trade_balance
+    visualize_trade_balance,
+    apply_quality_adjustment
 )
+import unittest
 
 
 def main():
@@ -229,5 +232,253 @@ def main():
     print(f"  Team 1: {viz_data['team1_percentage']}%   Team 2: {viz_data['team2_percentage']}%")
 
 
+class TestTradeValue(unittest.TestCase):
+    
+    def test_player_value_calculation(self):
+        """Test that player trade value calculations produce expected results"""
+        # Test star player
+        star_value = calculate_player_trade_value(
+            overall=92,
+            age=27,
+            position="Center",
+            contract_type="UFA",
+            term_years=6,
+            aav_millions=8.5,
+            potential="elite",
+            potential_certainty=0.9,
+            potential_volatility=0.3,
+            is_captain=True,
+            stanley_cups=1
+        )
+        self.assertGreater(star_value, 50, "Star player should have high value")
+        
+        # Test prospect
+        prospect_value = calculate_player_trade_value(
+            overall=75,
+            age=19,
+            position="Wing",
+            contract_type="ELC",
+            term_years=3,
+            aav_millions=0.9,
+            potential="elite",
+            potential_certainty=0.6,
+            potential_volatility=0.7
+        )
+        self.assertGreater(prospect_value, 25, "Prospect should have decent value")
+        
+        # Test aging veteran
+        veteran_value = calculate_player_trade_value(
+            overall=83,
+            age=37,
+            position="Defense",
+            contract_type="UFA",
+            term_years=2,
+            aav_millions=4.0,
+            has_major_awards=True,
+            stanley_cups=2
+        )
+        self.assertLess(veteran_value, 60, "Aging veteran should have moderate value")
+        
+    def test_draft_pick_value_calculation(self):
+        """Test that draft pick value calculations produce expected results"""
+        # Test 1st overall pick
+        first_overall = calculate_draft_pick_value(
+            round_num=1,
+            pick_num=1,
+            draft_strength="strong"
+        )
+        self.assertGreater(first_overall, 85, "1st overall pick should have very high value")
+        
+        # Test late 1st round pick
+        late_first = calculate_draft_pick_value(
+            round_num=1,
+            pick_num=28,
+            draft_strength="average"
+        )
+        self.assertLess(late_first, first_overall, "Late 1st round pick should be worth less than 1st overall")
+        self.assertGreater(late_first, 50, "Late 1st round pick should still have good value")
+        
+        # Test 2nd round pick
+        second_round = calculate_draft_pick_value(
+            round_num=2,
+            pick_num=33,
+            draft_strength="weak"
+        )
+        self.assertLess(second_round, late_first, "2nd round pick should be worth less than 1st round")
+        
+        # Test future pick with time discount
+        future_pick = calculate_draft_pick_value(
+            round_num=1,
+            projected_position=15,
+            draft_strength="average",
+            year=2027
+        )
+        current_pick = calculate_draft_pick_value(
+            round_num=1,
+            projected_position=15,
+            draft_strength="average",
+            year=2025
+        )
+        self.assertLess(future_pick, current_pick, "Future picks should be discounted")
+        
+        # Test different contexts
+        no_context = calculate_draft_pick_value(
+            round_num=1,
+            projected_position=10,
+            context="no_context"
+        )
+        in_season = calculate_draft_pick_value(
+            round_num=1,
+            projected_position=10,
+            context="in_season"
+        )
+        franchise = calculate_draft_pick_value(
+            round_num=1,
+            projected_position=10,
+            context="franchise"
+        )
+        self.assertGreater(no_context, in_season, "In-season projection should have uncertainty discount")
+        self.assertGreater(in_season, franchise, "Franchise projection should have higher uncertainty discount")
+    
+    def test_two_way_trade(self):
+        """Test a basic two-way trade evaluation"""
+        team1_players = [
+            {
+                "name": "Connor McDavid",
+                "overall": 97,
+                "age": 26,
+                "position": "Center"
+            }
+        ]
+        
+        team2_players = [
+            {
+                "name": "Leon Draisaitl",
+                "overall": 94,
+                "age": 27,
+                "position": "Center"
+            },
+            {
+                "name": "Evan Bouchard",
+                "overall": 85,
+                "age": 23,
+                "position": "Defense"
+            }
+        ]
+        
+        result = evaluate_trade(team1_players, team2_players)
+        
+        self.assertIn("team1", result)
+        self.assertIn("team2", result)
+        self.assertIn("trade_assessment", result)
+        
+        # The McDavid trade should favor team2
+        self.assertIn("better_deal_for", result["trade_assessment"])
+        
+    def test_three_way_trade(self):
+        """Test a three-way trade evaluation with specific asset destinations"""
+        team1_players = [
+            {
+                "id": "player1",
+                "name": "Player One",
+                "overall": 90,
+                "age": 25,
+                "position": "Center"
+            }
+        ]
+        
+        team2_players = [
+            {
+                "id": "player2",
+                "name": "Player Two",
+                "overall": 85,
+                "age": 27,
+                "position": "Wing"
+            }
+        ]
+        
+        team3_players = [
+            {
+                "id": "player3",
+                "name": "Player Three",
+                "overall": 82,
+                "age": 24,
+                "position": "Defense"
+            }
+        ]
+        
+        # Asset destinations: team1 player -> team3, team2 player -> team1, team3 player -> team2
+        asset_destinations = {
+            "player1-player": "team3",
+            "player2-player": "team1",
+            "player3-player": "team2"
+        }
+        
+        result = evaluate_trade(
+            team1_players, 
+            team2_players,
+            team3_players,
+            is_three_way=True,
+            asset_destinations=asset_destinations
+        )
+        
+        self.assertIn("team1", result)
+        self.assertIn("team2", result)
+        self.assertIn("team3", result)
+        self.assertIn("trade_assessment", result)
+        
+        # Check that net values reflect the correct destinations
+        self.assertGreater(result["team1"]["incoming_value"], 0)
+        self.assertGreater(result["team2"]["incoming_value"], 0)
+        self.assertGreater(result["team3"]["incoming_value"], 0)
+        
+    def test_trade_with_draft_picks(self):
+        """Test a trade evaluation including draft picks"""
+        team1_players = [
+            {
+                "name": "Star Player",
+                "overall": 88,
+                "age": 28,
+                "position": "Wing"
+            }
+        ]
+        
+        team2_players = [
+            {
+                "name": "Good Player",
+                "overall": 84,
+                "age": 25,
+                "position": "Defense"
+            }
+        ]
+        
+        # Team 2 adds a 1st round pick to the deal
+        team2_picks = [
+            {
+                "id": "pick1",
+                "year": 2025,
+                "round": 1,
+                "projected_position": 15,
+                "draft_strength": "average"
+            }
+        ]
+        
+        result = evaluate_trade(
+            team1_players, 
+            team2_players,
+            team1_picks=[],
+            team2_picks=team2_picks
+        )
+        
+        # Team 2 value should include the draft pick
+        self.assertGreater(result["team2"]["raw_value"], 
+                           sum(p["value"] for p in result["team2"]["players_values"] if "Good Player" in p["name"]),
+                           "Team 2 value should include draft pick")
+        
+        # Draft pick should appear in the players_values list
+        pick_values = [p for p in result["team2"]["players_values"] if "Round" in p["name"]]
+        self.assertGreaterEqual(len(pick_values), 1, "Draft pick should be included in value list")
+
+
 if __name__ == "__main__":
-    main() 
+    unittest.main() 

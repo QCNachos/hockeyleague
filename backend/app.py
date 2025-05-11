@@ -74,17 +74,49 @@ def server_error(e):
 
 # Register API endpoints for trade valuation
 @app.route('/api/evaluate-trade', methods=['POST'])
-@app.route('/api/evaluate-trade/', methods=['POST'])  # Added trailing slash version
-def evaluate_trade_route():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "No data provided"}), 400
-    
-    team1_players = data.get('team1_players', [])
-    team2_players = data.get('team2_players', [])
-    
-    result = evaluate_trade(team1_players, team2_players)
-    return jsonify(result)
+def api_evaluate_trade():
+    try:
+        data = request.json
+        
+        # Get player data for each team
+        team1_players = data.get('team1_players', [])
+        team2_players = data.get('team2_players', [])
+        team3_players = data.get('team3_players', [])
+        is_three_way = data.get('is_three_way', False)
+        
+        # Get draft pick data (if provided)
+        team1_picks = data.get('team1_picks', [])
+        team2_picks = data.get('team2_picks', [])
+        team3_picks = data.get('team3_picks', [])
+        
+        # Get asset destinations for 3-way trades
+        asset_destinations = data.get('asset_destinations', {})
+        
+        # Get draft context
+        draft_context = data.get('draft_context', 'no_context')
+        
+        # Log information about the request
+        app.logger.info(f"Evaluate trade request: {len(team1_players)} players and {len(team1_picks)} picks from team 1, "
+                      f"{len(team2_players)} players and {len(team2_picks)} picks from team 2"
+                      + (f", {len(team3_players)} players and {len(team3_picks)} picks from team 3" if is_three_way else ""))
+        
+        # Call the trade evaluation function with all parameters
+        result = evaluate_trade(
+            team1_players, 
+            team2_players,
+            team3_players if is_three_way else None, 
+            is_three_way=is_three_way,
+            team1_picks=team1_picks,
+            team2_picks=team2_picks,
+            team3_picks=team3_picks if is_three_way else None,
+            asset_destinations=asset_destinations,
+            draft_context=draft_context
+        )
+            
+        return jsonify(result)
+    except Exception as e:
+        app.logger.error(f"Error in trade evaluation: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 # Endpoint to get all leagues
 @app.route('/api/leagues', methods=['GET'])

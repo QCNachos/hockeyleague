@@ -520,12 +520,136 @@ def calculate_player_trade_value(
     return round(trade_value, 1)
 
 
+def calculate_draft_pick_value(
+    round_num: int,
+    pick_num: int = None,
+    projected_position: int = None, 
+    draft_strength: str = "average",
+    context: str = "no_context",
+    team_id: str = None,
+    year: int = None
+) -> float:
+    """
+    Calculate the trade value of a draft pick on a 0-100 scale.
+    
+    Parameters:
+    -----------
+    round_num : int
+        The round of the draft pick (1, 2, 3, etc.)
+    pick_num : int, optional
+        The specific pick number (1 for 1st overall, 2 for 2nd overall, etc.)
+    projected_position : int, optional
+        Projected draft position when pick_num is not known
+    draft_strength : str, optional
+        The strength of the draft class ('strong', 'average', 'weak')
+    context : str, optional
+        The context of the valuation ('no_context', 'in_season', 'franchise')
+    team_id : str, optional
+        Team ID for projections in 'in_season' or 'franchise' context
+    year : int, optional
+        Draft year (e.g., 2025, 2026)
+    
+    Returns:
+    --------
+    float
+        Draft pick value on a 0-100 scale
+    """
+    # Base values by round - 1st round picks are significantly more valuable
+    base_round_values = {
+        1: 60,  # 1st round base value
+        2: 25,  # 2nd round base value
+        3: 10,  # 3rd round base value
+        4: 5,   # 4th round base value
+        5: 3,   # 5th round base value
+        6: 2,   # 6th round base value
+        7: 1    # 7th round base value
+    }
+    
+    # Get base value for the round (default to 0.5 for rounds beyond 7)
+    base_value = base_round_values.get(round_num, 0.5)
+    
+    # Position value modifier for 1st round picks
+    position_modifier = 1.0
+    if round_num == 1:
+        if pick_num is not None:
+            # Special exponential value for top 3 picks
+            if pick_num == 1:  # 1st overall
+                position_modifier = 1.6
+            elif pick_num == 2:  # 2nd overall
+                position_modifier = 1.5
+            elif pick_num == 3:  # 3rd overall
+                position_modifier = 1.4
+            elif pick_num <= 5:  # Top 5
+                position_modifier = 1.3
+            elif pick_num <= 10:  # Top 10
+                position_modifier = 1.2
+            elif pick_num <= 15:  # Top 15
+                position_modifier = 1.1
+            elif pick_num <= 20:  # Top 20
+                position_modifier = 1.0
+            else:  # 21st-32nd or later
+                # Linear decrease in value for late 1st round picks
+                position_modifier = max(0.8, 1.1 - (pick_num - 20) * 0.015)
+        elif projected_position is not None:
+            # Use projected position when specific pick number isn't known
+            if projected_position <= 5:  # Projected top 5
+                position_modifier = 1.25
+            elif projected_position <= 10:  # Projected top 10
+                position_modifier = 1.15
+            elif projected_position <= 15:  # Projected top 15
+                position_modifier = 1.05
+            elif projected_position <= 20:  # Projected top 20
+                position_modifier = 0.95
+            else:  # Projected 21st or later
+                position_modifier = 0.85
+    elif round_num == 2:
+        # Second round picks have smaller position effects
+        if pick_num is not None and pick_num <= 5:  # Early 2nd round
+            position_modifier = 1.1
+    
+    # Draft strength modifier
+    strength_modifier = 1.0
+    if draft_strength.lower() == "strong":
+        strength_modifier = 1.2
+    elif draft_strength.lower() == "weak":
+        strength_modifier = 0.8
+    
+    # Context modifier (accounts for uncertainty in different contexts)
+    context_modifier = 1.0
+    if context.lower() == "in_season":
+        # In-season projections are somewhat uncertain
+        context_modifier = 0.95
+    elif context.lower() == "franchise":
+        # Long-term franchise projections are more uncertain
+        context_modifier = 0.9
+    
+    # Time value discount for future years (if year is provided)
+    time_value_discount = 1.0
+    current_year = 2025  # Default reference year
+    if year is not None and year > current_year:
+        # Each year into the future reduces value by 10%
+        time_value_discount = 0.9 ** (year - current_year)
+    
+    # Calculate final value
+    pick_value = base_value * position_modifier * strength_modifier * context_modifier * time_value_discount
+    
+    # Ensure value stays within 0-100 scale
+    return min(round(pick_value, 1), 99)
+
+
 def evaluate_trade(
     team1_players: List[Dict[str, Any]], 
-    team2_players: List[Dict[str, Any]]
+    team2_players: List[Dict[str, Any]],
+    team3_players: List[Dict[str, Any]] = None,
+    is_three_way: bool = False,
+    team1_picks: List[Dict[str, Any]] = None,
+    team2_picks: List[Dict[str, Any]] = None,
+    team3_picks: List[Dict[str, Any]] = None,
+    asset_destinations: Dict[str, str] = None,
+    draft_context: str = "no_context"
 ) -> Dict[str, Any]:
     """
-    Evaluate a trade between two teams.
+    Evaluate a trade between two or three teams.
     
     Parameters:
     -----------
@@ -533,6 +657,20 @@ def evaluate_trade(
         List of player dictionaries for team 1
     team2_players : List[Dict]
         List of player dictionaries for team 2
+    team3_players : List[Dict], optional
+        List of player dictionaries for team 3 (for 3-way trades)
+    is_three_way : bool, optional
+        Flag indicating if this is a three-way trade
+    team1_picks : List[Dict], optional
+        List of draft pick dictionaries for team 1
+    team2_picks : List[Dict], optional
+        List of draft pick dictionaries for team 2
+    team3_picks : List[Dict], optional
+        List of draft pick dictionaries for team 3
+    asset_destinations : Dict[str, str], optional
+        Mapping of asset IDs to destination team IDs
+    draft_context : str, optional
+        Context for draft pick valuation ('no_context', 'in_season', 'franchise')
     
     Returns:
     --------
@@ -543,11 +681,47 @@ def evaluate_trade(
         - Trade fairness assessment
         - Value difference between teams
     """
-    # Calculate raw values for each team
+    # Initialize lists for assets and their values
     team1_values = []
     team2_values = []
+    team3_values = []
     
+    # Initialize total incoming/outgoing value by team
+    team1_outgoing = 0
+    team1_incoming = 0
+    team2_outgoing = 0
+    team2_incoming = 0
+    team3_outgoing = 0
+    team3_incoming = 0
+    
+    # Helper function to determine asset destination
+    def get_asset_destination(asset_id, asset_type, source_team_id):
+        if not asset_destinations or not is_three_way:
+            # In 2-way trades, assets automatically go to the other team
+            if source_team_id == "team1":
+                return "team2"
+            elif source_team_id == "team2":
+                return "team1"
+            return None
+        
+        # For 3-way trades with specified destinations
+        asset_key = f"{asset_id}-{asset_type}"
+        if asset_key in asset_destinations:
+            return asset_destinations[asset_key]
+            
+        # Default destinations if not specified
+        if source_team_id == "team1":
+            return "team2"  # Default: team1 assets go to team2
+        elif source_team_id == "team2":
+            return "team3" if is_three_way else "team1"  # Default based on trade type
+        elif source_team_id == "team3":
+            return "team1"  # Default: team3 assets go to team1
+            
+        return None
+    
+    # Process player assets for team1
     for player in team1_players:
+        # Calculate the player's trade value
         value = calculate_player_trade_value(
             overall=player.get('overall', 0),
             age=player.get('age', 0),
@@ -563,8 +737,23 @@ def evaluate_trade(
             stanley_cups=player.get('stanley_cups', 0),
             has_major_awards=player.get('has_major_awards', False)
         )
+        
+        # Add to outgoing value from team1
+        team1_outgoing += value
+        
+        # Determine which team receives this asset
+        destination = player.get('destination') or get_asset_destination(player.get('id', ''), 'player', 'team1')
+        
+        # Update incoming value for the destination team
+        if destination == "team2":
+            team2_incoming += value
+        elif destination == "team3" and is_three_way:
+            team3_incoming += value
+            
+        # Add to team1 value list
         team1_values.append({"name": player.get('name', 'Unknown'), "value": value})
     
+    # Process player assets for team2
     for player in team2_players:
         value = calculate_player_trade_value(
             overall=player.get('overall', 0),
@@ -581,29 +770,191 @@ def evaluate_trade(
             stanley_cups=player.get('stanley_cups', 0),
             has_major_awards=player.get('has_major_awards', False)
         )
+        
+        # Add to outgoing value from team2
+        team2_outgoing += value
+        
+        # Determine which team receives this asset
+        destination = player.get('destination') or get_asset_destination(player.get('id', ''), 'player', 'team2')
+        
+        # Update incoming value for the destination team
+        if destination == "team1":
+            team1_incoming += value
+        elif destination == "team3" and is_three_way:
+            team3_incoming += value
+            
         team2_values.append({"name": player.get('name', 'Unknown'), "value": value})
     
-    # Calculate total raw values
-    team1_total = sum(player["value"] for player in team1_values)
-    team2_total = sum(player["value"] for player in team2_values)
+    # Process player assets for team3 (if three-way trade)
+    if is_three_way and team3_players:
+        for player in team3_players:
+            value = calculate_player_trade_value(
+                overall=player.get('overall', 0),
+                age=player.get('age', 0),
+                position=player.get('position', ''),
+                contract_type=player.get('contract_type', 'UFA'),
+                term_years=player.get('term_years', 0),
+                aav_millions=player.get('aav_millions', 0),
+                potential=player.get('potential', 'bottom6'),
+                potential_certainty=player.get('potential_certainty', 0.5),
+                potential_volatility=player.get('potential_volatility', 0.5),
+                is_captain=player.get('is_captain', False),
+                is_alternate=player.get('is_alternate', False),
+                stanley_cups=player.get('stanley_cups', 0),
+                has_major_awards=player.get('has_major_awards', False)
+            )
+            
+            # Add to outgoing value from team3
+            team3_outgoing += value
+            
+            # Determine which team receives this asset
+            destination = player.get('destination') or get_asset_destination(player.get('id', ''), 'player', 'team3')
+            
+            # Update incoming value for the destination team
+            if destination == "team1":
+                team1_incoming += value
+            elif destination == "team2":
+                team2_incoming += value
+                
+            team3_values.append({"name": player.get('name', 'Unknown'), "value": value})
+    
+    # Process draft picks for team1 (if provided)
+    if team1_picks:
+        for pick in team1_picks:
+            # Calculate the pick's trade value
+            value = calculate_draft_pick_value(
+                round_num=pick.get('round', 1),
+                pick_num=pick.get('pick_num'),
+                projected_position=pick.get('projected_position'),
+                draft_strength=pick.get('draft_strength', 'average'),
+                context=draft_context,
+                team_id=pick.get('team_id'),
+                year=pick.get('year')
+            )
+            
+            # Add to outgoing value from team1
+            team1_outgoing += value
+            
+            # Determine which team receives this asset
+            destination = pick.get('destination') or get_asset_destination(pick.get('id', ''), 'pick', 'team1')
+            
+            # Update incoming value for the destination team
+            if destination == "team2":
+                team2_incoming += value
+            elif destination == "team3" and is_three_way:
+                team3_incoming += value
+                
+            # Add to team1 value list
+            pick_name = f"{pick.get('year', 'Unknown')} Round {pick.get('round', 'Unknown')} Pick"
+            team1_values.append({"name": pick_name, "value": value})
+    
+    # Process draft picks for team2 (if provided)
+    if team2_picks:
+        for pick in team2_picks:
+            value = calculate_draft_pick_value(
+                round_num=pick.get('round', 1),
+                pick_num=pick.get('pick_num'),
+                projected_position=pick.get('projected_position'),
+                draft_strength=pick.get('draft_strength', 'average'),
+                context=draft_context,
+                team_id=pick.get('team_id'),
+                year=pick.get('year')
+            )
+            
+            # Add to outgoing value from team2
+            team2_outgoing += value
+            
+            # Determine which team receives this asset
+            destination = pick.get('destination') or get_asset_destination(pick.get('id', ''), 'pick', 'team2')
+            
+            # Update incoming value for the destination team
+            if destination == "team1":
+                team1_incoming += value
+            elif destination == "team3" and is_three_way:
+                team3_incoming += value
+                
+            # Add to team2 value list
+            pick_name = f"{pick.get('year', 'Unknown')} Round {pick.get('round', 'Unknown')} Pick"
+            team2_values.append({"name": pick_name, "value": value})
+    
+    # Process draft picks for team3 (if provided and three-way trade)
+    if is_three_way and team3_picks:
+        for pick in team3_picks:
+            value = calculate_draft_pick_value(
+                round_num=pick.get('round', 1),
+                pick_num=pick.get('pick_num'),
+                projected_position=pick.get('projected_position'),
+                draft_strength=pick.get('draft_strength', 'average'),
+                context=draft_context,
+                team_id=pick.get('team_id'),
+                year=pick.get('year')
+            )
+            
+            # Add to outgoing value from team3
+            team3_outgoing += value
+            
+            # Determine which team receives this asset
+            destination = pick.get('destination') or get_asset_destination(pick.get('id', ''), 'pick', 'team3')
+            
+            # Update incoming value for the destination team
+            if destination == "team1":
+                team1_incoming += value
+            elif destination == "team2":
+                team2_incoming += value
+                
+            # Add to team3 value list
+            pick_name = f"{pick.get('year', 'Unknown')} Round {pick.get('round', 'Unknown')} Pick"
+            team3_values.append({"name": pick_name, "value": value})
+    
+    # Calculate net values (incoming - outgoing)
+    team1_net = team1_incoming - team1_outgoing
+    team2_net = team2_incoming - team2_outgoing
+    team3_net = team3_incoming - team3_outgoing
+    
+    # Calculate total raw values (outgoing)
+    team1_total = team1_outgoing
+    team2_total = team2_outgoing
+    team3_total = team3_outgoing if is_three_way else 0
     
     # Apply quality vs. quantity adjustment
-    team1_adjusted, team2_adjusted = apply_quality_adjustment(team1_values, team2_values)
+    if is_three_way:
+        team1_adjusted, team2_adjusted, team3_adjusted = apply_quality_adjustment_three_way(
+            team1_values, team2_values, team3_values
+        )
+    else:
+        team1_adjusted, team2_adjusted = apply_quality_adjustment(team1_values, team2_values)
+        team3_adjusted = 0
     
     # Normalize the values to a 0-100 scale
-    max_team_value = max(team1_adjusted, team2_adjusted)
+    max_team_value = max(team1_adjusted, team2_adjusted, team3_adjusted if is_three_way else 0)
     
     # Avoid division by zero
     if max_team_value == 0:
         team1_normalized = 0
         team2_normalized = 0
+        team3_normalized = 0
     else:
         team1_normalized = (team1_adjusted / max_team_value) * 100
         team2_normalized = (team2_adjusted / max_team_value) * 100
+        team3_normalized = (team3_adjusted / max_team_value) * 100 if is_three_way else 0
     
     # Calculate value difference
-    raw_difference = abs(team1_adjusted - team2_adjusted)
-    normalized_difference = abs(team1_normalized - team2_normalized)
+    if is_three_way:
+        raw_differences = [
+            abs(team1_adjusted - team2_adjusted),
+            abs(team1_adjusted - team3_adjusted),
+            abs(team2_adjusted - team3_adjusted)
+        ]
+        normalized_differences = [
+            abs(team1_normalized - team2_normalized),
+            abs(team1_normalized - team3_normalized),
+            abs(team2_normalized - team3_normalized)
+        ]
+        raw_difference = max(raw_differences)
+        normalized_difference = max(normalized_differences)
+    else:
+        raw_difference = abs(team1_adjusted - team2_adjusted)
+        normalized_difference = abs(team1_normalized - team2_normalized)
     
     # Assess trade fairness
     if normalized_difference < 5:
@@ -618,36 +969,83 @@ def evaluate_trade(
         fairness = "Very Uneven"
     
     # Determine which team is getting the better deal
-    if team1_adjusted > team2_adjusted:
-        winner = "Team 2 (receiving more value)"
-    elif team2_adjusted > team1_adjusted:
-        winner = "Team 1 (receiving more value)"
+    if is_three_way:
+        # In a three-way trade, we determine which team gets the best value
+        if team1_net > team2_net and team1_net > team3_net:
+            winner = "Team 1 (receiving more value)"
+        elif team2_net > team1_net and team2_net > team3_net:
+            winner = "Team 2 (receiving more value)"
+        elif team3_net > team1_net and team3_net > team2_net:
+            winner = "Team 3 (receiving more value)"
+        else:
+            winner = "Equal"
     else:
-        winner = "Equal"
+        # For a two-team trade
+        if team1_net > team2_net:
+            winner = "Team 1 (receiving more value)"
+        elif team2_net > team1_net:
+            winner = "Team 2 (receiving more value)"
+        else:
+            winner = "Equal"
     
-    return {
+    # Build the result dictionary
+    result = {
         "team1": {
             "raw_value": round(team1_total, 1),
             "adjusted_value": round(team1_adjusted, 1),
             "normalized_value": round(team1_normalized, 1),
             "players_values": team1_values,
-            "num_players": len(team1_values)
+            "num_players": len(team1_values),
+            "incoming_value": round(team1_incoming, 1),
+            "outgoing_value": round(team1_outgoing, 1),
+            "net_value": round(team1_net, 1)
         },
         "team2": {
             "raw_value": round(team2_total, 1),
             "adjusted_value": round(team2_adjusted, 1),
             "normalized_value": round(team2_normalized, 1),
             "players_values": team2_values,
-            "num_players": len(team2_values)
+            "num_players": len(team2_values),
+            "incoming_value": round(team2_incoming, 1),
+            "outgoing_value": round(team2_outgoing, 1),
+            "net_value": round(team2_net, 1)
         },
         "trade_assessment": {
             "raw_difference": round(raw_difference, 1),
             "normalized_difference": round(normalized_difference, 1),
             "fairness": fairness,
             "better_deal_for": winner,
-            "quality_adjustment_applied": True
+            "quality_adjustment_applied": True,
+            "is_three_way": is_three_way
         }
     }
+    
+    # Add team 3 data if it's a three-way trade
+    if is_three_way:
+        result["team3"] = {
+            "raw_value": round(team3_total, 1),
+            "adjusted_value": round(team3_adjusted, 1),
+            "normalized_value": round(team3_normalized, 1),
+            "players_values": team3_values,
+            "num_players": len(team3_values),
+            "incoming_value": round(team3_incoming, 1),
+            "outgoing_value": round(team3_outgoing, 1),
+            "net_value": round(team3_net, 1)
+        }
+    else:
+        # Add empty team3 data for consistent frontend rendering
+        result["team3"] = {
+            "raw_value": 0,
+            "adjusted_value": 0,
+            "normalized_value": 0,
+            "players_values": [],
+            "num_players": 0,
+            "incoming_value": 0,
+            "outgoing_value": 0,
+            "net_value": 0
+        }
+    
+    return result
 
 
 def apply_quality_adjustment(
@@ -739,6 +1137,109 @@ def apply_quality_adjustment(
         team2_adjusted -= roster_penalty
     
     return team1_adjusted, team2_adjusted
+
+
+def apply_quality_adjustment_three_way(
+    team1_values: List[Dict[str, float]], 
+    team2_values: List[Dict[str, float]],
+    team3_values: List[Dict[str, float]]
+) -> Tuple[float, float, float]:
+    """
+    Apply an adjustment to account for the fact that quality is better than quantity in NHL trades.
+    This is an extended version of apply_quality_adjustment that handles three teams.
+    
+    Parameters:
+    -----------
+    team1_values : List[Dict]
+        List of player value dictionaries for team 1
+    team2_values : List[Dict]
+        List of player value dictionaries for team 2
+    team3_values : List[Dict]
+        List of player value dictionaries for team 3
+    
+    Returns:
+    --------
+    Tuple[float, float, float]
+        Adjusted values for team1, team2, and team3
+    """
+    # Extract player values
+    team1_player_values = [player["value"] for player in team1_values]
+    team2_player_values = [player["value"] for player in team2_values]
+    team3_player_values = [player["value"] for player in team3_values]
+    
+    # Calculate raw totals
+    team1_raw_total = sum(team1_player_values)
+    team2_raw_total = sum(team2_player_values)
+    team3_raw_total = sum(team3_player_values)
+    
+    # Sort values in descending order
+    team1_player_values.sort(reverse=True)
+    team2_player_values.sort(reverse=True)
+    team3_player_values.sort(reverse=True)
+    
+    # Apply quality boost to high-value players
+    # Players over certain thresholds get extra weight to reflect the NHL premium on star players
+    def calculate_quality_adjusted_value(player_values):
+        adjusted_total = 0
+        
+        for i, value in enumerate(player_values):
+            # Apply quality tiers with higher premiums for top players
+            if value >= 95:  # Generational tier (McDavid, etc.)
+                tier_multiplier = 1.25  # Increased from 1.15
+            elif value >= 90:  # Superstar tier
+                tier_multiplier = 1.18  # Increased from 1.15
+            elif value >= 85:  # Star tier
+                tier_multiplier = 1.12  # Increased from 1.10
+            elif value >= 75:  # Elite tier
+                tier_multiplier = 1.05
+            elif value >= 65:  # Top tier
+                tier_multiplier = 1.02
+            else:
+                tier_multiplier = 1.0
+            
+            # Apply quantity diminishing factor - each additional player has less impact
+            # First players have highest impact, additional players have steeper diminishing returns
+            # Steeper discounts for additional players
+            if i == 0:
+                position_discount = 0.0  # No discount for primary player
+            elif i == 1:
+                position_discount = 0.15  # 15% discount for second player (increased from 8%)
+            elif i == 2:
+                position_discount = 0.25  # 25% discount for third player (increased from 16%)
+            else:
+                # Steeper discounts for additional players
+                position_discount = min(0.25 + (i - 2) * 0.12, 0.7)  # Up to 70% discount (increased from 50%)
+            
+            player_adjusted = value * tier_multiplier * (1 - position_discount)
+            adjusted_total += player_adjusted
+        
+        return adjusted_total
+    
+    # Calculate adjusted values
+    team1_adjusted = calculate_quality_adjusted_value(team1_player_values)
+    team2_adjusted = calculate_quality_adjusted_value(team2_player_values)
+    team3_adjusted = calculate_quality_adjusted_value(team3_player_values)
+    
+    # Apply roster spot penalty for teams receiving many players
+    # NHL teams value roster spots and consolidating talent
+    max_efficient_players = 2  # Reduced from 3 to 2 for stricter roster spot value
+    
+    if len(team1_player_values) > max_efficient_players:
+        # Increased penalty for having too many players in a deal
+        roster_penalty = 0.05 * (len(team1_player_values) - max_efficient_players) * team1_raw_total  # Increased from 0.03
+        team1_adjusted -= roster_penalty
+    
+    if len(team2_player_values) > max_efficient_players:
+        # Increased penalty for having too many players in a deal
+        roster_penalty = 0.05 * (len(team2_player_values) - max_efficient_players) * team2_raw_total  # Increased from 0.03
+        team2_adjusted -= roster_penalty
+    
+    if len(team3_player_values) > max_efficient_players:
+        # Increased penalty for having too many players in a deal
+        roster_penalty = 0.05 * (len(team3_player_values) - max_efficient_players) * team3_raw_total  # Increased from 0.03
+        team3_adjusted -= roster_penalty
+    
+    return team1_adjusted, team2_adjusted, team3_adjusted
 
 
 def visualize_trade_balance(
